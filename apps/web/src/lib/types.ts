@@ -18,6 +18,8 @@ export interface VideoMetadata {
   duration: number;
   thumbnail: string;
   formats: VideoFormat[];
+  downloads_available?: boolean;
+  notice?: string | null;
 }
 
 export interface DownloadProgress {

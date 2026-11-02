@@ -24,6 +24,8 @@ class VideoMetadata(BaseModel):
     duration: int = 0
     thumbnail: str
     formats: List[VideoFormat]
+    downloads_available: bool = True
+    notice: Optional[str] = None
 
 
 class DownloadRequest(BaseModel):

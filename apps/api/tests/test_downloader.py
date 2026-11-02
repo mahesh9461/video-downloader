@@ -1,11 +1,26 @@
+import asyncio
+import os
 import pytest
+from unittest.mock import patch, MagicMock
+import yt_dlp
+
 from app.downloader import (
     detect_platform,
     map_ytdlp_error,
     format_bytes,
     format_seconds,
+    safe_int,
+    sanitize_filename,
+    extract_youtube_id,
+    extract_metadata,
+    download_via_cobalt,
+    download_video_stream,
+    is_youtube_cooldown_active,
+    trigger_youtube_cooldown,
+    reset_youtube_cooldown,
     DownloadException,
 )
+from app.schemas import VideoMetadata
 
 
 def test_detect_platform_youtube():
@@ -38,21 +53,36 @@ def test_detect_platform_invalid():
 
 
 def test_map_ytdlp_error_categories():
+    # Bot check
+    err_bot = map_ytdlp_error("ERROR: [youtube] Sign in to confirm you're not a bot. This helps protect our community.")
+    assert err_bot.error_type == "bot_check"
+    assert err_bot.status_code == 503
+    assert "YouTube is blocking this server right now" in err_bot.detail
+
+    # Private
     err_private = map_ytdlp_error("Private video. Sign in if you've been granted access to this video")
     assert err_private.error_type == "private"
     assert err_private.status_code == 403
 
+    # Geo restricted
     err_geo = map_ytdlp_error("This video is not available in your country")
     assert err_geo.error_type == "geo_restricted"
     assert err_geo.status_code == 403
 
+    # Deleted / 404
     err_deleted = map_ytdlp_error("Video unavailable. This video has been removed by the user")
     assert err_deleted.error_type == "deleted"
     assert err_deleted.status_code == 404
 
+    # Rate limit (429)
     err_rate = map_ytdlp_error("HTTP Error 429: Too Many Requests")
     assert err_rate.error_type == "rate_limit"
     assert err_rate.status_code == 429
+
+    # Unknown
+    err_unknown = map_ytdlp_error("Something weird went wrong on the transport layer")
+    assert err_unknown.error_type == "unknown"
+    assert err_unknown.status_code == 400
 
 
 def test_format_bytes():
@@ -69,8 +99,17 @@ def test_format_seconds():
     assert format_seconds(3665) == "01:01:05"
 
 
+def test_safe_int():
+    assert safe_int(None) is None
+    assert safe_int(None, default=0) == 0
+    assert safe_int(42) == 42
+    assert safe_int("128") == 128
+    assert safe_int(" 256 ") == 256
+    assert safe_int("not_a_number", default=10) == 10
+    assert safe_int([], default=5) == 5
+
+
 def test_extract_youtube_id():
-    from app.downloader import extract_youtube_id
     assert extract_youtube_id("https://www.youtube.com/watch?v=BOJw7TYH-fE") == "BOJw7TYH-fE"
     assert extract_youtube_id("https://youtu.be/BOJw7TYH-fE") == "BOJw7TYH-fE"
     assert extract_youtube_id("https://www.youtube.com/shorts/BOJw7TYH-fE") == "BOJw7TYH-fE"
@@ -78,21 +117,40 @@ def test_extract_youtube_id():
 
 
 def test_sanitize_filename():
-    from app.downloader import sanitize_filename
     assert sanitize_filename("Video? With / Invalid : Chars *") == "Video With  Invalid  Chars"
     assert sanitize_filename("") == "video"
 
 
-from unittest.mock import patch, MagicMock
+@patch("app.downloader.yt_dlp.YoutubeDL")
+def test_extract_metadata_success_path(mock_ydl_class):
+    mock_ydl = MagicMock()
+    mock_ydl_class.return_value.__enter__.return_value = mock_ydl
+    mock_ydl.extract_info.return_value = {
+        "id": "BOJw7TYH-fE",
+        "title": "Clean YouTube Video",
+        "uploader": "Test Creator",
+        "duration": 120,
+        "thumbnail": "https://example.com/thumb.jpg",
+        "formats": [
+            {"height": 1080, "vcodec": "avc1", "ext": "mp4"},
+            {"height": 720, "vcodec": "avc1", "ext": "mp4"},
+            {"vcodec": "none", "acodec": "mp4a", "ext": "m4a"},
+        ],
+    }
+
+    meta = extract_metadata("https://www.youtube.com/watch?v=BOJw7TYH-fE")
+    assert meta.id == "BOJw7TYH-fE"
+    assert meta.title == "Clean YouTube Video"
+    assert meta.downloads_available is True
+    assert meta.notice is None
+    assert len(meta.formats) > 0
+
 
 @patch("app.downloader.fetch_youtube_oembed")
 @patch("app.downloader.yt_dlp.YoutubeDL")
-def test_oembed_fallback_on_bot_block(mock_ydl_class, mock_oembed):
-    from app.downloader import extract_metadata, VideoMetadata
+def test_extract_metadata_bot_block_oembed_fallback(mock_ydl_class, mock_oembed):
     mock_ydl = MagicMock()
     mock_ydl_class.return_value.__enter__.return_value = mock_ydl
-    # Simulate YouTube bot challenge block
-    import yt_dlp
     mock_ydl.extract_info.side_effect = yt_dlp.utils.DownloadError("Sign in to confirm you're not a bot.")
 
     mock_oembed.return_value = VideoMetadata(
@@ -104,9 +162,135 @@ def test_oembed_fallback_on_bot_block(mock_ydl_class, mock_oembed):
         duration=0,
         thumbnail="https://example.com/thumb.jpg",
         formats=[],
+        downloads_available=False,
+        notice="Preview only: downloads are temporarily unavailable for this video.",
     )
 
     metadata = extract_metadata("https://www.youtube.com/watch?v=BOJw7TYH-fE")
     assert metadata.title == "Test oEmbed Video"
-    assert mock_oembed.called
+    assert metadata.downloads_available is False
+    assert metadata.formats == []
+    assert "Preview only" in metadata.notice
+    assert is_youtube_cooldown_active()
 
+
+@patch("app.downloader.fetch_youtube_oembed")
+@patch("app.downloader.yt_dlp.YoutubeDL")
+def test_extract_metadata_bot_block_and_oembed_failure(mock_ydl_class, mock_oembed):
+    mock_ydl = MagicMock()
+    mock_ydl_class.return_value.__enter__.return_value = mock_ydl
+    mock_ydl.extract_info.side_effect = yt_dlp.utils.DownloadError("Sign in to confirm you're not a bot.")
+    mock_oembed.return_value = None
+
+    with pytest.raises(DownloadException) as exc:
+        extract_metadata("https://www.youtube.com/watch?v=BOJw7TYH-fE")
+
+    assert exc.value.error_type == "bot_check"
+    assert exc.value.status_code == 503
+
+
+@patch("app.downloader.fetch_youtube_oembed")
+@patch("app.downloader.yt_dlp.YoutubeDL")
+def test_cooldown_skips_ytdlp(mock_ydl_class, mock_oembed):
+    mock_ydl = MagicMock()
+    mock_ydl_class.return_value.__enter__.return_value = mock_ydl
+    mock_ydl.extract_info.side_effect = yt_dlp.utils.DownloadError("Sign in to confirm you're not a bot.")
+
+    mock_oembed.return_value = VideoMetadata(
+        id="BOJw7TYH-fE",
+        platform="youtube",
+        title="Cooldown Video",
+        creator="Channel",
+        duration=0,
+        thumbnail="",
+        formats=[],
+        downloads_available=False,
+        notice="Preview only",
+    )
+
+    # First call: hits yt-dlp, triggers cooldown, falls back to oEmbed
+    extract_metadata("https://www.youtube.com/watch?v=BOJw7TYH-fE")
+    first_call_count = mock_ydl.extract_info.call_count
+    assert first_call_count == 1  # Stopped immediately after 1 bot block!
+    assert is_youtube_cooldown_active()
+
+    # Second call: skips yt-dlp entirely!
+    extract_metadata("https://www.youtube.com/watch?v=BOJw7TYH-fE")
+    assert mock_ydl.extract_info.call_count == first_call_count  # Did NOT call yt_dlp again
+
+
+def test_cobalt_not_called_when_unset():
+    with patch.dict(os.environ, {"COBALT_API_URL": ""}, clear=False):
+        loop = asyncio.new_event_loop()
+        queue = asyncio.Queue()
+        res = download_via_cobalt("https://youtube.com/watch?v=123", "yt-720p", "job1", "title", loop, queue)
+        assert res is None
+
+
+@patch("app.downloader.httpx.Client")
+def test_cobalt_called_with_video_quality_and_auth(mock_client_cls):
+    mock_client = MagicMock()
+    mock_client_cls.return_value.__enter__.return_value = mock_client
+
+    mock_resp = MagicMock()
+    mock_resp.status_code = 200
+    mock_resp.json.return_value = {
+        "status": "tunnel",
+        "url": "https://stream.example.com/video.mp4",
+    }
+    mock_client.post.return_value = mock_resp
+
+    mock_stream_resp = MagicMock()
+    mock_stream_resp.status_code = 200
+    mock_stream_resp.headers = {"content-length": "100"}
+    mock_stream_resp.iter_bytes.return_value = [b"A" * 100]
+    mock_client.stream.return_value.__enter__.return_value = mock_stream_resp
+
+    with patch.dict(os.environ, {"COBALT_API_URL": "https://custom-cobalt.example.com", "COBALT_API_KEY": "secret-key"}):
+        loop = asyncio.new_event_loop()
+        queue = asyncio.Queue()
+        res = download_via_cobalt("https://youtube.com/watch?v=123", "yt-1080p", "job1", "Test Title", loop, queue)
+
+        assert res is not None
+        assert "Test Title" in res["filename"]
+        # Verify post payload and headers
+        call_args = mock_client.post.call_args
+        assert call_args[0][0] == "https://custom-cobalt.example.com/"
+        payload = call_args[1]["json"]
+        assert payload["videoQuality"] == "1080"
+        assert payload["downloadMode"] == "auto"
+
+
+@patch("app.downloader.httpx.Client")
+def test_cobalt_error_response_handled_gracefully(mock_client_cls):
+    mock_client = MagicMock()
+    mock_client_cls.return_value.__enter__.return_value = mock_client
+
+    mock_resp = MagicMock()
+    mock_resp.status_code = 400
+    mock_resp.text = '{"status":"error","error":{"code":"error.api.auth.jwt.missing"}}'
+    mock_client.post.return_value = mock_resp
+
+    with patch.dict(os.environ, {"COBALT_API_URL": "https://custom-cobalt.example.com"}):
+        loop = asyncio.new_event_loop()
+        queue = asyncio.Queue()
+        res = download_via_cobalt("https://youtube.com/watch?v=123", "yt-720p", "job1", "Test Title", loop, queue)
+        assert res is None
+
+
+@pytest.mark.anyio
+@patch("app.downloader.yt_dlp.YoutubeDL")
+async def test_run_download_none_info_emits_error(mock_ydl_class):
+    mock_ydl = MagicMock()
+    mock_ydl_class.return_value.__enter__.return_value = mock_ydl
+    # yt-dlp returns None for info and creates no file
+    mock_ydl.extract_info.return_value = None
+
+    generator = download_video_stream("https://www.youtube.com/watch?v=dQw4w9WgXcQ", "yt-720p")
+    events = []
+    async for item in generator:
+        events.append(item)
+
+    # Check that an error event was emitted, NEVER "complete"
+    assert any('"status":"error"' in ev or '"status": "error"' in ev for ev in events)
+    assert not any('"status":"complete"' in ev or '"status": "complete"' in ev for ev in events)

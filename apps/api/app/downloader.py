@@ -1,15 +1,22 @@
 import asyncio
 import os
 import re
+import time
 import uuid
 import logging
-import subprocess
 from concurrent.futures import ThreadPoolExecutor
 from typing import AsyncGenerator, Dict, Any, List, Optional
 import httpx
 import yt_dlp
 
-from app.config import DOWNLOAD_DIR, FFMPEG_PATH, COOKIE_FILE_PATH, PROXY_URL
+from app.config import (
+    DOWNLOAD_DIR,
+    FFMPEG_PATH,
+    COOKIE_FILE_PATH,
+    PROXY_URL,
+    COBALT_API_URL,
+    COBALT_API_KEY,
+)
 from app.schemas import VideoFormat, VideoMetadata, DownloadProgress
 
 logger = logging.getLogger(__name__)
@@ -26,6 +33,42 @@ YOUTUBE_REGEX = re.compile(
 TIKTOK_REGEX = re.compile(
     r"^(https?://)?(www\.)?(tiktok\.com/@[\w.-]+/video/\d+|(vm|vt)\.tiktok\.com/[\w]+|tiktok\.com/t/[\w]+)"
 )
+
+# Shared client profiles: minimal hammering
+YOUTUBE_CLIENT_PROFILES: List[List[str]] = [["web", "mweb"], ["tv"]]
+
+BOT_BLOCK_COOLDOWN_SECONDS = int(os.getenv("BOT_BLOCK_COOLDOWN_SECONDS", "60"))
+_youtube_bot_block_until: float = 0.0
+
+
+def is_youtube_cooldown_active() -> bool:
+    global _youtube_bot_block_until
+    return time.time() < _youtube_bot_block_until
+
+
+def trigger_youtube_cooldown() -> None:
+    global _youtube_bot_block_until
+    _youtube_bot_block_until = time.time() + BOT_BLOCK_COOLDOWN_SECONDS
+    logger.warning(
+        "YouTube bot block detected. Activated in-memory cooldown for %ds.",
+        BOT_BLOCK_COOLDOWN_SECONDS,
+    )
+
+
+def reset_youtube_cooldown() -> None:
+    """Helper for testing or manually clearing the cooldown."""
+    global _youtube_bot_block_until
+    _youtube_bot_block_until = 0.0
+
+
+def safe_int(value: Any, default: Optional[int] = None) -> Optional[int]:
+    """Safely parses integer values from headers, JSON, or external strings."""
+    if value is None:
+        return default
+    try:
+        return int(float(str(value).strip()))
+    except (ValueError, TypeError):
+        return default
 
 
 class DownloadException(Exception):
@@ -49,15 +92,33 @@ def detect_platform(url: str) -> str:
     )
 
 
+def is_bot_check_error(error_msg: str) -> bool:
+    msg = error_msg.lower()
+    return (
+        "sign in to confirm you're not a bot" in msg
+        or "sign in to confirm you’re not a bot" in msg
+        or "confirm you're not a bot" in msg
+        or "confirm you’re not a bot" in msg
+        or "botguard" in msg
+    )
+
+
 def map_ytdlp_error(error_msg: str) -> DownloadException:
     msg = error_msg.lower()
+    # 1. Detect bot-check challenges FIRST before generic private/login checks
+    if is_bot_check_error(msg):
+        return DownloadException(
+            "YouTube is blocking this server right now. Please try again later.",
+            error_type="bot_check",
+            status_code=503,
+        )
     if "private video" in msg or "sign in if you've been granted access" in msg or "login required" in msg:
         return DownloadException("This video is private or requires sign-in.", "private", 403)
     if "not available in your country" in msg or "geo-restricted" in msg or "blocked in your country" in msg:
         return DownloadException("This video is not available in your region.", "geo_restricted", 403)
-    if "video unavailable" in msg or "removed by the user" in msg or "has been deleted" in msg or "404" in msg:
+    if "video unavailable" in msg or "removed by the user" in msg or "has been deleted" in msg or "http error 404" in msg:
         return DownloadException("The requested video was deleted or cannot be found.", "deleted", 404)
-    if "too many requests" in msg or "rate-limit" in msg or "429" in msg or "bot" in msg:
+    if "too many requests" in msg or "rate-limit" in msg or "http error 429" in msg:
         return DownloadException("Rate limit or verification challenge triggered. Please try again later.", "rate_limit", 429)
     if "unsupported url" in msg or "is not a valid url" in msg:
         return DownloadException("Invalid video URL provided.", "invalid_url", 400)
@@ -108,29 +169,28 @@ def fetch_youtube_oembed(video_id: str) -> Optional[VideoMetadata]:
     """
     Fetches YouTube metadata via Google's official public oEmbed CDN API.
     Guaranteed 100% uptime, zero authentication, never blocked on datacenter IPs.
+    Returns empty formats and downloads_available=False to remain honest when
+    full video stream extraction is unavailable.
     """
-    oembed_url = f"https://www.youtube.com/oembed?url=https://www.youtube.com/watch?v={video_id}&format=json"
+    oembed_url = "https://www.youtube.com/oembed"
+    params = {
+        "url": f"https://www.youtube.com/watch?v={video_id}",
+        "format": "json",
+    }
     headers = {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
         "Accept": "application/json",
     }
     try:
         with httpx.Client(timeout=6.0, follow_redirects=True, headers=headers) as client:
-            resp = client.get(oembed_url)
+            resp = client.get(oembed_url, params=params)
             if resp.status_code == 200:
                 data = resp.json()
                 title = data.get("title", "YouTube Video")
                 author = data.get("author_name", "YouTube Creator")
                 thumbnail = data.get("thumbnail_url") or f"https://i.ytimg.com/vi/{video_id}/hqdefault.jpg"
 
-                formats = [
-                    VideoFormat(format_id="yt-1080p", label="1080p Full HD", resolution="1080p", ext="mp4", is_audio_only=False),
-                    VideoFormat(format_id="yt-720p", label="720p HD", resolution="720p", ext="mp4", is_audio_only=False),
-                    VideoFormat(format_id="yt-480p", label="480p", resolution="480p", ext="mp4", is_audio_only=False),
-                    VideoFormat(format_id="yt-360p", label="360p", resolution="360p", ext="mp4", is_audio_only=False),
-                    VideoFormat(format_id="yt-audio-mp3", label="MP3 Audio", resolution="Audio", ext="mp3", is_audio_only=True),
-                ]
-                logger.info(f"Retrieved YouTube video metadata via Google oEmbed for {video_id}: {title}")
+                logger.info("Retrieved YouTube video metadata via Google oEmbed for %s: %s", video_id, title)
                 return VideoMetadata(
                     id=video_id,
                     platform="youtube",
@@ -139,21 +199,14 @@ def fetch_youtube_oembed(video_id: str) -> Optional[VideoMetadata]:
                     creator_avatar=None,
                     duration=0,
                     thumbnail=thumbnail,
-                    formats=formats,
+                    formats=[],
+                    downloads_available=False,
+                    notice="Preview only: downloads are temporarily unavailable for this video.",
                 )
+            logger.warning("Google oEmbed returned status %d for %s: %s", resp.status_code, video_id, resp.text[:150])
     except Exception as e:
-        logger.warning(f"Google oEmbed failed for {video_id}: {e}")
+        logger.warning("Google oEmbed failed for %s: %s", video_id, e)
     return None
-
-
-COBALT_INSTANCES = [
-    inst for inst in [
-        os.getenv("COBALT_API_URL"),
-        "https://api.cobalt.tools",
-        "https://cobalt-api.kwiatekm.pl",
-        "https://cobalt.xy2401.com",
-    ] if inst
-]
 
 
 def download_via_cobalt(
@@ -165,9 +218,13 @@ def download_via_cobalt(
     queue: asyncio.Queue,
 ) -> Optional[Dict[str, Any]]:
     """
-    Downloads media streams via the Cobalt production engine.
-    Bypasses datacenter IP blocks, extracts 1080p/720p/MP3 with zero bot challenge.
+    Downloads media streams via Cobalt ONLY if COBALT_API_URL is configured.
+    Uses v10 payload parameters (videoQuality, downloadMode, audioFormat).
     """
+    configured_url = os.getenv("COBALT_API_URL") or COBALT_API_URL
+    if not configured_url:
+        return None
+
     is_audio = "audio" in format_id
     quality_match = re.search(r"(\d+)p", format_id)
     quality = quality_match.group(1) if quality_match else "1080"
@@ -189,55 +246,59 @@ def download_via_cobalt(
         "Content-Type": "application/json",
         "User-Agent": "SaveItApp/1.0",
     }
-    cobalt_key = os.getenv("COBALT_API_KEY")
-    if cobalt_key:
-        client_headers["Authorization"] = f"Api-Key {cobalt_key}"
+    configured_key = os.getenv("COBALT_API_KEY") or COBALT_API_KEY
+    if configured_key:
+        client_headers["Authorization"] = f"Api-Key {configured_key}"
 
     loop.call_soon_threadsafe(
         queue.put_nowait,
-        DownloadProgress(status="downloading", percent=15.0, speed="Connecting to high-speed engine...", eta="Starting..."),
+        DownloadProgress(status="downloading", percent=15.0, speed="Connecting to download engine...", eta="Starting..."),
     )
 
-    with httpx.Client(timeout=45.0, follow_redirects=True, headers=client_headers) as client:
-        for instance in COBALT_INSTANCES:
-            try:
-                endpoint = instance.rstrip("/") + "/"
-                resp = client.post(endpoint, json=payload)
-                logger.info(f"Cobalt {instance}: {resp.status_code} {resp.text[:200]}")
-                if resp.status_code == 200:
-                    data = resp.json()
-                    stream_url = data.get("url")
-                    if stream_url:
-                        clean_title = sanitize_filename(title)
-                        out_filename = f"{job_id}_{clean_title}.{ext}"
-                        out_path = DOWNLOAD_DIR / out_filename
+    endpoint = configured_url.rstrip("/") + "/"
+    try:
+        with httpx.Client(timeout=45.0, follow_redirects=True, headers=client_headers) as client:
+            resp = client.post(endpoint, json=payload)
+            if resp.status_code == 200:
+                data = resp.json()
+                status_field = data.get("status")
+                stream_url = data.get("url")
 
-                        loop.call_soon_threadsafe(
-                            queue.put_nowait,
-                            DownloadProgress(status="downloading", percent=40.0, speed="Streaming...", eta="A few seconds"),
-                        )
+                # Handle tunnel, redirect, success or direct url presence
+                if stream_url and (status_field in ("tunnel", "redirect", "success") or not status_field):
+                    clean_title = sanitize_filename(title)
+                    out_filename = f"{job_id}_{clean_title}.{ext}"
+                    out_path = DOWNLOAD_DIR / out_filename
 
-                        with client.stream("GET", stream_url) as stream_resp:
-                            if stream_resp.status_code in (200, 206):
-                                total_bytes = int(stream_resp.headers.get("content-length") or 0)
-                                downloaded = 0
-                                with open(out_path, "wb") as f:
-                                    for chunk in stream_resp.iter_bytes(chunk_size=131072):
-                                        f.write(chunk)
-                                        downloaded += len(chunk)
-                                        if total_bytes > 0:
-                                            pct = min(98.0, 40.0 + (downloaded / total_bytes * 58.0))
-                                            loop.call_soon_threadsafe(
-                                                queue.put_nowait,
-                                                DownloadProgress(status="downloading", percent=round(pct, 1), filesize=total_bytes),
-                                            )
+                    loop.call_soon_threadsafe(
+                        queue.put_nowait,
+                        DownloadProgress(status="downloading", percent=40.0, speed="Streaming...", eta="A few seconds"),
+                    )
 
-                                if os.path.exists(out_path) and os.path.getsize(out_path) > 0:
-                                    logger.info(f"Cobalt download succeeded via {instance}: {out_filename}")
-                                    return {"filename": out_filename, "filesize": os.path.getsize(out_path)}
-            except Exception as e:
-                logger.warning(f"Cobalt instance {instance} failed: {e}")
-                continue
+                    with client.stream("GET", stream_url) as stream_resp:
+                        if stream_resp.status_code in (200, 206):
+                            total_bytes = safe_int(stream_resp.headers.get("content-length")) or 0
+                            downloaded = 0
+                            with open(out_path, "wb") as f:
+                                for chunk in stream_resp.iter_bytes(chunk_size=131072):
+                                    f.write(chunk)
+                                    downloaded += len(chunk)
+                                    if total_bytes > 0:
+                                        pct = min(98.0, 40.0 + (downloaded / total_bytes * 58.0))
+                                        loop.call_soon_threadsafe(
+                                            queue.put_nowait,
+                                            DownloadProgress(status="downloading", percent=round(pct, 1), filesize=total_bytes),
+                                        )
+
+                            if out_path.exists() and out_path.stat().st_size > 0:
+                                logger.info("Cobalt download succeeded: %s", out_filename)
+                                return {"filename": out_filename, "filesize": out_path.stat().st_size}
+                else:
+                    logger.warning("Cobalt %s returned status '%s': %s", configured_url, status_field, resp.text[:200])
+            else:
+                logger.warning("Cobalt %s returned HTTP %d: %s", configured_url, resp.status_code, resp.text[:200])
+    except Exception as e:
+        logger.warning("Cobalt request failed on %s: %s", configured_url, e)
     return None
 
 
@@ -259,7 +320,8 @@ def get_base_ydl_opts(platform: str, client_override: Optional[List[str]] = None
         opts["proxy"] = PROXY_URL
 
     if platform == "youtube":
-        clients = client_override if client_override is not None else ["tv_samsung", "web_embedded", "ios", "mweb", "android"]
+        # When cookies are set or by default, use configured profile without ios/android
+        clients = client_override if client_override is not None else YOUTUBE_CLIENT_PROFILES[0]
         opts["extractor_args"] = {
             "youtube": {
                 "player_client": clients,
@@ -272,21 +334,25 @@ def extract_metadata(url: str) -> VideoMetadata:
     url = sanitize_url(url)
     platform = detect_platform(url)
 
+    # If YouTube cooldown is active, skip hammering yt-dlp immediately
+    if platform == "youtube" and is_youtube_cooldown_active():
+        logger.info("YouTube cooldown active; skipping yt-dlp and checking oEmbed.")
+        vid_id = extract_youtube_id(url)
+        if vid_id:
+            oembed_meta = fetch_youtube_oembed(vid_id)
+            if oembed_meta:
+                return oembed_meta
+        raise DownloadException(
+            "YouTube is blocking this server right now. Please try again later.",
+            error_type="bot_check",
+            status_code=503,
+        )
+
     info = None
     last_err: Optional[Exception] = None
 
     client_candidates: List[Optional[List[str]]] = (
-        [
-            ["tv_samsung", "web_embedded"],
-            ["web_embedded"],
-            ["tv_samsung"],
-            ["ios", "mweb", "android"],
-            ["android"],
-            ["ios"],
-            None,
-        ]
-        if platform == "youtube"
-        else [None]
+        YOUTUBE_CLIENT_PROFILES if platform == "youtube" else [None]
     )
 
     for client_profile in client_candidates:
@@ -305,15 +371,21 @@ def extract_metadata(url: str) -> VideoMetadata:
                     break
         except yt_dlp.utils.DownloadError as e:
             last_err = e
+            if is_bot_check_error(str(e)):
+                trigger_youtube_cooldown()
+                break  # Stop retrying; subsequent profiles will also fail
             continue
         except Exception as e:
             if isinstance(e, DownloadException):
                 raise
             last_err = e
+            if is_bot_check_error(str(e)):
+                trigger_youtube_cooldown()
+                break
             continue
 
     if not info:
-        # If yt-dlp failed on cloud datacenter IP, immediately fallback to official Google oEmbed
+        # If yt-dlp failed on cloud datacenter IP, try honest oEmbed fallback
         if platform == "youtube":
             vid_id = extract_youtube_id(url)
             if vid_id:
@@ -328,7 +400,7 @@ def extract_metadata(url: str) -> VideoMetadata:
     title = info.get("title", "Untitled Video")
     creator = info.get("uploader") or info.get("channel") or info.get("creator") or "Unknown Creator"
     creator_avatar = None
-    duration = int(info.get("duration") or 0)
+    duration = safe_int(info.get("duration"), 0)
     thumbnail = info.get("thumbnail") or ""
 
     formats: List[VideoFormat] = []
@@ -415,6 +487,8 @@ def extract_metadata(url: str) -> VideoMetadata:
         duration=duration,
         thumbnail=thumbnail,
         formats=formats,
+        downloads_available=True,
+        notice=None,
     )
 
 
@@ -469,8 +543,8 @@ async def download_video_stream(url: str, format_id: str) -> AsyncGenerator[str,
     def progress_hook(d: Dict[str, Any]):
         status = d.get("status")
         if status == "downloading":
-            total = d.get("total_bytes") or d.get("total_bytes_estimate") or 0
-            downloaded = d.get("downloaded_bytes") or 0
+            total = safe_int(d.get("total_bytes") or d.get("total_bytes_estimate"), 0)
+            downloaded = safe_int(d.get("downloaded_bytes"), 0)
             percent = (downloaded / total * 100.0) if total > 0 else 0.0
 
             speed_str = format_bytes(d.get("speed"))
@@ -515,31 +589,31 @@ async def download_video_stream(url: str, format_id: str) -> AsyncGenerator[str,
     def run_download():
         nonlocal final_filename, final_filesize
         success = False
-        last_error = None
+        last_error: Optional[Exception] = None
 
-        client_candidates: List[Optional[List[str]]] = (
-            [
-                ["tv_samsung", "web_embedded"],
-                ["web_embedded"],
-                ["tv_samsung"],
-                ["ios", "mweb", "android"],
-                ["android"],
-                ["ios"],
-                None,
-            ]
-            if platform == "youtube"
-            else [None]
-        )
+        # Check cooldown
+        if platform == "youtube" and is_youtube_cooldown_active():
+            logger.info("YouTube cooldown active; skipping yt-dlp download attempt.")
+            last_error = DownloadException(
+                "YouTube is blocking this server right now. Please try again later.",
+                error_type="bot_check",
+                status_code=503,
+            )
+        else:
+            client_candidates: List[Optional[List[str]]] = (
+                YOUTUBE_CLIENT_PROFILES if platform == "youtube" else [None]
+            )
 
-        for client_profile in client_candidates:
-            curr_opts = dict(ydl_opts)
-            if platform == "youtube":
-                clients = client_profile if client_profile is not None else ["tv_samsung", "web_embedded", "ios"]
-                curr_opts["extractor_args"] = {"youtube": {"player_client": clients}}
-            try:
-                with yt_dlp.YoutubeDL(curr_opts) as ydl:
-                    info = ydl.extract_info(url, download=True)
-                    if info:
+            for client_profile in client_candidates:
+                curr_opts = dict(ydl_opts)
+                if platform == "youtube":
+                    curr_opts["extractor_args"] = {"youtube": {"player_client": client_profile}}
+                try:
+                    with yt_dlp.YoutubeDL(curr_opts) as ydl:
+                        info = ydl.extract_info(url, download=True)
+                        if not info:
+                            continue
+
                         target_filename = ydl.prepare_filename(info)
                         if is_audio:
                             ext = curr_opts["postprocessors"][0]["preferredcodec"]
@@ -553,20 +627,36 @@ async def download_video_stream(url: str, format_id: str) -> AsyncGenerator[str,
                                     target_filename = str(DOWNLOAD_DIR / f)
                                     break
 
-                        final_filename = os.path.basename(target_filename)
-                        if os.path.exists(target_filename):
+                        # Crucial fix: Only declare success if a file actually exists and has size
+                        if os.path.exists(target_filename) and os.path.getsize(target_filename) > 0:
+                            final_filename = os.path.basename(target_filename)
                             final_filesize = os.path.getsize(target_filename)
+                            success = True
+                            break
+                except yt_dlp.utils.DownloadError as e:
+                    last_error = e
+                    if is_bot_check_error(str(e)):
+                        trigger_youtube_cooldown()
+                        break
+                    continue
+                except Exception as e:
+                    last_error = e
+                    if is_bot_check_error(str(e)):
+                        trigger_youtube_cooldown()
+                        break
+                    continue
 
-                    success = True
-                    break
-            except Exception as e:
-                last_error = e
-                continue
+        # Optional Cobalt download fallback if configured
+        if not success and platform == "youtube" and (os.getenv("COBALT_API_URL") or COBALT_API_URL):
+            logger.info("yt-dlp blocked or failed. Attempting configured Cobalt fallback for %s", url)
+            title_hint = "video"
+            vid_id = extract_youtube_id(url)
+            if vid_id:
+                oembed = fetch_youtube_oembed(vid_id)
+                if oembed:
+                    title_hint = oembed.title
 
-        # If yt-dlp was blocked by YouTube bot challenge, seamlessly use Cobalt engine!
-        if not success and platform == "youtube":
-            logger.info(f"yt-dlp blocked on datacenter IP. Seamlessly executing Cobalt download fallback for {url}")
-            cobalt_res = download_via_cobalt(url, format_id, job_id, "video", loop, queue)
+            cobalt_res = download_via_cobalt(url, format_id, job_id, title_hint, loop, queue)
             if cobalt_res:
                 final_filename = cobalt_res["filename"]
                 final_filesize = cobalt_res["filesize"]
@@ -583,7 +673,11 @@ async def download_video_stream(url: str, format_id: str) -> AsyncGenerator[str,
                 ),
             )
         else:
-            err = map_ytdlp_error(str(last_error or "Download failed"))
+            if isinstance(last_error, DownloadException):
+                err = last_error
+            else:
+                err = map_ytdlp_error(str(last_error or "Download failed"))
+
             loop.call_soon_threadsafe(
                 queue.put_nowait,
                 DownloadProgress(
@@ -600,8 +694,8 @@ async def download_video_stream(url: str, format_id: str) -> AsyncGenerator[str,
         DownloadProgress(status="downloading", percent=1.0, speed="Starting...", eta="Calculating..."),
     )
 
-    # Run in bounded background executor
-    asyncio.get_event_loop().run_in_executor(DOWNLOAD_EXECUTOR, run_download)
+    # Run in bounded background executor using running loop
+    loop.run_in_executor(DOWNLOAD_EXECUTOR, run_download)
 
     while True:
         prog = await queue.get()

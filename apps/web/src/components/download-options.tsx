@@ -71,6 +71,11 @@ function YouTubeOptions({ metadata, onDownload, isDownloading, activeFormatId, s
         </CardTitle>
       </CardHeader>
       <CardContent className="space-y-4">
+        {metadata.notice && (
+          <div className="p-3 text-sm rounded-lg bg-amber-500/10 border border-amber-500/20 text-amber-300">
+            {metadata.notice}
+          </div>
+        )}
         {/* Video Formats */}
         {videoFormats.length > 0 && (
           <div className="space-y-2">

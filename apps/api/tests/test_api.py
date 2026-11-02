@@ -12,12 +12,25 @@ from app.schemas import VideoMetadata, VideoFormat
 client = TestClient(app)
 
 
+def test_root_get_and_head():
+    response = client.get("/")
+    assert response.status_code == 200
+    assert response.json() == {"status": "ok"}
+
+    head_resp = client.head("/")
+    assert head_resp.status_code == 200
+
+
 def test_health_check():
     response = client.get("/health")
     assert response.status_code == 200
     data = response.json()
     assert data["status"] == "ok"
     assert "ffmpeg_available" in data
+    assert "youtube_cooldown_active" in data
+    assert "proxy" in data
+    assert "cookies" in data
+    assert "cobalt" in data
 
 
 def test_get_metadata_invalid_url():

@@ -11,9 +11,22 @@ from fastapi import FastAPI, Request, HTTPException, BackgroundTasks, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, StreamingResponse, FileResponse
 
-from app.config import DOWNLOAD_DIR, CLEANUP_TIMEOUT_SECONDS, RATE_LIMIT_PER_MINUTE, FFMPEG_PATH
+from app.config import (
+    DOWNLOAD_DIR,
+    CLEANUP_TIMEOUT_SECONDS,
+    RATE_LIMIT_PER_MINUTE,
+    FFMPEG_PATH,
+    PROXY_URL,
+    COOKIE_FILE_PATH,
+    COBALT_API_URL,
+)
 from app.schemas import MetadataRequest, DownloadRequest, VideoMetadata, ApiError
-from app.downloader import extract_metadata, download_video_stream, DownloadException
+from app.downloader import (
+    extract_metadata,
+    download_video_stream,
+    DownloadException,
+    is_youtube_cooldown_active,
+)
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(name)s: %(message)s")
 logger = logging.getLogger("video_downloader")
@@ -48,7 +61,6 @@ async def check_rate_limit(client_ip: str) -> bool:
     window_start = now - 60.0
     async with rate_limit_lock:
         timestamps = rate_limits[client_ip]
-        # Keep only timestamps in current 60s window
         rate_limits[client_ip] = [ts for ts in timestamps if ts > window_start]
         if len(rate_limits[client_ip]) >= RATE_LIMIT_PER_MINUTE:
             return False
@@ -56,29 +68,36 @@ async def check_rate_limit(client_ip: str) -> bool:
         return True
 
 
+def sweep_expired_files():
+    now = time.time()
+    try:
+        for filename in os.listdir(DOWNLOAD_DIR):
+            file_path = DOWNLOAD_DIR / filename
+            if file_path.is_file():
+                age = now - file_path.stat().st_mtime
+                if age > CLEANUP_TIMEOUT_SECONDS:
+                    try:
+                        file_path.unlink(missing_ok=True)
+                        logger.info("Cleaned up expired file (%.0fs old): %s", age, filename)
+                    except Exception as e:
+                        logger.warning("Error removing expired file %s: %s", filename, e)
+    except Exception as e:
+        logger.error("Error during sweep of expired files: %s", e)
+
+
 async def cleanup_old_files():
     while True:
         try:
-            now = time.time()
-            for filename in os.listdir(DOWNLOAD_DIR):
-                file_path = DOWNLOAD_DIR / filename
-                if file_path.is_file():
-                    age = now - file_path.stat().st_mtime
-                    if age > CLEANUP_TIMEOUT_SECONDS:
-                        try:
-                            file_path.unlink(missing_ok=True)
-                            logger.info(f"Cleaned up expired file ({age:.0f}s old): {filename}")
-                        except Exception as e:
-                            logger.warning(f"Error removing expired file {filename}: {e}")
+            sweep_expired_files()
         except Exception as e:
-            logger.error(f"Error in cleanup background task: {e}")
+            logger.error("Error in cleanup background task: %s", e)
         await asyncio.sleep(60)
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     cleanup_task = asyncio.create_task(cleanup_old_files())
-    logger.info(f"Started video downloader service. FFmpeg: {FFMPEG_PATH or 'Not Found'}")
+    logger.info("Started video downloader service. FFmpeg: %s", FFMPEG_PATH or "Not Found")
     yield
     cleanup_task.cancel()
     try:
@@ -112,12 +131,30 @@ async def download_exception_handler(request: Request, exc: DownloadException):
     )
 
 
+@app.exception_handler(HTTPException)
+async def http_exception_handler(request: Request, exc: HTTPException):
+    return JSONResponse(
+        status_code=exc.status_code,
+        content={"detail": exc.detail, "error_type": "http_error"},
+    )
+
+
+@app.get("/")
+@app.head("/")
+async def root():
+    return {"status": "ok"}
+
+
 @app.get("/health")
 async def health_check():
     return {
         "status": "ok",
         "service": "SaveIt Downloader Backend",
         "ffmpeg_available": bool(FFMPEG_PATH),
+        "youtube_cooldown_active": is_youtube_cooldown_active(),
+        "proxy": bool(PROXY_URL),
+        "cookies": bool(COOKIE_FILE_PATH),
+        "cobalt": bool(COBALT_API_URL or os.getenv("COBALT_API_URL")),
     }
 
 
@@ -131,7 +168,7 @@ async def get_metadata(req: MetadataRequest):
     except DownloadException:
         raise
     except Exception as e:
-        logger.error(f"Unexpected error extracting metadata for {req.url}: {e}")
+        logger.error("Unexpected error extracting metadata for %s: %s", req.url, e)
         raise DownloadException("An unexpected error occurred while processing the video.", "unknown", 500)
 
 
@@ -150,6 +187,9 @@ async def download_video(req: DownloadRequest, request: Request):
 
     if not req.url or not req.url.strip():
         raise DownloadException("URL cannot be empty.", "invalid_url", 400)
+
+    # Opportunistically sweep any expired files
+    sweep_expired_files()
 
     stream_generator = download_video_stream(req.url.strip(), req.format_id.strip())
     return StreamingResponse(
@@ -171,24 +211,21 @@ async def remove_file_delayed(file_path: str, delay: int = None):
     try:
         if os.path.exists(file_path):
             os.remove(file_path)
-            logger.info(f"Removed downloaded file after completion: {file_path}")
+            logger.info("Removed downloaded file after completion: %s", file_path)
     except Exception as e:
-        logger.warning(f"Failed to remove file {file_path}: {e}")
+        logger.warning("Failed to remove file %s: %s", file_path, e)
 
 
 @app.get("/api/file/{filename}")
 async def serve_downloaded_file(filename: str, background_tasks: BackgroundTasks):
-    # Prevent directory traversal attacks
     safe_filename = os.path.basename(filename)
     file_path = DOWNLOAD_DIR / safe_filename
 
     if not file_path.exists() or not file_path.is_file():
         raise HTTPException(status_code=404, detail="Requested file not found or expired.")
 
-    # Schedule cleanup shortly after download starts
     background_tasks.add_task(remove_file_delayed, str(file_path))
 
-    # Clean display filename (strip internal prefix if present)
     display_name = safe_filename
     if "_" in safe_filename:
         prefix, *rest = safe_filename.split("_", 1)
