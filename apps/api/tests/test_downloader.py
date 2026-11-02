@@ -68,3 +68,45 @@ def test_format_seconds():
     assert format_seconds(125) == "02:05"
     assert format_seconds(3665) == "01:01:05"
 
+
+def test_extract_youtube_id():
+    from app.downloader import extract_youtube_id
+    assert extract_youtube_id("https://www.youtube.com/watch?v=BOJw7TYH-fE") == "BOJw7TYH-fE"
+    assert extract_youtube_id("https://youtu.be/BOJw7TYH-fE") == "BOJw7TYH-fE"
+    assert extract_youtube_id("https://www.youtube.com/shorts/BOJw7TYH-fE") == "BOJw7TYH-fE"
+    assert extract_youtube_id("https://tiktok.com/@user/video/123") is None
+
+
+def test_sanitize_filename():
+    from app.downloader import sanitize_filename
+    assert sanitize_filename("Video? With / Invalid : Chars *") == "Video With  Invalid  Chars"
+    assert sanitize_filename("") == "video"
+
+
+from unittest.mock import patch, MagicMock
+
+@patch("app.downloader.fetch_invidious_metadata")
+@patch("app.downloader.yt_dlp.YoutubeDL")
+def test_invidious_fallback_on_bot_block(mock_ydl_class, mock_invidious):
+    from app.downloader import extract_metadata, VideoMetadata
+    mock_ydl = MagicMock()
+    mock_ydl_class.return_value.__enter__.return_value = mock_ydl
+    # Simulate YouTube bot challenge block
+    import yt_dlp
+    mock_ydl.extract_info.side_effect = yt_dlp.utils.DownloadError("Sign in to confirm you're not a bot.")
+
+    mock_invidious.return_value = VideoMetadata(
+        id="BOJw7TYH-fE",
+        platform="youtube",
+        title="Test Invidious Video",
+        creator="Channel",
+        creator_avatar=None,
+        duration=120,
+        thumbnail="https://example.com/thumb.jpg",
+        formats=[],
+    )
+
+    metadata = extract_metadata("https://www.youtube.com/watch?v=BOJw7TYH-fE")
+    assert metadata.title == "Test Invidious Video"
+    assert mock_invidious.called
+

@@ -3,8 +3,10 @@ import os
 import re
 import uuid
 import logging
+import subprocess
 from concurrent.futures import ThreadPoolExecutor
 from typing import AsyncGenerator, Dict, Any, List, Optional
+import httpx
 import yt_dlp
 
 from app.config import DOWNLOAD_DIR, FFMPEG_PATH, COOKIE_FILE_PATH, PROXY_URL
@@ -92,6 +94,165 @@ def sanitize_url(url: str) -> str:
     return url
 
 
+def extract_youtube_id(url: str) -> Optional[str]:
+    match = re.search(r"(?:youtu\.be/|youtube\.com/(?:watch\?v=|embed/|shorts/))([\w-]{11})", url)
+    return match.group(1) if match else None
+
+
+def sanitize_filename(name: str) -> str:
+    cleaned = re.sub(r'[\\/*?:"<>|]', "", name).strip()
+    return cleaned[:80] if cleaned else "video"
+
+
+INVIDIOUS_INSTANCES = [
+    "https://inv.tux.pizza",
+    "https://invidious.nerdvpn.de",
+    "https://vid.puffyan.us",
+    "https://invidious.privacyredirect.com",
+    "https://yt.artemislena.eu",
+    "https://invidious.projectsegfau.lt",
+]
+
+# Cache format streams by video_id: format_id -> { "video_url": ..., "audio_url": ... }
+INVIDIOUS_STREAM_CACHE: Dict[str, Dict[str, Any]] = {}
+
+
+def fetch_invidious_metadata(video_id: str) -> VideoMetadata:
+    last_err = None
+    client_headers = {
+        "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
+        "Accept": "application/json",
+    }
+
+    with httpx.Client(timeout=6.0, follow_redirects=True, headers=client_headers) as client:
+        for instance in INVIDIOUS_INSTANCES:
+            try:
+                api_url = f"{instance}/api/v1/videos/{video_id}"
+                resp = client.get(api_url)
+                if resp.status_code == 200:
+                    data = resp.json()
+                    title = data.get("title", "YouTube Video")
+                    author = data.get("author", "Unknown Creator")
+                    duration = int(data.get("lengthSeconds") or 0)
+
+                    thumbnails = data.get("videoThumbnails", [])
+                    thumbnail_url = thumbnails[-1].get("url") if thumbnails else f"https://i.ytimg.com/vi/{video_id}/hqdefault.jpg"
+                    if thumbnail_url and thumbnail_url.startswith("/"):
+                        thumbnail_url = f"{instance}{thumbnail_url}"
+
+                    format_streams = data.get("formatStreams", [])
+                    adaptive_formats = data.get("adaptiveFormats", [])
+
+                    # Find best audio stream
+                    best_audio = None
+                    for af in adaptive_formats:
+                        type_str = af.get("type", "")
+                        if "audio/" in type_str:
+                            bitrate = af.get("bitrate", 0)
+                            if not best_audio or bitrate > best_audio.get("bitrate", 0):
+                                best_audio = af
+
+                    formats: List[VideoFormat] = []
+                    cache_entry: Dict[str, Any] = {"title": title, "streams": {}}
+                    found_heights = set()
+
+                    # 1. Pre-muxed streams
+                    for fs in format_streams:
+                        ql = fs.get("qualityLabel") or fs.get("quality") or ""
+                        h_match = re.search(r"(\d+)p", ql)
+                        if h_match:
+                            h = int(h_match.group(1))
+                            if h not in found_heights:
+                                found_heights.add(h)
+                                fid = f"yt-{h}p"
+                                formats.append(
+                                    VideoFormat(
+                                        format_id=fid,
+                                        label=f"{h}p MP4",
+                                        resolution=f"{h}p",
+                                        ext="mp4",
+                                        filesize=int(fs.get("clen") or fs.get("size") or 0) or None,
+                                        is_audio_only=False,
+                                    )
+                                )
+                                cache_entry["streams"][fid] = {
+                                    "video_url": fs.get("url"),
+                                    "audio_url": None,
+                                }
+
+                    # 2. Adaptive video streams (1080p, 1440p, 4K)
+                    for af in adaptive_formats:
+                        type_str = af.get("type", "")
+                        if "video/" in type_str:
+                            ql = af.get("qualityLabel") or ""
+                            h_match = re.search(r"(\d+)p", ql)
+                            if h_match:
+                                h = int(h_match.group(1))
+                                if h not in found_heights and h >= 720:
+                                    found_heights.add(h)
+                                    fid = f"yt-{h}p"
+                                    formats.append(
+                                        VideoFormat(
+                                            format_id=fid,
+                                            label=f"{h}p MP4 (HD)",
+                                            resolution=f"{h}p",
+                                            ext="mp4",
+                                            filesize=int(af.get("clen") or 0) or None,
+                                            is_audio_only=False,
+                                        )
+                                    )
+                                    cache_entry["streams"][fid] = {
+                                        "video_url": af.get("url"),
+                                        "audio_url": best_audio.get("url") if best_audio else None,
+                                    }
+
+                    formats.sort(
+                        key=lambda f: int(re.search(r"\d+", f.resolution).group()) if re.search(r"\d+", f.resolution) else 0,
+                        reverse=True,
+                    )
+
+                    # 3. MP3 Audio format
+                    if best_audio:
+                        fid = "yt-audio-mp3"
+                        formats.append(
+                            VideoFormat(
+                                format_id=fid,
+                                label="MP3 Audio",
+                                resolution="Audio",
+                                ext="mp3",
+                                filesize=int(best_audio.get("clen") or 0) or None,
+                                is_audio_only=True,
+                            )
+                        )
+                        cache_entry["streams"][fid] = {
+                            "video_url": None,
+                            "audio_url": best_audio.get("url"),
+                        }
+
+                    INVIDIOUS_STREAM_CACHE[video_id] = cache_entry
+                    logger.info(f"Successfully fetched metadata via Invidious mirror for {video_id}: {title}")
+
+                    return VideoMetadata(
+                        id=video_id,
+                        platform="youtube",
+                        title=title,
+                        creator=author,
+                        creator_avatar=None,
+                        duration=duration,
+                        thumbnail=thumbnail_url,
+                        formats=formats,
+                    )
+            except Exception as e:
+                last_err = e
+                continue
+
+    raise DownloadException(
+        f"Could not retrieve video stream. Please try again shortly. ({last_err or 'Instances busy'})",
+        error_type="network",
+        status_code=502,
+    )
+
+
 def get_base_ydl_opts(platform: str, client_override: Optional[List[str]] = None) -> Dict[str, Any]:
     opts: Dict[str, Any] = {
         "quiet": True,
@@ -165,9 +326,13 @@ def extract_metadata(url: str) -> VideoMetadata:
             continue
 
     if not info:
+        if platform == "youtube":
+            vid_id = extract_youtube_id(url)
+            if vid_id:
+                logger.info(f"yt-dlp blocked on datacenter IP for {vid_id}. Activating Invidious fallback engine.")
+                return fetch_invidious_metadata(vid_id)
         if last_err:
             raise map_ytdlp_error(str(last_err))
-        raise DownloadException("Could not retrieve video information.", "unknown", 404)
         raise DownloadException("Could not retrieve video information.", "unknown", 404)
 
     video_id = info.get("id", str(uuid.uuid4())[:8])
@@ -280,6 +445,112 @@ def extract_metadata(url: str) -> VideoMetadata:
     )
 
 
+def download_via_invidious(
+    video_id: str,
+    format_id: str,
+    job_id: str,
+    loop: asyncio.AbstractEventLoop,
+    queue: asyncio.Queue,
+) -> Optional[Dict[str, Any]]:
+    if video_id not in INVIDIOUS_STREAM_CACHE:
+        try:
+            fetch_invidious_metadata(video_id)
+        except Exception as e:
+            logger.error(f"Invidious stream fetch failed: {e}")
+            return None
+
+    cache = INVIDIOUS_STREAM_CACHE.get(video_id)
+    if not cache or "streams" not in cache:
+        return None
+
+    stream_info = cache["streams"].get(format_id)
+    if not stream_info:
+        if "audio" in format_id:
+            stream_info = cache["streams"].get("yt-audio-mp3")
+        if not stream_info and cache["streams"]:
+            stream_info = next(iter(cache["streams"].values()))
+
+    if not stream_info:
+        return None
+
+    video_url = stream_info.get("video_url")
+    audio_url = stream_info.get("audio_url")
+    title_slug = sanitize_filename(cache.get("title", "video"))
+    is_audio = "audio" in format_id
+
+    loop.call_soon_threadsafe(
+        queue.put_nowait,
+        DownloadProgress(status="downloading", percent=30.0, speed="Streaming...", eta="Connecting..."),
+    )
+
+    ffmpeg_bin = FFMPEG_PATH or "ffmpeg"
+
+    if is_audio:
+        out_filename = f"{job_id}_{title_slug}.mp3"
+        out_path = str(DOWNLOAD_DIR / out_filename)
+        source_url = audio_url or video_url
+        cmd = [
+            ffmpeg_bin, "-y",
+            "-reconnect", "1",
+            "-reconnect_streamed", "1",
+            "-reconnect_delay_max", "5",
+            "-i", source_url,
+            "-vn",
+            "-c:a", "libmp3lame",
+            "-b:a", "192k",
+            out_path,
+        ]
+    elif video_url and audio_url:
+        out_filename = f"{job_id}_{title_slug}.mp4"
+        out_path = str(DOWNLOAD_DIR / out_filename)
+        cmd = [
+            ffmpeg_bin, "-y",
+            "-reconnect", "1",
+            "-reconnect_streamed", "1",
+            "-reconnect_delay_max", "5",
+            "-i", video_url,
+            "-i", audio_url,
+            "-c:v", "copy",
+            "-c:a", "aac",
+            "-shortest",
+            out_path,
+        ]
+    elif video_url:
+        out_filename = f"{job_id}_{title_slug}.mp4"
+        out_path = str(DOWNLOAD_DIR / out_filename)
+        cmd = [
+            ffmpeg_bin, "-y",
+            "-reconnect", "1",
+            "-reconnect_streamed", "1",
+            "-reconnect_delay_max", "5",
+            "-i", video_url,
+            "-c", "copy",
+            out_path,
+        ]
+    else:
+        return None
+
+    loop.call_soon_threadsafe(
+        queue.put_nowait,
+        DownloadProgress(status="merging" if not is_audio else "converting", percent=70.0, speed="Remuxing...", eta="A few seconds"),
+    )
+
+    try:
+        proc = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=240)
+        if proc.returncode != 0:
+            logger.error(f"FFmpeg stream remuxing failed: {proc.stderr.decode('utf-8', errors='ignore')[:300]}")
+            return None
+
+        if os.path.exists(out_path):
+            filesize = os.path.getsize(out_path)
+            return {"filename": out_filename, "filesize": filesize}
+    except Exception as e:
+        logger.error(f"Error during Invidious FFmpeg download: {e}")
+        return None
+
+    return None
+
+
 async def download_video_stream(url: str, format_id: str) -> AsyncGenerator[str, None]:
     url = sanitize_url(url)
     loop = asyncio.get_running_loop()
@@ -378,53 +649,73 @@ async def download_video_stream(url: str, format_id: str) -> AsyncGenerator[str,
         nonlocal final_filename, final_filesize
         success = False
         last_error = None
+        vid_id = extract_youtube_id(url) if platform == "youtube" else None
 
-        client_candidates: List[Optional[List[str]]] = (
-            [
-                ["tv_samsung", "web_embedded"],
-                ["web_embedded"],
-                ["tv_samsung"],
-                ["ios", "mweb", "android"],
-                ["android"],
-                ["ios"],
-                None,
-            ]
-            if platform == "youtube"
-            else [None]
-        )
+        # 1. If video streams were already discovered via Invidious cache, stream directly!
+        if vid_id and vid_id in INVIDIOUS_STREAM_CACHE:
+            logger.info(f"Using Invidious streaming engine for download: {vid_id}")
+            result = download_via_invidious(vid_id, format_id, job_id, loop, queue)
+            if result:
+                final_filename = result["filename"]
+                final_filesize = result["filesize"]
+                success = True
 
-        for client_profile in client_candidates:
-            curr_opts = dict(ydl_opts)
-            if platform == "youtube":
-                clients = client_profile if client_profile is not None else ["ios", "mweb", "android"]
-                curr_opts["extractor_args"] = {"youtube": {"player_client": clients}}
-            try:
-                with yt_dlp.YoutubeDL(curr_opts) as ydl:
-                    info = ydl.extract_info(url, download=True)
-                    if info:
-                        target_filename = ydl.prepare_filename(info)
-                        if is_audio:
-                            ext = curr_opts["postprocessors"][0]["preferredcodec"]
-                            target_filename = os.path.splitext(target_filename)[0] + f".{ext}"
-                        elif "merge_output_format" in curr_opts:
-                            target_filename = os.path.splitext(target_filename)[0] + f".{curr_opts['merge_output_format']}"
+        # 2. Otherwise try standard yt-dlp
+        if not success:
+            client_candidates: List[Optional[List[str]]] = (
+                [
+                    ["tv_samsung", "web_embedded"],
+                    ["web_embedded"],
+                    ["tv_samsung"],
+                    ["ios", "mweb", "android"],
+                    ["android"],
+                    ["ios"],
+                    None,
+                ]
+                if platform == "youtube"
+                else [None]
+            )
 
-                        if not os.path.exists(target_filename):
-                            # Find matching file with job_id prefix in DOWNLOAD_DIR
-                            for f in os.listdir(DOWNLOAD_DIR):
-                                if f.startswith(job_id):
-                                    target_filename = str(DOWNLOAD_DIR / f)
-                                    break
+            for client_profile in client_candidates:
+                curr_opts = dict(ydl_opts)
+                if platform == "youtube":
+                    clients = client_profile if client_profile is not None else ["tv_samsung", "web_embedded", "ios"]
+                    curr_opts["extractor_args"] = {"youtube": {"player_client": clients}}
+                try:
+                    with yt_dlp.YoutubeDL(curr_opts) as ydl:
+                        info = ydl.extract_info(url, download=True)
+                        if info:
+                            target_filename = ydl.prepare_filename(info)
+                            if is_audio:
+                                ext = curr_opts["postprocessors"][0]["preferredcodec"]
+                                target_filename = os.path.splitext(target_filename)[0] + f".{ext}"
+                            elif "merge_output_format" in curr_opts:
+                                target_filename = os.path.splitext(target_filename)[0] + f".{curr_opts['merge_output_format']}"
 
-                        final_filename = os.path.basename(target_filename)
-                        if os.path.exists(target_filename):
-                            final_filesize = os.path.getsize(target_filename)
+                            if not os.path.exists(target_filename):
+                                for f in os.listdir(DOWNLOAD_DIR):
+                                    if f.startswith(job_id):
+                                        target_filename = str(DOWNLOAD_DIR / f)
+                                        break
 
-                    success = True
-                    break
-            except Exception as e:
-                last_error = e
-                continue
+                            final_filename = os.path.basename(target_filename)
+                            if os.path.exists(target_filename):
+                                final_filesize = os.path.getsize(target_filename)
+
+                        success = True
+                        break
+                except Exception as e:
+                    last_error = e
+                    continue
+
+        # 3. If yt-dlp failed (e.g. Bot check / challenge), seamlessly fallback to Invidious stream engine!
+        if not success and platform == "youtube" and vid_id:
+            logger.info(f"yt-dlp blocked on datacenter IP. Seamlessly falling back to Invidious stream engine for {vid_id}")
+            result = download_via_invidious(vid_id, format_id, job_id, loop, queue)
+            if result:
+                final_filename = result["filename"]
+                final_filesize = result["filesize"]
+                success = True
 
         if success:
             loop.call_soon_threadsafe(
