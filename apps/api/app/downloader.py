@@ -7,7 +7,7 @@ from concurrent.futures import ThreadPoolExecutor
 from typing import AsyncGenerator, Dict, Any, List, Optional
 import yt_dlp
 
-from app.config import DOWNLOAD_DIR, FFMPEG_PATH
+from app.config import DOWNLOAD_DIR, FFMPEG_PATH, COOKIE_FILE_PATH, PROXY_URL
 from app.schemas import VideoFormat, VideoMetadata, DownloadProgress
 
 logger = logging.getLogger(__name__)
@@ -103,8 +103,14 @@ def get_base_ydl_opts(platform: str, client_override: Optional[List[str]] = None
     if FFMPEG_PATH:
         opts["ffmpeg_location"] = FFMPEG_PATH
 
+    if COOKIE_FILE_PATH and os.path.exists(COOKIE_FILE_PATH):
+        opts["cookiefile"] = COOKIE_FILE_PATH
+
+    if PROXY_URL:
+        opts["proxy"] = PROXY_URL
+
     if platform == "youtube":
-        clients = client_override if client_override is not None else ["ios", "mweb", "android"]
+        clients = client_override if client_override is not None else ["tv_samsung", "web_embedded", "ios", "mweb", "android"]
         opts["extractor_args"] = {
             "youtube": {
                 "player_client": clients,
@@ -121,7 +127,16 @@ def extract_metadata(url: str) -> VideoMetadata:
     last_err: Optional[Exception] = None
 
     client_candidates: List[Optional[List[str]]] = (
-        [["ios", "mweb", "android"], ["android"], ["ios"], ["mweb"], None]
+        [
+            ["tv_samsung", "web_embedded"],
+            ["web_embedded"],
+            ["tv_samsung"],
+            ["ios", "mweb", "android"],
+            ["android"],
+            ["ios"],
+            ["mweb"],
+            None,
+        ]
         if platform == "youtube"
         else [None]
     )
@@ -365,7 +380,15 @@ async def download_video_stream(url: str, format_id: str) -> AsyncGenerator[str,
         last_error = None
 
         client_candidates: List[Optional[List[str]]] = (
-            [["ios", "mweb", "android"], ["android"], ["ios"], None]
+            [
+                ["tv_samsung", "web_embedded"],
+                ["web_embedded"],
+                ["tv_samsung"],
+                ["ios", "mweb", "android"],
+                ["android"],
+                ["ios"],
+                None,
+            ]
             if platform == "youtube"
             else [None]
         )
