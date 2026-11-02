@@ -103,12 +103,10 @@ def get_base_ydl_opts(platform: str, client_override: Optional[List[str]] = None
     if FFMPEG_PATH:
         opts["ffmpeg_location"] = FFMPEG_PATH
 
-    if platform == "youtube":
-        # android_vr and android bypass YouTube's "The page needs to be reloaded" bot challenge
-        clients = client_override or ["android_vr", "android", "web"]
+    if platform == "youtube" and client_override:
         opts["extractor_args"] = {
             "youtube": {
-                "player_client": clients,
+                "player_client": client_override,
             }
         }
     return opts
@@ -136,7 +134,7 @@ def extract_metadata(url: str) -> VideoMetadata:
         # If web/default triggered the reload or playability block, fallback specifically to mobile clients
         if platform == "youtube" and ("page needs to be reloaded" in err_str or "playability" in err_str.lower()):
             try:
-                fallback_opts = get_base_ydl_opts(platform, client_override=["android_vr", "android"])
+                fallback_opts = get_base_ydl_opts(platform, client_override=["ios", "mweb"])
                 fallback_opts["skip_download"] = True
                 with yt_dlp.YoutubeDL(fallback_opts) as ydl:
                     info = ydl.extract_info(url, download=False)
@@ -273,7 +271,7 @@ async def download_video_stream(url: str, format_id: str) -> AsyncGenerator[str,
 
     is_audio = "audio" in format_id or format_id == "tiktok-audio"
 
-    ydl_opts = get_base_ydl_opts(platform, client_override=["android_vr", "android"] if platform == "youtube" else None)
+    ydl_opts = get_base_ydl_opts(platform)
     ydl_opts.update(
         {
             "outtmpl": out_template,
@@ -401,6 +399,12 @@ async def download_video_stream(url: str, format_id: str) -> AsyncGenerator[str,
             )
         finally:
             loop.call_soon_threadsafe(queue.put_nowait, None)
+
+    # Send initial progress state immediately
+    loop.call_soon_threadsafe(
+        queue.put_nowait,
+        DownloadProgress(status="downloading", percent=1.0, speed="Starting...", eta="Calculating..."),
+    )
 
     # Run in bounded background executor
     asyncio.get_event_loop().run_in_executor(DOWNLOAD_EXECUTOR, run_download)

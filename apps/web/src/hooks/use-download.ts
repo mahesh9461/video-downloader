@@ -56,9 +56,9 @@ export function useDownload(): UseDownloadReturn {
       const data = await apiClient.fetchMetadata(url);
       setMetadata(data);
     } catch (err) {
-      if (err instanceof DownloadError) {
-        setError(err.message);
-        setErrorType(err.type);
+      if (err instanceof DownloadError || (err && typeof err === "object" && (err as any).name === "DownloadError")) {
+        setError((err as DownloadError).message);
+        setErrorType((err as DownloadError).type);
       } else {
         setError("Failed to fetch video info. Please check the URL and try again.");
         setErrorType("network");
@@ -70,7 +70,15 @@ export function useDownload(): UseDownloadReturn {
 
   const startDownload = useCallback((url: string, formatId: string) => {
     setIsDownloading(true);
-    setProgress(null);
+    setProgress({
+      status: "downloading",
+      percent: 0,
+      speed: "Connecting...",
+      eta: "Starting...",
+      filename: null,
+      filesize: null,
+      error_message: null,
+    });
     setError(null);
 
     const cancel = apiClient.downloadWithProgress(
