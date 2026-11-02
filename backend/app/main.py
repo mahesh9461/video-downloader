@@ -1,6 +1,7 @@
 import asyncio
 import os
 import time
+import ipaddress
 import logging
 from collections import defaultdict
 from typing import Dict, List
@@ -25,10 +26,20 @@ rate_limit_lock = asyncio.Lock()
 def get_client_ip(request: Request) -> str:
     forwarded = request.headers.get("x-forwarded-for")
     if forwarded:
-        return forwarded.split(",")[0].strip()
+        candidate = forwarded.split(",")[0].strip()
+        try:
+            ipaddress.ip_address(candidate)
+            return candidate
+        except ValueError:
+            pass
     real_ip = request.headers.get("x-real-ip")
     if real_ip:
-        return real_ip.strip()
+        candidate = real_ip.strip()
+        try:
+            ipaddress.ip_address(candidate)
+            return candidate
+        except ValueError:
+            pass
     return request.client.host if request.client else "127.0.0.1"
 
 
@@ -154,7 +165,7 @@ async def download_video(req: DownloadRequest, request: Request):
 
 async def remove_file_delayed(file_path: str, delay: int = None):
     if delay is None:
-        delay = int(os.getenv("FILE_CLEANUP_DELAY_SECONDS", "15"))
+        delay = int(os.getenv("FILE_CLEANUP_DELAY_SECONDS", "300"))
     if delay > 0:
         await asyncio.sleep(delay)
     try:

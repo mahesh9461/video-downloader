@@ -24,6 +24,7 @@ import { HistoryDrawer } from "@/components/history-drawer";
 import { ErrorBanner } from "@/components/error-banner";
 import { useDownload } from "@/hooks/use-download";
 import { useHistory } from "@/hooks/use-history";
+import { cleanVideoUrl } from "@/lib/validators";
 
 export default function Home() {
   const [historyOpen, setHistoryOpen] = useState(false);
@@ -49,9 +50,10 @@ export default function Home() {
 
   const handleUrlSubmit = useCallback(
     (url: string) => {
-      setCurrentUrl(url);
+      const cleaned = cleanVideoUrl(url);
+      setCurrentUrl(cleaned);
       reset();
-      fetchMetadata(url);
+      fetchMetadata(cleaned);
     },
     [fetchMetadata, reset]
   );
@@ -63,13 +65,14 @@ export default function Home() {
 
       // Add to history when download starts
       if (metadata) {
+        const chosenFormat = metadata.formats.find((f) => f.format_id === formatId);
         addToHistory({
           platform: metadata.platform,
           title: metadata.title,
           thumbnail: metadata.thumbnail,
           creator: metadata.creator,
           format: label,
-          filesize: null,
+          filesize: chosenFormat?.filesize || null,
         });
       }
     },
@@ -155,7 +158,13 @@ export default function Home() {
           )}
 
           {/* Progress Bar */}
-          {progress && <ProgressBar progress={progress} />}
+          {progress && (
+            <ProgressBar
+              progress={progress}
+              onCancel={cancelDownload}
+              onReset={reset}
+            />
+          )}
         </section>
 
         {/* Features Grid (SEO & Value Prop) */}

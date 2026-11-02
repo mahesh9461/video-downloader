@@ -1,13 +1,16 @@
 "use client";
 
-import { Zap, HardDrive, Clock, CheckCircle2, XCircle, Merge } from "lucide-react";
+import { Zap, HardDrive, Clock, CheckCircle2, XCircle, Merge, X, RotateCcw } from "lucide-react";
 import { Progress } from "@/components/ui/progress";
 import { Card, CardContent } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
 import { DownloadProgress as DownloadProgressType } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
 interface ProgressBarProps {
   progress: DownloadProgressType;
+  onCancel?: () => void;
+  onReset?: () => void;
 }
 
 const STATUS_CONFIG: Record<string, { icon: React.ElementType; label: string; color: string }> = {
@@ -18,9 +21,10 @@ const STATUS_CONFIG: Record<string, { icon: React.ElementType; label: string; co
   error: { icon: XCircle, label: "Failed", color: "text-red-400" },
 };
 
-export function ProgressBar({ progress }: ProgressBarProps) {
+export function ProgressBar({ progress, onCancel, onReset }: ProgressBarProps) {
   const config = STATUS_CONFIG[progress.status] || STATUS_CONFIG.downloading;
   const Icon = config.icon;
+  const isInFlight = ["downloading", "merging", "converting"].includes(progress.status);
 
   return (
     <Card className="animate-in fade-in-0 slide-in-from-bottom-2 duration-300 overflow-hidden">
@@ -34,9 +38,33 @@ export function ProgressBar({ progress }: ProgressBarProps) {
               />
               <span className={cn("text-sm font-medium", config.color)}>{config.label}</span>
             </div>
-            <span className="text-sm font-mono font-bold text-white tabular-nums">
-              {Math.round(progress.percent)}%
-            </span>
+            <div className="flex items-center gap-3">
+              <span className="text-sm font-mono font-bold text-white tabular-nums">
+                {Math.round(progress.percent)}%
+              </span>
+              {isInFlight && onCancel && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={onCancel}
+                  className="h-6 px-2 text-xs text-zinc-400 hover:text-red-400 hover:bg-red-500/10"
+                >
+                  <X className="w-3.5 h-3.5 mr-1" />
+                  Cancel
+                </Button>
+              )}
+              {progress.status === "complete" && onReset && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={onReset}
+                  className="h-6 px-2 text-xs text-zinc-400 hover:text-violet-300 hover:bg-violet-500/10"
+                >
+                  <RotateCcw className="w-3 h-3 mr-1" />
+                  Done
+                </Button>
+              )}
+            </div>
           </div>
 
           {/* Progress bar */}
@@ -71,4 +99,3 @@ export function ProgressBar({ progress }: ProgressBarProps) {
     </Card>
   );
 }
-

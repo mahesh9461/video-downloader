@@ -1,5 +1,5 @@
 import "@testing-library/jest-dom";
-import { detectPlatform, isValidUrl } from "@/lib/validators";
+import { detectPlatform, isValidUrl, cleanVideoUrl } from "@/lib/validators";
 
 describe("validators", () => {
   describe("detectPlatform", () => {
@@ -252,6 +252,41 @@ describe("validators", () => {
 
       // Assert
       expect(result).toBe(false);
+    });
+  });
+
+  describe("cleanVideoUrl", () => {
+    it("should strip playlist parameter from YouTube watch URL to prevent loading full playlist", () => {
+      // Arrange
+      const url = "https://www.youtube.com/watch?v=dQw4w9WgXcQ&list=RDdQw4w9WgXcQ&index=1";
+
+      // Act
+      const result = cleanVideoUrl(url);
+
+      // Assert
+      expect(result).toBe("https://www.youtube.com/watch?v=dQw4w9WgXcQ");
+    });
+
+    it("should preserve standard YouTube video URL without playlist", () => {
+      // Arrange
+      const url = "https://www.youtube.com/watch?v=dQw4w9WgXcQ";
+
+      // Act
+      const result = cleanVideoUrl(url);
+
+      // Assert
+      expect(result).toBe("https://www.youtube.com/watch?v=dQw4w9WgXcQ");
+    });
+
+    it("should preserve TikTok URLs without altering", () => {
+      // Arrange
+      const url = "https://www.tiktok.com/@user/video/1234567890123456789";
+
+      // Act
+      const result = cleanVideoUrl(url);
+
+      // Assert
+      expect(result).toBe("https://www.tiktok.com/@user/video/1234567890123456789");
     });
   });
 });

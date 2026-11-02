@@ -1,16 +1,35 @@
 import { VideoMetadata, DownloadProgress, ApiError } from "./types";
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+const getApiBase = () => {
+  if (process.env.NEXT_PUBLIC_API_URL !== undefined && process.env.NEXT_PUBLIC_API_URL !== "") {
+    return process.env.NEXT_PUBLIC_API_URL;
+  }
+  if (typeof window !== "undefined") {
+    return "/api/proxy";
+  }
+  return "http://localhost:8000";
+};
+
+const API_BASE = getApiBase();
 
 class ApiClient {
   private baseUrl: string;
 
   constructor(baseUrl: string) {
-    this.baseUrl = baseUrl;
+    this.baseUrl = baseUrl.replace(/\/+$/, "");
+  }
+
+  private resolveUrl(path: string): string {
+    const cleanPath = path.startsWith("/") ? path : `/${path}`;
+    if (this.baseUrl.endsWith("/api/proxy")) {
+      const endpoint = cleanPath.startsWith("/api/") ? cleanPath.slice(5) : cleanPath.slice(1);
+      return `${this.baseUrl}/${endpoint}`;
+    }
+    return `${this.baseUrl}${cleanPath}`;
   }
 
   async fetchMetadata(url: string): Promise<VideoMetadata> {
-    const response = await fetch(`${this.baseUrl}/api/metadata`, {
+    const response = await fetch(this.resolveUrl("/api/metadata"), {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ url }),
@@ -35,7 +54,7 @@ class ApiClient {
 
     const run = async () => {
       try {
-        const response = await fetch(`${this.baseUrl}/api/download`, {
+        const response = await fetch(this.resolveUrl("/api/download"), {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ url, format_id: formatId }),
@@ -67,7 +86,7 @@ class ApiClient {
 
               if (data.status === "complete" && data.filename) {
                 onComplete(
-                  `${this.baseUrl}/api/file/${encodeURIComponent(data.filename)}`
+                  this.resolveUrl(`/api/file/${encodeURIComponent(data.filename)}`)
                 );
               } else if (data.status === "error") {
                 onError(data.error_message || "Download failed");
@@ -103,4 +122,3 @@ export class DownloadError extends Error {
 }
 
 export const apiClient = new ApiClient(API_BASE);
-

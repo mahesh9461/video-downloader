@@ -8,7 +8,8 @@ export async function POST(
 ) {
   const { path } = await params;
   const targetPath = path.join("/");
-  const targetUrl = `${BACKEND_URL}/api/${targetPath}`;
+  const cleanPath = targetPath.startsWith("api/") ? targetPath.slice(4) : targetPath;
+  const targetUrl = `${BACKEND_URL}/api/${cleanPath}`;
 
   try {
     const body = await request.json();
@@ -54,7 +55,8 @@ export async function GET(
 ) {
   const { path } = await params;
   const targetPath = path.join("/");
-  const targetUrl = `${BACKEND_URL}/api/${targetPath}`;
+  const cleanPath = targetPath.startsWith("api/") ? targetPath.slice(4) : targetPath;
+  const targetUrl = `${BACKEND_URL}/api/${cleanPath}`;
 
   try {
     const backendResponse = await fetch(targetUrl, {

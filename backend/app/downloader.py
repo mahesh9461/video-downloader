@@ -3,6 +3,7 @@ import os
 import re
 import uuid
 import logging
+from concurrent.futures import ThreadPoolExecutor
 from typing import AsyncGenerator, Dict, Any, List, Optional
 import yt_dlp
 
@@ -10,6 +11,12 @@ from app.config import DOWNLOAD_DIR, FFMPEG_PATH
 from app.schemas import VideoFormat, VideoMetadata, DownloadProgress
 
 logger = logging.getLogger(__name__)
+
+MAX_CONCURRENT_DOWNLOADS = int(os.getenv("MAX_CONCURRENT_DOWNLOADS", "5"))
+DOWNLOAD_EXECUTOR = ThreadPoolExecutor(
+    max_workers=MAX_CONCURRENT_DOWNLOADS,
+    thread_name_prefix="downloader_worker",
+)
 
 YOUTUBE_REGEX = re.compile(
     r"^(https?://)?(www\.|m\.)?(youtube\.com/(watch\?v=|shorts/|embed/)|youtu\.be/)[\w-]{11}"
@@ -75,10 +82,22 @@ def format_seconds(seconds: Optional[int]) -> Optional[str]:
     return f"{mins:02d}:{secs:02d}"
 
 
+def sanitize_url(url: str) -> str:
+    """Strips playlist and mix parameters so yt-dlp only loads the single target video."""
+    url = url.strip()
+    if ("youtube.com" in url or "youtu.be" in url) and ("&list=" in url or "?list=" in url):
+        v_match = re.search(r"[?&]v=([a-zA-Z0-9_-]{11})", url)
+        if v_match:
+            return f"https://www.youtube.com/watch?v={v_match.group(1)}"
+    return url
+
+
 def get_base_ydl_opts(platform: str, client_override: Optional[List[str]] = None) -> Dict[str, Any]:
     opts: Dict[str, Any] = {
         "quiet": True,
         "no_warnings": True,
+        "noplaylist": True,
+        "playlist_items": "1",
         "extract_flat": False,
     }
     if FFMPEG_PATH:
@@ -96,6 +115,7 @@ def get_base_ydl_opts(platform: str, client_override: Optional[List[str]] = None
 
 
 def extract_metadata(url: str) -> VideoMetadata:
+    url = sanitize_url(url)
     platform = detect_platform(url)
 
     ydl_opts = get_base_ydl_opts(platform)
@@ -105,6 +125,12 @@ def extract_metadata(url: str) -> VideoMetadata:
     try:
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             info = ydl.extract_info(url, download=False)
+            if info and (info.get("_type") == "playlist" or "entries" in info):
+                entries = [e for e in info.get("entries", []) if e]
+                if entries:
+                    info = entries[0]
+                else:
+                    raise DownloadException("Playlist contains no playable videos.", "deleted", 404)
     except yt_dlp.utils.DownloadError as e:
         err_str = str(e)
         # If web/default triggered the reload or playability block, fallback specifically to mobile clients
@@ -237,6 +263,7 @@ def extract_metadata(url: str) -> VideoMetadata:
 
 
 async def download_video_stream(url: str, format_id: str) -> AsyncGenerator[str, None]:
+    url = sanitize_url(url)
     loop = asyncio.get_running_loop()
     queue: asyncio.Queue = asyncio.Queue()
     platform = detect_platform(url)
@@ -375,8 +402,8 @@ async def download_video_stream(url: str, format_id: str) -> AsyncGenerator[str,
         finally:
             loop.call_soon_threadsafe(queue.put_nowait, None)
 
-    # Run in background executor
-    asyncio.get_event_loop().run_in_executor(None, run_download)
+    # Run in bounded background executor
+    asyncio.get_event_loop().run_in_executor(DOWNLOAD_EXECUTOR, run_download)
 
     while True:
         prog = await queue.get()
