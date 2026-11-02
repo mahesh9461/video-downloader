@@ -104,13 +104,18 @@ def sanitize_filename(name: str) -> str:
     return cleaned[:80] if cleaned else "video"
 
 
-INVIDIOUS_INSTANCES = [
-    "https://inv.tux.pizza",
-    "https://invidious.nerdvpn.de",
-    "https://vid.puffyan.us",
-    "https://invidious.privacyredirect.com",
-    "https://yt.artemislena.eu",
-    "https://invidious.projectsegfau.lt",
+FALLBACK_STREAM_APIS = [
+    # Piped API endpoints (high-speed decentralized YouTube stream extraction)
+    {"type": "piped", "url": "https://pipedapi.kavin.rocks/streams/{id}"},
+    {"type": "piped", "url": "https://api.piped.privacy.com.de/streams/{id}"},
+    {"type": "piped", "url": "https://api-piped.mha.fi/streams/{id}"},
+    {"type": "piped", "url": "https://piped-api.lunar.icu/streams/{id}"},
+    {"type": "piped", "url": "https://api.piped.projectsegfau.lt/streams/{id}"},
+    # Invidious API endpoints
+    {"type": "invidious", "url": "https://inv.tux.pizza/api/v1/videos/{id}"},
+    {"type": "invidious", "url": "https://invidious.nerdvpn.de/api/v1/videos/{id}"},
+    {"type": "invidious", "url": "https://invidious.jing.rocks/api/v1/videos/{id}"},
+    {"type": "invidious", "url": "https://invidious.f5.si/api/v1/videos/{id}"},
 ]
 
 # Cache format streams by video_id: format_id -> { "video_url": ..., "audio_url": ... }
@@ -118,32 +123,104 @@ INVIDIOUS_STREAM_CACHE: Dict[str, Dict[str, Any]] = {}
 
 
 def fetch_invidious_metadata(video_id: str) -> VideoMetadata:
-    last_err = None
     client_headers = {
-        "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
         "Accept": "application/json",
     }
 
-    with httpx.Client(timeout=6.0, follow_redirects=True, headers=client_headers) as client:
-        for instance in INVIDIOUS_INSTANCES:
+    with httpx.Client(timeout=7.0, follow_redirects=True, headers=client_headers) as client:
+        for api_item in FALLBACK_STREAM_APIS:
+            api_type = api_item["type"]
+            api_url = api_item["url"].format(id=video_id)
             try:
-                api_url = f"{instance}/api/v1/videos/{video_id}"
                 resp = client.get(api_url)
-                if resp.status_code == 200:
+                if resp.status_code != 200:
+                    continue
+
+                content_type = resp.headers.get("content-type", "").lower()
+                if "json" not in content_type:
+                    continue
+
+                try:
                     data = resp.json()
+                except Exception:
+                    continue
+
+                if not isinstance(data, dict):
+                    continue
+
+                formats: List[VideoFormat] = []
+                cache_entry: Dict[str, Any] = {"title": "YouTube Video", "streams": {}}
+                found_heights = set()
+
+                if api_type == "piped":
+                    title = data.get("title") or "YouTube Video"
+                    author = data.get("uploader") or "Unknown Creator"
+                    duration = int(data.get("duration") or 0)
+                    thumbnail_url = data.get("thumbnailUrl") or f"https://i.ytimg.com/vi/{video_id}/hqdefault.jpg"
+
+                    video_streams = data.get("videoStreams", [])
+                    audio_streams = data.get("audioStreams", [])
+
+                    # Find best audio stream
+                    best_audio = None
+                    for aud in audio_streams:
+                        bitrate = aud.get("bitrate", 0)
+                        if not best_audio or bitrate > best_audio.get("bitrate", 0):
+                            best_audio = aud
+
+                    for vs in video_streams:
+                        h = vs.get("height")
+                        q = vs.get("quality") or f"{h}p"
+                        if not h:
+                            h_match = re.search(r"(\d+)p", q)
+                            h = int(h_match.group(1)) if h_match else 0
+                        if h and h not in found_heights:
+                            found_heights.add(h)
+                            fid = f"yt-{h}p"
+                            formats.append(
+                                VideoFormat(
+                                    format_id=fid,
+                                    label=f"{h}p MP4" + (" (HD)" if h >= 720 else ""),
+                                    resolution=f"{h}p",
+                                    ext="mp4",
+                                    filesize=vs.get("contentLength") or None,
+                                    is_audio_only=False,
+                                )
+                            )
+                            cache_entry["streams"][fid] = {
+                                "video_url": vs.get("url"),
+                                "audio_url": best_audio.get("url") if (vs.get("videoOnly") and best_audio) else None,
+                            }
+
+                    if best_audio:
+                        fid = "yt-audio-mp3"
+                        formats.append(
+                            VideoFormat(
+                                format_id=fid,
+                                label="MP3 Audio",
+                                resolution="Audio",
+                                ext="mp3",
+                                filesize=best_audio.get("contentLength") or None,
+                                is_audio_only=True,
+                            )
+                        )
+                        cache_entry["streams"][fid] = {
+                            "video_url": None,
+                            "audio_url": best_audio.get("url"),
+                        }
+
+                elif api_type == "invidious":
                     title = data.get("title", "YouTube Video")
                     author = data.get("author", "Unknown Creator")
                     duration = int(data.get("lengthSeconds") or 0)
 
                     thumbnails = data.get("videoThumbnails", [])
                     thumbnail_url = thumbnails[-1].get("url") if thumbnails else f"https://i.ytimg.com/vi/{video_id}/hqdefault.jpg"
-                    if thumbnail_url and thumbnail_url.startswith("/"):
-                        thumbnail_url = f"{instance}{thumbnail_url}"
 
                     format_streams = data.get("formatStreams", [])
                     adaptive_formats = data.get("adaptiveFormats", [])
 
-                    # Find best audio stream
                     best_audio = None
                     for af in adaptive_formats:
                         type_str = af.get("type", "")
@@ -152,11 +229,6 @@ def fetch_invidious_metadata(video_id: str) -> VideoMetadata:
                             if not best_audio or bitrate > best_audio.get("bitrate", 0):
                                 best_audio = af
 
-                    formats: List[VideoFormat] = []
-                    cache_entry: Dict[str, Any] = {"title": title, "streams": {}}
-                    found_heights = set()
-
-                    # 1. Pre-muxed streams
                     for fs in format_streams:
                         ql = fs.get("qualityLabel") or fs.get("quality") or ""
                         h_match = re.search(r"(\d+)p", ql)
@@ -180,7 +252,6 @@ def fetch_invidious_metadata(video_id: str) -> VideoMetadata:
                                     "audio_url": None,
                                 }
 
-                    # 2. Adaptive video streams (1080p, 1440p, 4K)
                     for af in adaptive_formats:
                         type_str = af.get("type", "")
                         if "video/" in type_str:
@@ -206,12 +277,6 @@ def fetch_invidious_metadata(video_id: str) -> VideoMetadata:
                                         "audio_url": best_audio.get("url") if best_audio else None,
                                     }
 
-                    formats.sort(
-                        key=lambda f: int(re.search(r"\d+", f.resolution).group()) if re.search(r"\d+", f.resolution) else 0,
-                        reverse=True,
-                    )
-
-                    # 3. MP3 Audio format
                     if best_audio:
                         fid = "yt-audio-mp3"
                         formats.append(
@@ -229,8 +294,14 @@ def fetch_invidious_metadata(video_id: str) -> VideoMetadata:
                             "audio_url": best_audio.get("url"),
                         }
 
+                if formats:
+                    formats.sort(
+                        key=lambda f: int(re.search(r"\d+", f.resolution).group()) if re.search(r"\d+", f.resolution) else 0,
+                        reverse=True,
+                    )
+                    cache_entry["title"] = title
                     INVIDIOUS_STREAM_CACHE[video_id] = cache_entry
-                    logger.info(f"Successfully fetched metadata via Invidious mirror for {video_id}: {title}")
+                    logger.info(f"Successfully retrieved streams via {api_type} ({api_url}) for {video_id}: {title}")
 
                     return VideoMetadata(
                         id=video_id,
@@ -243,11 +314,11 @@ def fetch_invidious_metadata(video_id: str) -> VideoMetadata:
                         formats=formats,
                     )
             except Exception as e:
-                last_err = e
+                logger.warning(f"Fallback endpoint {api_url} failed: {e}")
                 continue
 
     raise DownloadException(
-        f"Could not retrieve video stream. Please try again shortly. ({last_err or 'Instances busy'})",
+        "Could not retrieve video stream from upstream servers. Please check the URL or try another video.",
         error_type="network",
         status_code=502,
     )
