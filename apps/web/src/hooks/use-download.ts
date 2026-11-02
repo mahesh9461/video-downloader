@@ -3,6 +3,7 @@
 import { useState, useCallback, useRef } from "react";
 import { apiClient, DownloadError } from "@/lib/api";
 import { VideoMetadata, DownloadProgress } from "@/lib/types";
+import { trackDownloadComplete, trackDownloadError } from "@/lib/analytics";
 
 interface UseDownloadReturn {
   metadata: VideoMetadata | null;
@@ -57,11 +58,16 @@ export function useDownload(): UseDownloadReturn {
       setMetadata(data);
     } catch (err) {
       if (err instanceof DownloadError || (err && typeof err === "object" && (err as any).name === "DownloadError")) {
-        setError((err as DownloadError).message);
-        setErrorType((err as DownloadError).type);
+        const errorMsg = (err as DownloadError).message;
+        const type = (err as DownloadError).type;
+        setError(errorMsg);
+        setErrorType(type);
+        trackDownloadError({ error_message: errorMsg, error_type: type });
       } else {
-        setError("Failed to fetch video info. Please check the URL and try again.");
+        const errorMsg = "Failed to fetch video info. Please check the URL and try again.";
+        setError(errorMsg);
         setErrorType("network");
+        trackDownloadError({ error_message: errorMsg, error_type: "network" });
       }
     } finally {
       setIsLoadingMetadata(false);
@@ -96,6 +102,12 @@ export function useDownload(): UseDownloadReturn {
           filesize: null,
           error_message: null,
         });
+        trackDownloadComplete({
+          platform: metadata?.platform || "unknown",
+          title: metadata?.title || "Unknown Video",
+          format: formatId,
+          duration_seconds: metadata?.duration || 0,
+        });
         // Trigger browser download
         const link = document.createElement("a");
         link.href = downloadUrl;
@@ -108,6 +120,11 @@ export function useDownload(): UseDownloadReturn {
         setIsDownloading(false);
         setError(errorMsg);
         setErrorType("unknown");
+        trackDownloadError({
+          platform: metadata?.platform || "unknown",
+          error_message: errorMsg,
+          error_type: "download_failed",
+        });
       }
     );
 

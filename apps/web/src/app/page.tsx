@@ -24,7 +24,13 @@ import { HistoryDrawer } from "@/components/history-drawer";
 import { ErrorBanner } from "@/components/error-banner";
 import { useDownload } from "@/hooks/use-download";
 import { useHistory } from "@/hooks/use-history";
-import { cleanVideoUrl } from "@/lib/validators";
+import { cleanVideoUrl, detectPlatform } from "@/lib/validators";
+import {
+  trackVideoSearch,
+  trackDownloadStart,
+  trackFaqClick,
+  trackHistoryAction,
+} from "@/lib/analytics";
 
 export default function Home() {
   const [historyOpen, setHistoryOpen] = useState(false);
@@ -51,6 +57,8 @@ export default function Home() {
   const handleUrlSubmit = useCallback(
     (url: string) => {
       const cleaned = cleanVideoUrl(url);
+      const platform = detectPlatform(cleaned) || "other";
+      trackVideoSearch({ platform, url: cleaned });
       setCurrentUrl(cleaned);
       reset();
       fetchMetadata(cleaned);
@@ -61,11 +69,20 @@ export default function Home() {
   const handleDownload = useCallback(
     (formatId: string, label: string) => {
       setActiveFormatId(formatId);
+      const chosenFormat = metadata?.formats.find((f) => f.format_id === formatId);
+      
+      trackDownloadStart({
+        platform: metadata?.platform || "unknown",
+        title: metadata?.title || "Unknown Video",
+        format: label,
+        quality: chosenFormat?.resolution || label,
+        is_audio: chosenFormat?.is_audio_only || label.toLowerCase().includes("mp3"),
+      });
+
       startDownload(currentUrl, formatId);
 
       // Add to history when download starts
       if (metadata) {
-        const chosenFormat = metadata.formats.find((f) => f.format_id === formatId);
         addToHistory({
           platform: metadata.platform,
           title: metadata.title,
@@ -79,13 +96,23 @@ export default function Home() {
     [currentUrl, metadata, startDownload, addToHistory]
   );
 
-  const toggleFaq = (index: number) => {
-    setOpenFaq(openFaq === index ? null : index);
+  const toggleFaq = (index: number, question: string) => {
+    const isOpening = openFaq !== index;
+    setOpenFaq(isOpening ? index : null);
+    if (isOpening) {
+      trackFaqClick(question);
+    }
   };
 
   return (
     <div className="min-h-screen flex flex-col selection:bg-violet-500/20 selection:text-violet-300">
-      <Header onOpenHistory={() => setHistoryOpen(true)} historyCount={history.length} />
+      <Header
+        onOpenHistory={() => {
+          trackHistoryAction("open", history.length);
+          setHistoryOpen(true);
+        }}
+        historyCount={history.length}
+      />
 
       <main className="flex-1 flex flex-col items-center px-4 pt-12 sm:pt-20 pb-20">
         {/* Ambient Top Glow */}
@@ -289,7 +316,7 @@ export default function Home() {
                   className="rounded-xl border border-zinc-800/80 bg-zinc-900/30 overflow-hidden transition-all"
                 >
                   <button
-                    onClick={() => toggleFaq(idx)}
+                    onClick={() => toggleFaq(idx, faq.q)}
                     className="w-full px-5 py-4 text-left flex items-center justify-between text-sm font-medium text-zinc-200 hover:text-white"
                   >
                     <span>{faq.q}</span>

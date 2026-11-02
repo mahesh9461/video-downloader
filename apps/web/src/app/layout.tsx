@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import "./globals.css";
+import { GoogleAnalytics } from "@/components/google-analytics";
 
 const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || "https://saveit.app";
 
@@ -13,22 +14,24 @@ export const viewport: Viewport = {
 export const metadata: Metadata = {
   metadataBase: new URL(siteUrl),
   title: {
-    default: "SaveIt — Fast, Watermark-Free YouTube & TikTok Downloader",
+    default: "SaveIt — Free YouTube Downloader (4K/1080p) & TikTok Downloader No Watermark",
     template: "%s | SaveIt",
   },
   description:
-    "Download videos from YouTube and TikTok in pristine 4K, 1080p, 720p or 320kbps MP3 audio. 100% free, no watermarks, no registration, and ultra-fast processing.",
+    "Free online video downloader for YouTube and TikTok. Download 4K, 1080p MP4 videos without watermarks and convert to 320kbps MP3 audio at maximum speed. No software required.",
   keywords: [
     "YouTube downloader",
     "TikTok downloader without watermark",
-    "save TikTok video",
+    "save TikTok video without watermark",
     "download YouTube 4K",
-    "YouTube to MP3",
-    "TikTok to MP3",
+    "download YouTube 1080p",
+    "YouTube to MP3 converter 320kbps",
+    "TikTok audio mp3 download",
     "watermark free video downloader",
     "online video saver",
     "convert youtube to mp4",
-    "download tiktok audio",
+    "download youtube shorts",
+    "fastest video downloader online",
   ],
   authors: [{ name: "SaveIt Engineering Team" }],
   creator: "SaveIt",
@@ -84,12 +87,13 @@ const jsonLd = {
   "@graph": [
     {
       "@type": "WebApplication",
-      name: "SaveIt",
+      name: "SaveIt Video Downloader",
       url: siteUrl,
       description:
         "High-performance web tool for downloading watermark-free TikTok videos and 4K YouTube videos with audio extraction.",
       applicationCategory: "MultimediaApplication",
       operatingSystem: "All",
+      browserRequirements: "Requires modern web browser with HTML5 support",
       offers: {
         "@type": "Offer",
         price: "0",
@@ -101,6 +105,31 @@ const jsonLd = {
         "High-bitrate MP3 Audio Extraction",
         "Real-Time Download Progress Streaming",
         "Client-side Privacy & Local History",
+      ],
+    },
+    {
+      "@type": "HowTo",
+      name: "How to Download Videos from YouTube and TikTok for Free",
+      description: "Follow these simple steps to download high quality videos without watermarks using SaveIt.",
+      step: [
+        {
+          "@type": "HowToStep",
+          name: "Copy Video Link",
+          text: "Copy the link of the YouTube video or TikTok clip you want to download.",
+          url: `${siteUrl}#step1`,
+        },
+        {
+          "@type": "HowToStep",
+          name: "Paste URL and Select Format",
+          text: "Paste the URL into SaveIt, view available formats (4K, 1080p, 720p, or MP3 audio), and choose your preferred resolution.",
+          url: `${siteUrl}#step2`,
+        },
+        {
+          "@type": "HowToStep",
+          name: "Download File",
+          text: "Watch the real-time download and conversion progress, and save the file directly to your device.",
+          url: `${siteUrl}#step3`,
+        },
       ],
     },
     {
@@ -149,6 +178,7 @@ export default function RootLayout({
         />
       </head>
       <body className="font-sans antialiased text-zinc-100 selection:bg-violet-500/30 selection:text-violet-200">
+        <GoogleAnalytics />
         <div className="gradient-bg" />
         <div className="noise-overlay" />
         <div className="grid-pattern" />
