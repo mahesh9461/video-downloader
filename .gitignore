@@ -13,6 +13,8 @@ venv/
 .venv/
 backend/venv/
 backend/.venv/
+apps/api/venv/
+apps/api/.venv/
 env/
 ENV/
 
@@ -28,6 +30,8 @@ htmlcov/
 # Downloads & temp files
 backend/downloads/*
 !backend/downloads/.gitkeep
+apps/api/downloads/*
+!apps/api/downloads/.gitkeep
 downloads/
 
 # Next.js build output

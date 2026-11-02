@@ -1,0 +1,21 @@
+{
+  "name": "saveit-monorepo",
+  "version": "1.0.0",
+  "private": true,
+  "description": "SaveIt Video Downloader — Unified Monorepo (Next.js + FastAPI)",
+  "workspaces": [
+    "apps/*"
+  ],
+  "scripts": {
+    "setup": "./scripts/setup.sh",
+    "dev": "./scripts/dev.sh",
+    "dev:web": "npm run dev -w web",
+    "dev:api": "./scripts/dev-api.sh",
+    "build": "npm run build -w web",
+    "test": "npm run test:web",
+    "test:web": "npm test -w web",
+    "test:api": "./scripts/test-api.sh",
+    "lint": "npm run lint -w web"
+  }
+}
+

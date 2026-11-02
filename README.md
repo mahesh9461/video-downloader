@@ -1,102 +1,81 @@
-# 🎬 SaveIt — Production Video Downloader (YouTube & TikTok)
+# 🎬 SaveIt — Production Video Downloader (Monorepo)
 
-A clean, production-ready, dark-mode web application for downloading videos and extracting audio from **YouTube** (up to 4K 60FPS) and **TikTok** (100% watermark-free), built with **Next.js (App Router)** and **FastAPI** + **yt-dlp** + **FFmpeg**.
-
----
-
-## 🛠️ Tech Stack & Architecture
-
-- **Frontend**: Next.js (App Router, React 19, TypeScript), Tailwind CSS, Lucide icons, Shadcn UI primitives, Redux Toolkit for state verification.
-- **Backend**: Python 3.9+ / 3.11 with FastAPI, `yt-dlp` Python SDK, `static-ffmpeg` (FFmpeg 7.0 embedded), asynchronous Server-Sent Events (SSE) streaming.
-- **Task Management & Streaming**: Real-time download progress, ETA, transfer speed, and FFmpeg DASH merging stages streamed via SSE (`text/event-stream`).
-- **Storage & Cleanup**: Automatic background cleanup service (files older than 10 minutes removed) and immediate delayed removal on download completion.
-- **Rate Limiting**: In-memory sliding window rate limiter (max 5 downloads per minute per IP).
+A clean, production-ready, dark-mode web application for downloading videos and extracting audio from **YouTube** (up to 4K 60FPS) and **TikTok** (100% watermark-free), built as a **Native Monorepo** with **Next.js 16 (App Router)** and **FastAPI** + **yt-dlp** + **FFmpeg**.
 
 ---
 
-## 🚀 Quick Start
+## 🛠️ Monorepo Architecture
 
-### 1. Backend (FastAPI)
+- **`apps/web`**: Next.js 16 (App Router, React 19, TypeScript), Tailwind CSS v4, Lucide icons, Radix UI primitives.
+- **`apps/api`**: Python 3.9+ / 3.11 / 3.14 with FastAPI, `yt-dlp` SDK, `static-ffmpeg` (FFmpeg 7.0 embedded), asynchronous Server-Sent Events (SSE).
+- **No Docker Required**: Runs natively on macOS/Linux with zero VM overhead, instant hot-reloading, and low memory usage.
+
+---
+
+## 🚀 Quick Start (One Command)
+
+### 1. First-time Setup
+Run the setup script from the project root to install web dependencies and create the Python virtual environment:
+
 ```bash
-cd backend
-python3 -m venv venv
-source venv/bin/activate
-pip install -r requirements.txt
-
-# Run server on port 8000
-uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+npm run setup
 ```
 
-### 2. Frontend (Next.js)
-```bash
-cd frontend
-npm install
+### 2. Start Both Web & API
+Run both the Next.js frontend (`http://localhost:3000`) and the FastAPI backend (`http://localhost:8000`) concurrently with a single command:
 
-# Run dev server
+```bash
 npm run dev
-
-# Or build and run production server
-npm run build
-npm start
 ```
 
-### 3. Docker Compose (Full Stack)
-```bash
-docker-compose up --build
-```
-- Frontend: `http://localhost:3000`
-- Backend API: `http://localhost:8000`
-- API Docs: `http://localhost:8000/docs`
+- **Frontend App:** [http://localhost:3000](http://localhost:3000)
+- **Backend API:** [http://127.0.0.1:8000](http://127.0.0.1:8000)
+- **Interactive API Docs (Swagger):** [http://127.0.0.1:8000/docs](http://127.0.0.1:8000/docs)
 
 ---
 
 ## 🧪 Running Automated Tests
 
-### Frontend (Jest + React Testing Library)
 ```bash
-cd frontend
+# Run all tests (frontend + backend)
 npm test
-```
-*15 test suites, 142 tests passed.* Strict compliance with AAA structure and Redux `<Provider>` store verification.
 
-### Backend (Pytest)
-```bash
-cd backend
-./venv/bin/pytest -v
+# Run frontend Jest tests only (145 tests)
+npm run test:web
+
+# Run backend Pytest suites only
+npm run test:api
 ```
-*15 test suites passed (API endpoints, yt-dlp error mapping, rate limiting, SSE streaming, file serving, full E2E lifecycle).*
 
 ---
 
-## 📂 Project Structure
+## 📂 Monorepo Structure
 
 ```
 video-downloader/
-├── backend/
-│   ├── app/
-│   │   ├── __init__.py
-│   │   ├── main.py              # FastAPI app, CORS, rate limiter, file endpoints
-│   │   ├── downloader.py        # yt-dlp wrapper, format parsing, SSE generator
-│   │   ├── schemas.py           # Pydantic request/response models
-│   │   └── config.py            # FFmpeg auto-detection, paths, cleanup constants
-│   ├── tests/
-│   │   ├── test_api.py          # API & middleware integration tests
-│   │   ├── test_downloader.py   # Unit tests for formats & error mapping
-│   │   └── test_live_e2e.py     # Full E2E lifecycle test
-│   ├── downloads/               # Temporary downloads directory
-│   ├── Dockerfile
-│   ├── requirements.txt
-│   └── pytest.ini
-├── frontend/
-│   ├── src/
-│   │   ├── app/                 # Next.js App Router (layout, page, SEO routes)
-│   │   ├── components/          # UI primitives and feature components
-│   │   ├── hooks/               # useDownload (SSE), useHistory (localStorage)
-│   │   ├── lib/                 # api client, store, types, validators, utils
-│   │   └── __tests__/           # Comprehensive test suite (142 tests)
-│   ├── Dockerfile
-│   └── package.json
-├── docker-compose.yml
+├── package.json               # Root monorepo workspace scripts
+├── scripts/
+│   ├── setup.sh               # Auto-setup for python venv & node_modules
+│   ├── dev.sh                 # Concurrent dev server runner
+│   ├── dev-api.sh             # Dedicated backend runner
+│   └── test-api.sh            # Dedicated Pytest runner
+├── apps/
+│   ├── web/                   # Next.js 16 Frontend
+│   │   ├── src/
+│   │   │   ├── app/           # App Router (pages & proxy)
+│   │   │   ├── components/    # UI & download components
+│   │   │   ├── hooks/         # useDownload & useHistory
+│   │   │   ├── lib/           # API client & validators
+│   │   │   └── __tests__/     # 15 Jest test suites (145 tests)
+│   │   └── package.json
+│   └── api/                   # FastAPI Backend
+│       ├── app/
+│       │   ├── main.py        # Endpoints, CORS, rate limiting
+│       │   ├── downloader.py  # yt-dlp wrapper, SSE stream
+│       │   ├── schemas.py     # Pydantic models
+│       │   └── config.py      # FFmpeg & storage config
+│       ├── tests/             # Pytest test suites
+│       ├── downloads/         # Auto-pruned temp storage
+│       └── requirements.txt
 └── README.md
 ```
-
