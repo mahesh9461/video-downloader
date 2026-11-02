@@ -103,10 +103,11 @@ def get_base_ydl_opts(platform: str, client_override: Optional[List[str]] = None
     if FFMPEG_PATH:
         opts["ffmpeg_location"] = FFMPEG_PATH
 
-    if platform == "youtube" and client_override:
+    if platform == "youtube":
+        clients = client_override if client_override is not None else ["ios", "mweb", "android"]
         opts["extractor_args"] = {
             "youtube": {
-                "player_client": client_override,
+                "player_client": clients,
             }
         }
     return opts
@@ -116,38 +117,42 @@ def extract_metadata(url: str) -> VideoMetadata:
     url = sanitize_url(url)
     platform = detect_platform(url)
 
-    ydl_opts = get_base_ydl_opts(platform)
-    ydl_opts["skip_download"] = True
-
     info = None
-    try:
-        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            info = ydl.extract_info(url, download=False)
-            if info and (info.get("_type") == "playlist" or "entries" in info):
-                entries = [e for e in info.get("entries", []) if e]
-                if entries:
-                    info = entries[0]
-                else:
-                    raise DownloadException("Playlist contains no playable videos.", "deleted", 404)
-    except yt_dlp.utils.DownloadError as e:
-        err_str = str(e)
-        # If web/default triggered the reload or playability block, fallback specifically to mobile clients
-        if platform == "youtube" and ("page needs to be reloaded" in err_str or "playability" in err_str.lower()):
-            try:
-                fallback_opts = get_base_ydl_opts(platform, client_override=["ios", "mweb"])
-                fallback_opts["skip_download"] = True
-                with yt_dlp.YoutubeDL(fallback_opts) as ydl:
-                    info = ydl.extract_info(url, download=False)
-            except Exception as fb_err:
-                raise map_ytdlp_error(str(fb_err))
-        else:
-            raise map_ytdlp_error(err_str)
-    except Exception as e:
-        if isinstance(e, DownloadException):
-            raise
-        raise DownloadException(str(e), "unknown", 400)
+    last_err: Optional[Exception] = None
+
+    client_candidates: List[Optional[List[str]]] = (
+        [["ios", "mweb", "android"], ["android"], ["ios"], ["mweb"], None]
+        if platform == "youtube"
+        else [None]
+    )
+
+    for client_profile in client_candidates:
+        ydl_opts = get_base_ydl_opts(platform, client_override=client_profile)
+        ydl_opts["skip_download"] = True
+        try:
+            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                info = ydl.extract_info(url, download=False)
+                if info and (info.get("_type") == "playlist" or "entries" in info):
+                    entries = [e for e in info.get("entries", []) if e]
+                    if entries:
+                        info = entries[0]
+                    else:
+                        raise DownloadException("Playlist contains no playable videos.", "deleted", 404)
+                if info:
+                    break
+        except yt_dlp.utils.DownloadError as e:
+            last_err = e
+            continue
+        except Exception as e:
+            if isinstance(e, DownloadException):
+                raise
+            last_err = e
+            continue
 
     if not info:
+        if last_err:
+            raise map_ytdlp_error(str(last_err))
+        raise DownloadException("Could not retrieve video information.", "unknown", 404)
         raise DownloadException("Could not retrieve video information.", "unknown", 404)
 
     video_id = info.get("id", str(uuid.uuid4())[:8])
@@ -356,39 +361,60 @@ async def download_video_stream(url: str, format_id: str) -> AsyncGenerator[str,
 
     def run_download():
         nonlocal final_filename, final_filesize
-        try:
-            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-                info = ydl.extract_info(url, download=True)
-                if info:
-                    target_filename = ydl.prepare_filename(info)
-                    if is_audio:
-                        ext = ydl_opts["postprocessors"][0]["preferredcodec"]
-                        target_filename = os.path.splitext(target_filename)[0] + f".{ext}"
-                    elif "merge_output_format" in ydl_opts:
-                        target_filename = os.path.splitext(target_filename)[0] + f".{ydl_opts['merge_output_format']}"
+        success = False
+        last_error = None
 
-                    if not os.path.exists(target_filename):
-                        # Find matching file with job_id prefix in DOWNLOAD_DIR
-                        for f in os.listdir(DOWNLOAD_DIR):
-                            if f.startswith(job_id):
-                                target_filename = str(DOWNLOAD_DIR / f)
-                                break
+        client_candidates: List[Optional[List[str]]] = (
+            [["ios", "mweb", "android"], ["android"], ["ios"], None]
+            if platform == "youtube"
+            else [None]
+        )
 
-                    final_filename = os.path.basename(target_filename)
-                    if os.path.exists(target_filename):
-                        final_filesize = os.path.getsize(target_filename)
+        for client_profile in client_candidates:
+            curr_opts = dict(ydl_opts)
+            if platform == "youtube":
+                clients = client_profile if client_profile is not None else ["ios", "mweb", "android"]
+                curr_opts["extractor_args"] = {"youtube": {"player_client": clients}}
+            try:
+                with yt_dlp.YoutubeDL(curr_opts) as ydl:
+                    info = ydl.extract_info(url, download=True)
+                    if info:
+                        target_filename = ydl.prepare_filename(info)
+                        if is_audio:
+                            ext = curr_opts["postprocessors"][0]["preferredcodec"]
+                            target_filename = os.path.splitext(target_filename)[0] + f".{ext}"
+                        elif "merge_output_format" in curr_opts:
+                            target_filename = os.path.splitext(target_filename)[0] + f".{curr_opts['merge_output_format']}"
 
-                loop.call_soon_threadsafe(
-                    queue.put_nowait,
-                    DownloadProgress(
-                        status="complete",
-                        percent=100.0,
-                        filename=final_filename,
-                        filesize=final_filesize,
-                    ),
-                )
-        except Exception as e:
-            err = map_ytdlp_error(str(e))
+                        if not os.path.exists(target_filename):
+                            # Find matching file with job_id prefix in DOWNLOAD_DIR
+                            for f in os.listdir(DOWNLOAD_DIR):
+                                if f.startswith(job_id):
+                                    target_filename = str(DOWNLOAD_DIR / f)
+                                    break
+
+                        final_filename = os.path.basename(target_filename)
+                        if os.path.exists(target_filename):
+                            final_filesize = os.path.getsize(target_filename)
+
+                    success = True
+                    break
+            except Exception as e:
+                last_error = e
+                continue
+
+        if success:
+            loop.call_soon_threadsafe(
+                queue.put_nowait,
+                DownloadProgress(
+                    status="complete",
+                    percent=100.0,
+                    filename=final_filename,
+                    filesize=final_filesize,
+                ),
+            )
+        else:
+            err = map_ytdlp_error(str(last_error or "Download failed"))
             loop.call_soon_threadsafe(
                 queue.put_nowait,
                 DownloadProgress(
@@ -397,8 +423,7 @@ async def download_video_stream(url: str, format_id: str) -> AsyncGenerator[str,
                     error_message=err.detail,
                 ),
             )
-        finally:
-            loop.call_soon_threadsafe(queue.put_nowait, None)
+        loop.call_soon_threadsafe(queue.put_nowait, None)
 
     # Send initial progress state immediately
     loop.call_soon_threadsafe(
