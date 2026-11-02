@@ -85,9 +85,9 @@ def test_sanitize_filename():
 
 from unittest.mock import patch, MagicMock
 
-@patch("app.downloader.fetch_invidious_metadata")
+@patch("app.downloader.fetch_youtube_oembed")
 @patch("app.downloader.yt_dlp.YoutubeDL")
-def test_invidious_fallback_on_bot_block(mock_ydl_class, mock_invidious):
+def test_oembed_fallback_on_bot_block(mock_ydl_class, mock_oembed):
     from app.downloader import extract_metadata, VideoMetadata
     mock_ydl = MagicMock()
     mock_ydl_class.return_value.__enter__.return_value = mock_ydl
@@ -95,18 +95,18 @@ def test_invidious_fallback_on_bot_block(mock_ydl_class, mock_invidious):
     import yt_dlp
     mock_ydl.extract_info.side_effect = yt_dlp.utils.DownloadError("Sign in to confirm you're not a bot.")
 
-    mock_invidious.return_value = VideoMetadata(
+    mock_oembed.return_value = VideoMetadata(
         id="BOJw7TYH-fE",
         platform="youtube",
-        title="Test Invidious Video",
+        title="Test oEmbed Video",
         creator="Channel",
         creator_avatar=None,
-        duration=120,
+        duration=0,
         thumbnail="https://example.com/thumb.jpg",
         formats=[],
     )
 
     metadata = extract_metadata("https://www.youtube.com/watch?v=BOJw7TYH-fE")
-    assert metadata.title == "Test Invidious Video"
-    assert mock_invidious.called
+    assert metadata.title == "Test oEmbed Video"
+    assert mock_oembed.called
 
