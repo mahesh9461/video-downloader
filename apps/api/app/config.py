@@ -15,6 +15,11 @@ try:
 except Exception:
     pass
 
+# Ensure Deno is available in PATH for yt-dlp JS challenge evaluation
+for deno_dir in [Path.home() / ".deno" / "bin", Path("/opt/render/.deno/bin"), Path("/root/.deno/bin")]:
+    if deno_dir.is_dir() and str(deno_dir) not in os.environ.get("PATH", ""):
+        os.environ["PATH"] = f"{deno_dir}:{os.environ.get('PATH', '')}"
+
 BASE_DIR = Path(__file__).resolve().parent.parent
 DOWNLOAD_DIR = Path(os.getenv("DOWNLOAD_DIR", BASE_DIR / "downloads"))
 DOWNLOAD_DIR.mkdir(parents=True, exist_ok=True)
@@ -53,7 +58,7 @@ if candidate_cookie_path and candidate_cookie_path.is_file():
     try:
         # If file is read-only (e.g. Render secret files) or outside /tmp, copy to writable temp file
         writable_path = Path("/tmp/cookies.txt")
-        if candidate_cookie_path != writable_path:
+        if candidate_cookie_path.resolve() != writable_path.resolve():
             shutil.copyfile(candidate_cookie_path, writable_path)
             target_cookie_path = writable_path
         COOKIE_FILE_PATH = str(target_cookie_path.resolve())
@@ -61,10 +66,19 @@ if candidate_cookie_path and candidate_cookie_path.is_file():
     except Exception as e:
         COOKIE_FILE_PATH = str(candidate_cookie_path.resolve())
         logger.info("YouTube cookies loaded from %s (copy failed: %s)", COOKIE_FILE_PATH, e)
+elif Path("/tmp/cookies.txt").is_file() and Path("/tmp/cookies.txt").stat().st_size > 0:
+    COOKIE_FILE_PATH = "/tmp/cookies.txt"
+    logger.info("YouTube cookies loaded from existing /tmp/cookies.txt")
 else:
     logger.info("No YouTube cookies configured")
 
-PROXY_URL: Optional[str] = os.getenv("PROXY_URL") or os.getenv("HTTP_PROXY") or os.getenv("HTTPS_PROXY")
+PROXY_URL: Optional[str] = (
+    os.getenv("PROXY_URL")
+    or os.getenv("HTTP_PROXY")
+    or os.getenv("HTTPS_PROXY")
+    or os.getenv("http_proxy")
+    or os.getenv("https_proxy")
+)
 
 
 def mask_proxy_url(url: Optional[str]) -> Optional[str]:

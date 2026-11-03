@@ -21,7 +21,7 @@ from app.schemas import VideoFormat, VideoMetadata, DownloadProgress
 
 logger = logging.getLogger(__name__)
 
-MAX_CONCURRENT_DOWNLOADS = int(os.getenv("MAX_CONCURRENT_DOWNLOADS", "5"))
+MAX_CONCURRENT_DOWNLOADS = int(os.getenv("MAX_CONCURRENT_DOWNLOADS", "2"))
 DOWNLOAD_EXECUTOR = ThreadPoolExecutor(
     max_workers=MAX_CONCURRENT_DOWNLOADS,
     thread_name_prefix="downloader_worker",
@@ -325,11 +325,26 @@ def get_base_ydl_opts(platform: str, client_override: Optional[List[str]] = None
     if FFMPEG_PATH:
         opts["ffmpeg_location"] = FFMPEG_PATH
 
-    if COOKIE_FILE_PATH and os.path.exists(COOKIE_FILE_PATH):
-        opts["cookiefile"] = COOKIE_FILE_PATH
+    # Dynamic cookie check: COOKIE_FILE_PATH, YOUTUBE_COOKIES_FILE, or /tmp/cookies.txt
+    cookie_path = (
+        COOKIE_FILE_PATH
+        or os.getenv("YOUTUBE_COOKIES_FILE")
+        or ("/tmp/cookies.txt" if os.path.exists("/tmp/cookies.txt") and os.path.getsize("/tmp/cookies.txt") > 0 else None)
+    )
+    if cookie_path and os.path.exists(cookie_path):
+        opts["cookiefile"] = str(cookie_path)
 
-    if PROXY_URL:
-        opts["proxy"] = PROXY_URL
+    # Dynamic proxy check: PROXY_URL or standard HTTP_PROXY/HTTPS_PROXY env vars
+    proxy = (
+        PROXY_URL
+        or os.getenv("PROXY_URL")
+        or os.getenv("HTTP_PROXY")
+        or os.getenv("HTTPS_PROXY")
+        or os.getenv("http_proxy")
+        or os.getenv("https_proxy")
+    )
+    if proxy:
+        opts["proxy"] = proxy
 
     if platform == "youtube":
         # When cookies are set or by default, use configured profile without ios/android
@@ -362,6 +377,7 @@ def extract_metadata(url: str) -> VideoMetadata:
 
     info = None
     last_err: Optional[Exception] = None
+    encountered_bot_check = False
 
     client_candidates: List[Optional[List[str]]] = (
         YOUTUBE_CLIENT_PROFILES if platform == "youtube" else [None]
@@ -384,17 +400,30 @@ def extract_metadata(url: str) -> VideoMetadata:
         except yt_dlp.utils.DownloadError as e:
             last_err = e
             if is_bot_check_error(str(e)):
-                trigger_youtube_cooldown()
-                break  # Stop retrying; subsequent profiles will also fail
+                encountered_bot_check = True
+                logger.warning(
+                    "Bot check detected on client profile %s for %s. Attempting remaining profiles...",
+                    client_profile,
+                    url,
+                )
+                continue
             continue
         except Exception as e:
             if isinstance(e, DownloadException):
                 raise
             last_err = e
             if is_bot_check_error(str(e)):
-                trigger_youtube_cooldown()
-                break
+                encountered_bot_check = True
+                logger.warning(
+                    "Bot check detected on client profile %s for %s. Attempting remaining profiles...",
+                    client_profile,
+                    url,
+                )
+                continue
             continue
+
+    if not info and platform == "youtube" and encountered_bot_check:
+        trigger_youtube_cooldown()
 
     if not info:
         # If yt-dlp failed on cloud datacenter IP, try honest oEmbed fallback
@@ -624,6 +653,7 @@ async def download_video_stream(url: str, format_id: str) -> AsyncGenerator[str,
         nonlocal final_filename, final_filesize
         success = False
         last_error: Optional[Exception] = None
+        encountered_bot_check = False
 
         # Check cooldown
         if platform == "youtube" and is_youtube_cooldown_active():
@@ -670,15 +700,28 @@ async def download_video_stream(url: str, format_id: str) -> AsyncGenerator[str,
                 except yt_dlp.utils.DownloadError as e:
                     last_error = e
                     if is_bot_check_error(str(e)):
-                        trigger_youtube_cooldown()
-                        break
+                        encountered_bot_check = True
+                        logger.warning(
+                            "Bot check detected during download on profile %s for %s. Attempting remaining profiles...",
+                            client_profile,
+                            url,
+                        )
+                        continue
                     continue
                 except Exception as e:
                     last_error = e
                     if is_bot_check_error(str(e)):
-                        trigger_youtube_cooldown()
-                        break
+                        encountered_bot_check = True
+                        logger.warning(
+                            "Bot check detected during download on profile %s for %s. Attempting remaining profiles...",
+                            client_profile,
+                            url,
+                        )
+                        continue
                     continue
+
+            if not success and platform == "youtube" and encountered_bot_check:
+                trigger_youtube_cooldown()
 
         # Optional Cobalt download fallback if configured
         if not success and platform == "youtube" and (os.getenv("COBALT_API_URL") or COBALT_API_URL):

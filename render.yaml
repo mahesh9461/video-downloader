@@ -1,0 +1,20 @@
+services:
+  - type: web
+    name: saveit-api
+    env: python
+    region: oregon
+    plan: free
+    buildCommand: "curl -fsSL https://deno.land/install.sh | sh && export PATH=\"$HOME/.deno/bin:$PATH\" && pip install -r apps/api/requirements.txt"
+    startCommand: "export PATH=\"$HOME/.deno/bin:$PATH\" && cd apps/api && uvicorn app.main:app --host 0.0.0.0 --port $PORT"
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.11.10
+      - key: MAX_CONCURRENT_DOWNLOADS
+        value: "2"
+      - key: BOT_BLOCK_COOLDOWN_SECONDS
+        value: "60"
+      - key: PROXY_URL
+        sync: false
+      - key: YOUTUBE_COOKIES
+        sync: false
+

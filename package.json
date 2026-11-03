@@ -12,6 +12,7 @@
     "dev:web": "npm run dev -w web",
     "dev:api": "./scripts/dev-api.sh",
     "build": "npm run build -w web",
+    "build:api": "./scripts/build-render.sh",
     "test": "npm run test:web",
     "test:web": "npm test -w web",
     "test:api": "./scripts/test-api.sh",

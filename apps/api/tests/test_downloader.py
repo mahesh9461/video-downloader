@@ -18,6 +18,8 @@ from app.downloader import (
     is_youtube_cooldown_active,
     trigger_youtube_cooldown,
     reset_youtube_cooldown,
+    get_base_ydl_opts,
+    YOUTUBE_CLIENT_PROFILES,
     DownloadException,
 )
 from app.schemas import VideoMetadata
@@ -246,15 +248,54 @@ def test_cooldown_skips_ytdlp(mock_ydl_class, mock_oembed):
         notice="Preview only",
     )
 
-    # First call: hits yt-dlp, triggers cooldown, falls back to oEmbed
+    # First call: hits yt-dlp across all client profiles before triggering cooldown
     extract_metadata("https://www.youtube.com/watch?v=BOJw7TYH-fE")
     first_call_count = mock_ydl.extract_info.call_count
-    assert first_call_count == 1  # Stopped immediately after 1 bot block!
+    assert first_call_count == len(YOUTUBE_CLIENT_PROFILES)  # Retried all profiles before cooldown
     assert is_youtube_cooldown_active()
 
     # Second call: skips yt-dlp entirely!
     extract_metadata("https://www.youtube.com/watch?v=BOJw7TYH-fE")
     assert mock_ydl.extract_info.call_count == first_call_count  # Did NOT call yt_dlp again
+
+
+@patch("app.downloader.yt_dlp.YoutubeDL")
+def test_profile_fallback_succeeds_on_second_profile(mock_ydl_class):
+    mock_ydl = MagicMock()
+    mock_ydl_class.return_value.__enter__.return_value = mock_ydl
+    # First profile hits bot check, second profile succeeds
+    mock_ydl.extract_info.side_effect = [
+        yt_dlp.utils.DownloadError("Sign in to confirm you're not a bot."),
+        {
+            "id": "BOJw7TYH-fE",
+            "title": "Fallback Video",
+            "uploader": "Channel",
+            "duration": 60,
+            "thumbnail": "https://example.com/thumb.jpg",
+            "formats": [{"height": 720, "vcodec": "avc1", "ext": "mp4"}],
+        },
+    ]
+
+    metadata = extract_metadata("https://www.youtube.com/watch?v=BOJw7TYH-fE")
+    assert metadata.title == "Fallback Video"
+    assert metadata.downloads_available is True
+    assert mock_ydl.extract_info.call_count == 2
+    # Cooldown should NOT have been activated since profile 2 succeeded
+    assert not is_youtube_cooldown_active()
+
+
+def test_get_base_ydl_opts_proxy_and_cookies():
+    with patch.dict(
+        os.environ,
+        {
+            "PROXY_URL": "http://user:pass@proxy.example.com:8080",
+            "YOUTUBE_COOKIES_FILE": "/nonexistent/test_cookies.txt",
+        },
+        clear=False,
+    ):
+        opts = get_base_ydl_opts("youtube")
+        assert opts.get("proxy") == "http://user:pass@proxy.example.com:8080"
+        assert opts.get("quiet") is True
 
 
 def test_cobalt_not_called_when_unset():
@@ -332,3 +373,30 @@ async def test_run_download_none_info_emits_error(mock_ydl_class):
     # Check that an error event was emitted, NEVER "complete"
     assert any('"status":"error"' in ev or '"status": "error"' in ev for ev in events)
     assert not any('"status":"complete"' in ev or '"status": "complete"' in ev for ev in events)
+
+
+@pytest.mark.anyio
+@patch("app.downloader.yt_dlp.YoutubeDL")
+async def test_run_download_profile_fallback(mock_ydl_class, tmp_path):
+    mock_ydl = MagicMock()
+    mock_ydl_class.return_value.__enter__.return_value = mock_ydl
+
+    # Setup dummy downloaded file
+    fake_file = tmp_path / "job_test.mp4"
+    fake_file.write_bytes(b"dummy video data")
+
+    # First profile hits bot check, second profile succeeds
+    mock_ydl.extract_info.side_effect = [
+        yt_dlp.utils.DownloadError("Sign in to confirm you're not a bot."),
+        {"id": "dQw4w9WgXcQ", "title": "Test Fallback Video"},
+    ]
+    mock_ydl.prepare_filename.return_value = str(fake_file)
+
+    generator = download_video_stream("https://www.youtube.com/watch?v=dQw4w9WgXcQ", "yt-720p")
+    events = []
+    async for item in generator:
+        events.append(item)
+
+    assert any('"status":"complete"' in ev or '"status": "complete"' in ev for ev in events)
+    assert mock_ydl.extract_info.call_count == 2
+    assert not is_youtube_cooldown_active()
