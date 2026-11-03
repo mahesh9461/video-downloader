@@ -13,6 +13,8 @@ from app.downloader import (
     sanitize_filename,
     extract_youtube_id,
     extract_metadata,
+    fetch_youtube_innertube,
+    download_youtube_innertube_stream,
     download_via_cobalt,
     download_video_stream,
     is_youtube_cooldown_active,
@@ -67,11 +69,15 @@ def test_detect_platform_invalid():
 
 
 def test_map_ytdlp_error_categories():
-    # Bot check
+    # Bot check & Player response extraction failure
     err_bot = map_ytdlp_error("ERROR: [youtube] Sign in to confirm you're not a bot. This helps protect our community.")
     assert err_bot.error_type == "bot_check"
     assert err_bot.status_code == 503
     assert "YouTube is blocking this server right now" in err_bot.detail
+
+    err_player = map_ytdlp_error("ERROR: [youtube] d-hhix_uHUY: Failed to extract any player response; please report this issue")
+    assert err_player.error_type == "bot_check"
+    assert err_player.status_code == 503
 
     # Private
     err_private = map_ytdlp_error("Private video. Sign in if you've been granted access to this video")
@@ -296,6 +302,95 @@ def test_get_base_ydl_opts_proxy_and_cookies():
         opts = get_base_ydl_opts("youtube")
         assert opts.get("proxy") == "http://user:pass@proxy.example.com:8080"
         assert opts.get("quiet") is True
+
+
+@patch("app.downloader.httpx.Client")
+def test_fetch_youtube_innertube_success(mock_client_cls):
+    mock_client = MagicMock()
+    mock_client_cls.return_value.__enter__.return_value = mock_client
+
+    mock_resp = MagicMock()
+    mock_resp.status_code = 200
+    mock_resp.json.return_value = {
+        "playabilityStatus": {"status": "OK"},
+        "videoDetails": {
+            "title": "Five Little Ducks",
+            "author": "Rhyme Channel",
+            "lengthSeconds": "150",
+            "thumbnail": {"thumbnails": [{"url": "https://example.com/thumb.jpg"}]},
+        },
+        "streamingData": {
+            "formats": [
+                {
+                    "itag": 22,
+                    "qualityLabel": "720p",
+                    "url": "https://rr.googlevideo.com/videoplayback?itag=22",
+                    "contentLength": "15000000",
+                    "mimeType": "video/mp4; codecs=avc1",
+                }
+            ],
+            "adaptiveFormats": [
+                {
+                    "itag": 140,
+                    "mimeType": "audio/mp4; codecs=mp4a",
+                    "url": "https://rr.googlevideo.com/videoplayback?itag=140",
+                    "contentLength": "2000000",
+                    "bitrate": 128000,
+                }
+            ],
+        },
+    }
+    mock_client.post.return_value = mock_resp
+
+    meta = fetch_youtube_innertube("d-hhix_uHUY")
+    assert meta is not None
+    assert meta.id == "d-hhix_uHUY"
+    assert meta.title == "Five Little Ducks"
+    assert meta.downloads_available is True
+    assert len(meta.formats) == 2
+    f_ids = [f.format_id for f in meta.formats]
+    assert "yt-720p" in f_ids
+    assert "yt-audio-mp3" in f_ids
+
+
+@patch("app.downloader.httpx.Client")
+def test_download_youtube_innertube_stream_success(mock_client_cls, tmp_path):
+    mock_client = MagicMock()
+    mock_client_cls.return_value.__enter__.return_value = mock_client
+
+    # Mock metadata call
+    mock_meta_resp = MagicMock()
+    mock_meta_resp.status_code = 200
+    mock_meta_resp.json.return_value = {
+        "playabilityStatus": {"status": "OK"},
+        "videoDetails": {"title": "Direct Duck Video"},
+        "streamingData": {
+            "formats": [
+                {
+                    "itag": 22,
+                    "qualityLabel": "720p",
+                    "url": "https://rr.googlevideo.com/videoplayback?test=1",
+                    "contentLength": "1024",
+                }
+            ]
+        },
+    }
+    mock_client.post.return_value = mock_meta_resp
+
+    # Mock stream response
+    mock_stream_resp = MagicMock()
+    mock_stream_resp.status_code = 200
+    mock_stream_resp.headers = {"content-length": "1024"}
+    mock_stream_resp.iter_bytes.return_value = [b"A" * 1024]
+    mock_client.stream.return_value.__enter__.return_value = mock_stream_resp
+
+    loop = asyncio.new_event_loop()
+    queue = asyncio.Queue()
+
+    res = download_youtube_innertube_stream("vid_direct_test", "yt-720p", "test_job_1", loop, queue)
+    assert res is not None
+    assert "Direct Duck Video" in res["filename"]
+    assert res["filesize"] == 1024
 
 
 def test_cobalt_not_called_when_unset():

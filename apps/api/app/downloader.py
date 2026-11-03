@@ -37,8 +37,12 @@ INSTAGRAM_REGEX = re.compile(
     r"^(https?://)?(www\.)?instagram\.com/(reel|reels|p|tv|share/reel)/[\w-]+"
 )
 
-# Shared client profiles: minimal hammering
-YOUTUBE_CLIENT_PROFILES: List[List[str]] = [["web", "mweb"], ["tv"]]
+# Modern working client profiles: default smart suite -> mobile clients -> embedded/tv clients
+YOUTUBE_CLIENT_PROFILES: List[List[str]] = [
+    ["default"],
+    ["android", "ios"],
+    ["web_embedded", "tv_samsung"],
+]
 
 BOT_BLOCK_COOLDOWN_SECONDS = int(os.getenv("BOT_BLOCK_COOLDOWN_SECONDS", "60"))
 _youtube_bot_block_until: float = 0.0
@@ -105,6 +109,8 @@ def is_bot_check_error(error_msg: str) -> bool:
         or "confirm you're not a bot" in msg
         or "confirm you’re not a bot" in msg
         or "botguard" in msg
+        or "failed to extract any player response" in msg
+        or "all player responses are invalid" in msg
     )
 
 
@@ -217,6 +223,279 @@ def fetch_youtube_oembed(video_id: str) -> Optional[VideoMetadata]:
             logger.warning("Google oEmbed returned status %d for %s: %s", resp.status_code, video_id, resp.text[:150])
     except Exception as e:
         logger.warning("Google oEmbed failed for %s: %s", video_id, e)
+    return None
+
+
+_innertube_stream_cache: Dict[str, Dict[str, Any]] = {}
+
+INNERTUBE_CLIENTS_CONFIG = [
+    {
+        "clientName": "ANDROID",
+        "clientVersion": "19.29.35",
+        "androidSdkVersion": 30,
+        "userAgent": "com.google.android.youtube/19.29.35 (Linux; U; Android 11; en_US) gzip",
+    },
+    {
+        "clientName": "IOS",
+        "clientVersion": "19.29.1",
+        "deviceModel": "iPhone16,2",
+        "userAgent": "com.google.ios.youtube/19.29.1 (iPhone16,2; U; CPU iOS 17_5_1 like Mac OS X; en_US)",
+    },
+    {
+        "clientName": "TVHTML5_SIMPLY_EMBEDDED_PLAYER",
+        "clientVersion": "2.0",
+        "userAgent": "Mozilla/5.0 (SMART-TV; Linux; Tizen 5.0) AppleWebKit/538.1 (KHTML, like Gecko) Version/5.0 TV Safari/538.1",
+        "thirdParty": {"embedUrl": "https://www.youtube.com"},
+    },
+]
+
+
+def fetch_youtube_innertube(video_id: str) -> Optional[VideoMetadata]:
+    """
+    Built-in native YouTube InnerTube extractor.
+    Queries YouTube's official InnerTube API across Android, iOS, and TV clients
+    to obtain real streaming URLs directly without relying on external third-party services.
+    """
+    endpoint = "https://www.youtube.com/youtubei/v1/player"
+    proxy = (
+        PROXY_URL
+        or os.getenv("PROXY_URL")
+        or os.getenv("HTTP_PROXY")
+        or os.getenv("HTTPS_PROXY")
+        or os.getenv("http_proxy")
+        or os.getenv("https_proxy")
+    )
+    client_kwargs: Dict[str, Any] = {"timeout": 8.0, "follow_redirects": True}
+    if proxy:
+        client_kwargs["proxy"] = proxy
+
+    for cfg in INNERTUBE_CLIENTS_CONFIG:
+        payload: Dict[str, Any] = {
+            "videoId": video_id,
+            "context": {
+                "client": {
+                    "clientName": cfg["clientName"],
+                    "clientVersion": cfg["clientVersion"],
+                    "hl": "en",
+                    "gl": "US",
+                }
+            },
+        }
+        if "androidSdkVersion" in cfg:
+            payload["context"]["client"]["androidSdkVersion"] = cfg["androidSdkVersion"]
+        if "deviceModel" in cfg:
+            payload["context"]["client"]["deviceModel"] = cfg["deviceModel"]
+        if "thirdParty" in cfg:
+            payload["context"]["thirdParty"] = cfg["thirdParty"]
+
+        headers = {
+            "User-Agent": cfg["userAgent"],
+            "Content-Type": "application/json",
+            "Origin": "https://www.youtube.com",
+        }
+
+        try:
+            with httpx.Client(**client_kwargs) as client:
+                resp = client.post(endpoint, json=payload, headers=headers)
+                if resp.status_code != 200:
+                    continue
+                data = resp.json()
+                playability = data.get("playabilityStatus", {})
+                status = playability.get("status")
+                if status != "OK":
+                    continue
+
+                details = data.get("videoDetails", {})
+                title = details.get("title", "YouTube Video")
+                author = details.get("author", "YouTube Creator")
+                duration = safe_int(details.get("lengthSeconds"), 0)
+                thumbnails = details.get("thumbnail", {}).get("thumbnails", [])
+                thumbnail = thumbnails[-1]["url"] if thumbnails else f"https://i.ytimg.com/vi/{video_id}/hqdefault.jpg"
+
+                streaming = data.get("streamingData", {})
+                combined_formats = streaming.get("formats", [])
+                adaptive_formats = streaming.get("adaptiveFormats", [])
+
+                formats: List[VideoFormat] = []
+                stream_map: Dict[str, Dict[str, Any]] = {}
+
+                # 1. Combined audio+video formats (guaranteed full progressive playback)
+                for f in combined_formats:
+                    url = f.get("url")
+                    if not url:
+                        continue
+                    itag = f.get("itag")
+                    quality = f.get("qualityLabel") or f"{f.get('height', 360)}p"
+                    filesize = safe_int(f.get("contentLength"))
+                    format_id = f"yt-{quality}"
+                    if any(fmt.format_id == format_id for fmt in formats):
+                        format_id = f"yt-{quality}-{itag}"
+                    label = f"{quality} Full HD" if "1080" in quality else f"{quality} HD" if "720" in quality else f"{quality}"
+                    formats.append(
+                        VideoFormat(
+                            format_id=format_id,
+                            label=label,
+                            resolution=quality,
+                            ext="mp4",
+                            filesize=filesize,
+                            is_audio_only=False,
+                        )
+                    )
+                    stream_map[format_id] = {
+                        "url": url,
+                        "ext": "mp4",
+                        "mime": f.get("mimeType", "video/mp4"),
+                        "filesize": filesize,
+                        "is_audio": False,
+                    }
+
+                # 2. Audio-only format
+                for f in adaptive_formats:
+                    url = f.get("url")
+                    if not url:
+                        continue
+                    mime = f.get("mimeType", "")
+                    if mime.startswith("audio/") and "yt-audio-mp3" not in stream_map:
+                        filesize = safe_int(f.get("contentLength"))
+                        bitrate = safe_int(f.get("bitrate"), 128000) // 1000
+                        formats.append(
+                            VideoFormat(
+                                format_id="yt-audio-mp3",
+                                label=f"MP3 Audio ({bitrate}k)",
+                                resolution="Audio",
+                                ext="mp3",
+                                filesize=filesize,
+                                is_audio_only=True,
+                            )
+                        )
+                        stream_map["yt-audio-mp3"] = {
+                            "url": url,
+                            "ext": "mp3",
+                            "mime": mime,
+                            "filesize": filesize,
+                            "is_audio": True,
+                        }
+                        break
+
+                if formats:
+                    stream_map["_title"] = title
+                    _innertube_stream_cache[video_id] = stream_map
+                    logger.info(
+                        "Extracted %d formats via built-in InnerTube (%s) for %s: %s",
+                        len(formats),
+                        cfg["clientName"],
+                        video_id,
+                        title,
+                    )
+                    return VideoMetadata(
+                        id=video_id,
+                        platform="youtube",
+                        title=title,
+                        creator=author,
+                        creator_avatar=None,
+                        duration=duration,
+                        thumbnail=thumbnail,
+                        formats=formats,
+                        downloads_available=True,
+                        notice=None,
+                    )
+        except Exception as e:
+            logger.debug("InnerTube client %s failed for %s: %s", cfg["clientName"], video_id, e)
+
+    return None
+
+
+def download_youtube_innertube_stream(
+    video_id: str,
+    format_id: str,
+    job_id: str,
+    loop: asyncio.AbstractEventLoop,
+    queue: asyncio.Queue,
+) -> Optional[Dict[str, Any]]:
+    """
+    Downloads media streams directly from Google's CDN via InnerTube stream URLs.
+    Runs entirely within our own backend with zero third-party dependencies.
+    """
+    stream_map = _innertube_stream_cache.get(video_id)
+    if not stream_map:
+        meta = fetch_youtube_innertube(video_id)
+        if meta:
+            stream_map = _innertube_stream_cache.get(video_id)
+
+    if not stream_map:
+        return None
+
+    title = stream_map.get("_title", "video")
+
+    target_stream = stream_map.get(format_id)
+    if not target_stream:
+        # Fallback to audio or best available video stream
+        if "audio" in format_id:
+            for fid, s in stream_map.items():
+                if s.get("is_audio"):
+                    target_stream = s
+                    break
+        else:
+            for fid, s in stream_map.items():
+                if not s.get("is_audio"):
+                    target_stream = s
+                    break
+        if not target_stream and stream_map:
+            target_stream = next(iter(stream_map.values()))
+
+    if not target_stream or not target_stream.get("url"):
+        return None
+
+    stream_url = target_stream["url"]
+    ext = target_stream.get("ext", "mp4")
+    clean_title = sanitize_filename(title)
+    out_filename = f"{job_id}_{clean_title}.{ext}"
+    out_path = DOWNLOAD_DIR / out_filename
+
+    proxy = (
+        PROXY_URL
+        or os.getenv("PROXY_URL")
+        or os.getenv("HTTP_PROXY")
+        or os.getenv("HTTPS_PROXY")
+        or os.getenv("http_proxy")
+        or os.getenv("https_proxy")
+    )
+    client_kwargs: Dict[str, Any] = {"timeout": 60.0, "follow_redirects": True}
+    if proxy:
+        client_kwargs["proxy"] = proxy
+
+    loop.call_soon_threadsafe(
+        queue.put_nowait,
+        DownloadProgress(status="downloading", percent=5.0, speed="Streaming directly from Google CDN..."),
+    )
+
+    try:
+        with httpx.Client(**client_kwargs) as client:
+            with client.stream("GET", stream_url) as resp:
+                if resp.status_code in (200, 206):
+                    total_bytes = safe_int(resp.headers.get("content-length")) or target_stream.get("filesize") or 0
+                    downloaded = 0
+                    with open(out_path, "wb") as f:
+                        for chunk in resp.iter_bytes(chunk_size=131072):
+                            f.write(chunk)
+                            downloaded += len(chunk)
+                            if total_bytes > 0:
+                                pct = min(98.0, (downloaded / total_bytes) * 98.0)
+                                loop.call_soon_threadsafe(
+                                    queue.put_nowait,
+                                    DownloadProgress(
+                                        status="downloading",
+                                        percent=round(pct, 1),
+                                        filesize=total_bytes,
+                                    ),
+                                )
+
+                    if out_path.exists() and out_path.stat().st_size > 0:
+                        logger.info("Direct InnerTube download succeeded: %s (%d bytes)", out_filename, out_path.stat().st_size)
+                        return {"filename": out_filename, "filesize": out_path.stat().st_size}
+    except Exception as e:
+        logger.warning("Direct InnerTube stream failed for %s: %s", video_id, e)
+
     return None
 
 
@@ -363,9 +642,12 @@ def extract_metadata(url: str) -> VideoMetadata:
 
     # If YouTube cooldown is active, skip hammering yt-dlp immediately
     if platform == "youtube" and is_youtube_cooldown_active():
-        logger.info("YouTube cooldown active; skipping yt-dlp and checking oEmbed.")
+        logger.info("YouTube cooldown active; checking built-in InnerTube engine and oEmbed.")
         vid_id = extract_youtube_id(url)
         if vid_id:
+            innertube_meta = fetch_youtube_innertube(vid_id)
+            if innertube_meta and innertube_meta.formats:
+                return innertube_meta
             oembed_meta = fetch_youtube_oembed(vid_id)
             if oembed_meta:
                 return oembed_meta
@@ -426,10 +708,13 @@ def extract_metadata(url: str) -> VideoMetadata:
         trigger_youtube_cooldown()
 
     if not info:
-        # If yt-dlp failed on cloud datacenter IP, try honest oEmbed fallback
+        # If yt-dlp failed on cloud datacenter IP, try built-in InnerTube engine before honest oEmbed
         if platform == "youtube":
             vid_id = extract_youtube_id(url)
             if vid_id:
+                innertube_meta = fetch_youtube_innertube(vid_id)
+                if innertube_meta and innertube_meta.formats:
+                    return innertube_meta
                 oembed_meta = fetch_youtube_oembed(vid_id)
                 if oembed_meta:
                     return oembed_meta
@@ -722,6 +1007,23 @@ async def download_video_stream(url: str, format_id: str) -> AsyncGenerator[str,
 
             if not success and platform == "youtube" and encountered_bot_check:
                 trigger_youtube_cooldown()
+
+        # Built-in direct streaming engine for YouTube when yt-dlp fails or is blocked
+        if not success and platform == "youtube":
+            vid_id = extract_youtube_id(url)
+            if vid_id:
+                logger.info("Executing built-in direct streaming engine for %s", vid_id)
+                stream_res = download_youtube_innertube_stream(
+                    video_id=vid_id,
+                    format_id=format_id,
+                    job_id=job_id,
+                    loop=loop,
+                    queue=queue,
+                )
+                if stream_res:
+                    final_filename = stream_res["filename"]
+                    final_filesize = stream_res["filesize"]
+                    success = True
 
         # Optional Cobalt download fallback if configured
         if not success and platform == "youtube" and (os.getenv("COBALT_API_URL") or COBALT_API_URL):
