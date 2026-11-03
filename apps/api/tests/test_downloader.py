@@ -46,6 +46,18 @@ def test_detect_platform_tiktok():
         assert detect_platform(url) == "tiktok"
 
 
+def test_detect_platform_instagram():
+    urls = [
+        "https://www.instagram.com/reel/C3bXYZ123/",
+        "https://instagram.com/reels/C3bXYZ123/",
+        "https://www.instagram.com/p/C3bXYZ123/",
+        "https://www.instagram.com/tv/C3bXYZ123/",
+        "https://www.instagram.com/share/reel/C3bXYZ123/",
+    ]
+    for url in urls:
+        assert detect_platform(url) == "instagram"
+
+
 def test_detect_platform_invalid():
     with pytest.raises(DownloadException) as exc:
         detect_platform("https://vimeo.com/123456")
@@ -144,6 +156,32 @@ def test_extract_metadata_success_path(mock_ydl_class):
     assert meta.downloads_available is True
     assert meta.notice is None
     assert len(meta.formats) > 0
+
+
+@patch("app.downloader.yt_dlp.YoutubeDL")
+def test_extract_metadata_instagram_success(mock_ydl_class):
+    mock_ydl = MagicMock()
+    mock_ydl_class.return_value.__enter__.return_value = mock_ydl
+    mock_ydl.extract_info.return_value = {
+        "id": "C3bXYZ123",
+        "title": "Amazing Instagram Reel",
+        "uploader": "insta_creator",
+        "duration": 30,
+        "thumbnail": "https://example.com/ig_thumb.jpg",
+        "formats": [
+            {"format_id": "0", "ext": "mp4", "width": 1080, "height": 1920},
+        ],
+    }
+
+    meta = extract_metadata("https://www.instagram.com/reel/C3bXYZ123/")
+    assert meta.id == "C3bXYZ123"
+    assert meta.platform == "instagram"
+    assert meta.title == "Amazing Instagram Reel"
+    assert meta.creator == "insta_creator"
+    assert len(meta.formats) == 2
+    format_ids = [f.format_id for f in meta.formats]
+    assert "instagram-video" in format_ids
+    assert "instagram-audio" in format_ids
 
 
 @patch("app.downloader.fetch_youtube_oembed")

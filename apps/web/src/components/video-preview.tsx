@@ -53,10 +53,10 @@ export function VideoPreview({ metadata, isLoading }: VideoPreviewProps) {
               {formatDuration(metadata.duration)}
             </div>
             <Badge
-              variant={metadata.platform === "youtube" ? "youtube" : "tiktok"}
+              variant={metadata.platform === "youtube" ? "youtube" : metadata.platform === "instagram" ? "instagram" : "tiktok"}
               className="absolute top-2 left-2"
             >
-              {metadata.platform === "youtube" ? "YouTube" : "TikTok"}
+              {metadata.platform === "youtube" ? "YouTube" : metadata.platform === "instagram" ? "Instagram" : "TikTok"}
             </Badge>
           </div>
 

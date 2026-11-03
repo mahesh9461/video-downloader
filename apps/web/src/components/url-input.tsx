@@ -88,8 +88,8 @@ export function UrlInput({ onSubmit, isLoading, disabled }: UrlInputProps) {
 
         <div className="flex items-center gap-2 pr-1">
           {platform && (
-            <Badge variant={platform === "youtube" ? "youtube" : "tiktok"}>
-              {platform === "youtube" ? "YouTube" : "TikTok"}
+            <Badge variant={platform === "youtube" ? "youtube" : platform === "instagram" ? "instagram" : "tiktok"}>
+              {platform === "youtube" ? "YouTube" : platform === "instagram" ? "Instagram" : "TikTok"}
             </Badge>
           )}
 

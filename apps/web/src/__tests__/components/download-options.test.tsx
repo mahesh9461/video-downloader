@@ -43,6 +43,20 @@ const mockTikTokMetadata: VideoMetadata = {
   ],
 };
 
+const mockInstagramMetadata: VideoMetadata = {
+  id: "ig-test",
+  platform: "instagram",
+  title: "Instagram Reel Test",
+  creator: "InstaCreator",
+  creator_avatar: null,
+  duration: 30,
+  thumbnail: "thumb.jpg",
+  formats: [
+    { format_id: "instagram-video", label: "Download Reel (HD)", resolution: "HD", ext: "mp4", filesize: 12000000, is_audio_only: false },
+    { format_id: "instagram-audio", label: "Extract Audio", resolution: null, ext: "mp3", filesize: 1500000, is_audio_only: true },
+  ],
+};
+
 function renderWithProvider(ui: React.ReactElement, testStore: ReturnType<typeof createTestStore>) {
   const { render } = require("@testing-library/react");
   return render(<Provider store={testStore}>{ui}</Provider>);
@@ -95,6 +109,24 @@ describe("DownloadOptions", () => {
       expect(screen.getByRole("button", { name: /hd video/i })).toBeInTheDocument();
       expect(screen.getByRole("button", { name: /extract audio/i })).toBeInTheDocument();
     });
+
+    it("should render Instagram download options when platform is Instagram", () => {
+      // Arrange & Act
+      renderWithProvider(
+        <DownloadOptions
+          metadata={mockInstagramMetadata}
+          onDownload={mockOnDownload}
+          isDownloading={false}
+          activeFormatId={null}
+        />,
+        store
+      );
+
+      // Assert
+      expect(screen.getByText("Instagram Reel Download")).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: /download reel \(hd\)/i })).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: /extract audio/i })).toBeInTheDocument();
+    });
   });
 
   describe("user interaction", () => {
@@ -137,6 +169,26 @@ describe("DownloadOptions", () => {
 
       // Assert
       expect(mockOnDownload).toHaveBeenCalledWith("nowm", "No Watermark");
+    });
+
+    it("should trigger download directly on Instagram option click", async () => {
+      // Arrange
+      const user = userEvent.setup();
+      renderWithProvider(
+        <DownloadOptions
+          metadata={mockInstagramMetadata}
+          onDownload={mockOnDownload}
+          isDownloading={false}
+          activeFormatId={null}
+        />,
+        store
+      );
+
+      // Act
+      await user.click(screen.getByRole("button", { name: /download reel \(hd\)/i }));
+
+      // Assert
+      expect(mockOnDownload).toHaveBeenCalledWith("instagram-video", "Download Reel (HD)");
     });
   });
 

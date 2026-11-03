@@ -76,10 +76,10 @@ export function HistoryDrawer({
                 <p className="text-sm font-medium text-zinc-200 line-clamp-1">{item.title}</p>
                 <div className="flex items-center gap-2 mt-1 text-xs text-zinc-500">
                   <Badge
-                    variant={item.platform === "youtube" ? "youtube" : "tiktok"}
+                    variant={item.platform === "youtube" ? "youtube" : item.platform === "instagram" ? "instagram" : "tiktok"}
                     className="text-[10px] px-1.5 py-0"
                   >
-                    {item.platform === "youtube" ? "YT" : "TT"}
+                    {item.platform === "youtube" ? "YT" : item.platform === "instagram" ? "IG" : "TT"}
                   </Badge>
                   <span>{item.format}</span>
                   {item.filesize && (

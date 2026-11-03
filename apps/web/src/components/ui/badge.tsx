@@ -13,6 +13,7 @@ const badgeVariants = cva(
         outline: "border-zinc-700 text-zinc-300",
         youtube: "border-transparent bg-red-600/20 text-red-400",
         tiktok: "border-transparent bg-cyan-600/20 text-cyan-400",
+        instagram: "border-transparent bg-pink-600/20 text-pink-400",
       },
     },
     defaultVariants: {

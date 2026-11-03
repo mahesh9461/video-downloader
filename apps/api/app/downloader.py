@@ -33,6 +33,9 @@ YOUTUBE_REGEX = re.compile(
 TIKTOK_REGEX = re.compile(
     r"^(https?://)?(www\.)?(tiktok\.com/@[\w.-]+/video/\d+|(vm|vt)\.tiktok\.com/[\w]+|tiktok\.com/t/[\w]+)"
 )
+INSTAGRAM_REGEX = re.compile(
+    r"^(https?://)?(www\.)?instagram\.com/(reel|reels|p|tv|share/reel)/[\w-]+"
+)
 
 # Shared client profiles: minimal hammering
 YOUTUBE_CLIENT_PROFILES: List[List[str]] = [["web", "mweb"], ["tv"]]
@@ -85,8 +88,10 @@ def detect_platform(url: str) -> str:
         return "youtube"
     if TIKTOK_REGEX.search(url):
         return "tiktok"
+    if INSTAGRAM_REGEX.search(url):
+        return "instagram"
     raise DownloadException(
-        "Invalid or unsupported URL. Please paste a valid YouTube or TikTok link.",
+        "Invalid or unsupported URL. Please paste a valid YouTube, TikTok, or Instagram link.",
         error_type="invalid_url",
         status_code=400,
     )
@@ -112,8 +117,14 @@ def map_ytdlp_error(error_msg: str) -> DownloadException:
             error_type="bot_check",
             status_code=503,
         )
-    if "private video" in msg or "sign in if you've been granted access" in msg or "login required" in msg:
-        return DownloadException("This video is private or requires sign-in.", "private", 403)
+    if (
+        "private video" in msg
+        or "sign in if you've been granted access" in msg
+        or "login required" in msg
+        or "lsd token" in msg
+        or "checkpoint_required" in msg
+    ):
+        return DownloadException("This video or reel is private or requires sign-in.", "private", 403)
     if "not available in your country" in msg or "geo-restricted" in msg or "blocked in your country" in msg:
         return DownloadException("This video is not available in your region.", "geo_restricted", 403)
     if "video unavailable" in msg or "removed by the user" in msg or "has been deleted" in msg or "http error 404" in msg:
@@ -309,6 +320,7 @@ def get_base_ydl_opts(platform: str, client_override: Optional[List[str]] = None
         "noplaylist": True,
         "playlist_items": "1",
         "extract_flat": False,
+        "nocheckcertificate": True,
     }
     if FFMPEG_PATH:
         opts["ffmpeg_location"] = FFMPEG_PATH
@@ -478,6 +490,28 @@ def extract_metadata(url: str) -> VideoMetadata:
             )
         )
 
+    elif platform == "instagram":
+        formats.append(
+            VideoFormat(
+                format_id="instagram-video",
+                label="Reel / Video (HD)",
+                resolution="HD",
+                ext="mp4",
+                filesize=None,
+                is_audio_only=False,
+            )
+        )
+        formats.append(
+            VideoFormat(
+                format_id="instagram-audio",
+                label="MP3 Audio",
+                resolution="Audio",
+                ext="mp3",
+                filesize=None,
+                is_audio_only=True,
+            )
+        )
+
     return VideoMetadata(
         id=video_id,
         platform=platform,
@@ -501,7 +535,7 @@ async def download_video_stream(url: str, format_id: str) -> AsyncGenerator[str,
     job_id = uuid.uuid4().hex[:10]
     out_template = str(DOWNLOAD_DIR / f"{job_id}_%(title).100B.%(ext)s")
 
-    is_audio = "audio" in format_id or format_id == "tiktok-audio"
+    is_audio = "audio" in format_id or format_id in ("tiktok-audio", "instagram-audio")
 
     ydl_opts = get_base_ydl_opts(platform)
     ydl_opts.update(
@@ -514,7 +548,7 @@ async def download_video_stream(url: str, format_id: str) -> AsyncGenerator[str,
     )
 
     if is_audio:
-        preferred_codec = "mp3" if "mp3" in format_id or format_id == "tiktok-audio" else "m4a"
+        preferred_codec = "mp3" if "mp3" in format_id or format_id in ("tiktok-audio", "instagram-audio") else "m4a"
         ydl_opts.update(
             {
                 "format": "bestaudio/best",
@@ -536,7 +570,7 @@ async def download_video_stream(url: str, format_id: str) -> AsyncGenerator[str,
             else:
                 ydl_opts["format"] = "bestvideo[ext=mp4]+bestaudio[ext=m4a]/bestvideo+bestaudio/best"
             ydl_opts["merge_output_format"] = "mp4"
-        elif platform == "tiktok":
+        elif platform in ("tiktok", "instagram"):
             ydl_opts["format"] = "best[ext=mp4]/best"
             ydl_opts["merge_output_format"] = "mp4"
 

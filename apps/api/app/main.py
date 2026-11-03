@@ -109,7 +109,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(
     title="SaveIt Video Downloader API",
     version="1.0.0",
-    description="High-speed video downloading backend for YouTube and TikTok with FFmpeg processing",
+    description="High-speed video downloading backend for YouTube, TikTok, and Instagram Reels with FFmpeg processing",
     lifespan=lifespan,
 )
 

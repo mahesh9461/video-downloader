@@ -1,4 +1,4 @@
-export type Platform = "youtube" | "tiktok";
+export type Platform = "youtube" | "tiktok" | "instagram";
 
 export interface VideoFormat {
   format_id: string;

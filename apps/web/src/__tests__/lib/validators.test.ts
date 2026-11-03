@@ -184,12 +184,11 @@ describe("validators", () => {
       expect(result).toBeNull();
     });
 
-    it("should return null for Instagram URLs", () => {
-      // Arrange & Act
-      const result = detectPlatform("https://www.instagram.com/reel/abc123/");
-
-      // Assert
-      expect(result).toBeNull();
+    it("should detect Instagram Reel and Post URLs", () => {
+      // Arrange & Act & Assert
+      expect(detectPlatform("https://www.instagram.com/reel/C3bXYZ123/")).toBe("instagram");
+      expect(detectPlatform("https://instagram.com/reels/C3bXYZ123/")).toBe("instagram");
+      expect(detectPlatform("https://www.instagram.com/p/C3bXYZ123/")).toBe("instagram");
     });
 
     it("should return null for Vimeo URLs", () => {
@@ -227,6 +226,17 @@ describe("validators", () => {
     it("should return true for valid TikTok URLs", () => {
       // Arrange
       const url = "https://www.tiktok.com/@user/video/1234567890123456789";
+
+      // Act
+      const result = isValidUrl(url);
+
+      // Assert
+      expect(result).toBe(true);
+    });
+
+    it("should return true for valid Instagram URLs", () => {
+      // Arrange
+      const url = "https://www.instagram.com/reel/C3bXYZ123/";
 
       // Act
       const result = isValidUrl(url);

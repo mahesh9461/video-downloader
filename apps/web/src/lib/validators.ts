@@ -14,6 +14,10 @@ const TIKTOK_PATTERNS = [
   /^(https?:\/\/)?(www\.)?tiktok\.com\/t\/[\w]+/,
 ];
 
+const INSTAGRAM_PATTERNS = [
+  /^(https?:\/\/)?(www\.)?instagram\.com\/(reel|reels|p|tv|share\/reel)\/[\w-]+/,
+];
+
 export function cleanVideoUrl(url: string): string {
   const trimmed = url.trim();
   // Strip playlist and mix parameters so only the single target video is loaded
@@ -36,6 +40,10 @@ export function detectPlatform(url: string): Platform | null {
 
   for (const pattern of TIKTOK_PATTERNS) {
     if (pattern.test(trimmed)) return "tiktok";
+  }
+
+  for (const pattern of INSTAGRAM_PATTERNS) {
+    if (pattern.test(trimmed)) return "instagram";
   }
 
   return null;

@@ -3,7 +3,7 @@ from pydantic import BaseModel, Field
 
 
 class MetadataRequest(BaseModel):
-    url: str = Field(..., description="Target video URL from YouTube or TikTok")
+    url: str = Field(..., description="Target video URL from YouTube, TikTok, or Instagram")
 
 
 class VideoFormat(BaseModel):

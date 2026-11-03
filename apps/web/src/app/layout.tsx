@@ -14,14 +14,17 @@ export const viewport: Viewport = {
 export const metadata: Metadata = {
   metadataBase: new URL(siteUrl),
   title: {
-    default: "SaveIt — Free YouTube Downloader (4K/1080p) & TikTok Downloader No Watermark",
+    default: "SaveIt — Free YouTube, TikTok & Instagram Reels Downloader",
     template: "%s | SaveIt",
   },
   description:
-    "Free online video downloader for YouTube and TikTok. Download 4K, 1080p MP4 videos without watermarks and convert to 320kbps MP3 audio at maximum speed. No software required.",
+    "Free online video downloader for YouTube, TikTok, and Instagram Reels. Download 4K, 1080p MP4 videos without watermarks and convert to 320kbps MP3 audio at maximum speed. No software required.",
   keywords: [
     "YouTube downloader",
     "TikTok downloader without watermark",
+    "Instagram Reels downloader",
+    "Instagram video download 1080p",
+    "save Instagram reels mp4",
     "save TikTok video without watermark",
     "download YouTube 4K",
     "download YouTube 1080p",

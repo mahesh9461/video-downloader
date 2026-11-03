@@ -12,6 +12,7 @@ import httpx
 
 TEST_YOUTUBE_URL = "https://www.youtube.com/watch?v=dQw4w9WgXcQ"
 TEST_TIKTOK_URL = "https://www.tiktok.com/@tiktok/video/7106594312292453678"
+TEST_INSTAGRAM_URL = "https://www.instagram.com/reel/C3bXYZ123/"
 
 
 def run_smoke_tests(base_url: str):
@@ -100,6 +101,19 @@ def run_smoke_tests(base_url: str):
                 print(f"  FAIL: {e}")
         else:
             print("  SKIP: TikTok formats not retrieved.")
+
+        # Step 6: Instagram Metadata
+        print(f"\n[Step 6] POST /api/metadata (Instagram: {TEST_INSTAGRAM_URL})")
+        try:
+            r = client.post(f"{base_url}/api/metadata", json={"url": TEST_INSTAGRAM_URL})
+            if r.status_code == 200:
+                ig_meta = r.json()
+                print(f"  PASS: Retrieved title: '{ig_meta.get('title')}'")
+                print(f"        formats count: {len(ig_meta.get('formats', []))}")
+            else:
+                print(f"  FAIL: HTTP {r.status_code}: {r.text[:200]}")
+        except Exception as e:
+            print(f"  FAIL: {e}")
 
     print("\n=== Smoke Tests Finished ===")
 

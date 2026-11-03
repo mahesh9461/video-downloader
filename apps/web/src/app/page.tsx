@@ -134,12 +134,12 @@ export default function Home() {
           </h1>
 
           <p className="text-zinc-400 text-base sm:text-lg leading-relaxed max-w-xl mx-auto">
-            High-speed, lossless downloads from YouTube and TikTok. Enjoy watermark-free videos,
-            up to 4K 60FPS resolutions, and crystal-clear audio extraction.
+            High-speed, lossless downloads from YouTube, TikTok, and Instagram. Enjoy watermark-free videos,
+            up to 4K resolutions, and crystal-clear audio extraction.
           </p>
 
           {/* Platform Badges */}
-          <div className="flex items-center justify-center gap-3 pt-1">
+          <div className="flex flex-wrap items-center justify-center gap-3 pt-1">
             <div className="flex items-center gap-1.5 text-xs font-medium text-zinc-300 bg-zinc-900/80 border border-zinc-800 rounded-full px-3.5 py-1.5 shadow-sm">
               <Play className="w-3.5 h-3.5 text-red-500 fill-red-500" />
               YouTube (4K, 1080p, MP3)
@@ -147,6 +147,10 @@ export default function Home() {
             <div className="flex items-center gap-1.5 text-xs font-medium text-zinc-300 bg-zinc-900/80 border border-zinc-800 rounded-full px-3.5 py-1.5 shadow-sm">
               <Music2 className="w-3.5 h-3.5 text-cyan-400" />
               TikTok (No Watermark)
+            </div>
+            <div className="flex items-center gap-1.5 text-xs font-medium text-zinc-300 bg-zinc-900/80 border border-zinc-800 rounded-full px-3.5 py-1.5 shadow-sm">
+              <Film className="w-3.5 h-3.5 text-pink-400" />
+              Instagram (Reels, HD)
             </div>
           </div>
         </section>

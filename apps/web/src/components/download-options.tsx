@@ -36,6 +36,10 @@ export function DownloadOptions({
     return <TikTokOptions metadata={metadata} onDownload={onDownload} isDownloading={isDownloading} activeFormatId={activeFormatId} />;
   }
 
+  if (metadata.platform === "instagram") {
+    return <InstagramOptions metadata={metadata} onDownload={onDownload} isDownloading={isDownloading} activeFormatId={activeFormatId} />;
+  }
+
   return <YouTubeOptions metadata={metadata} onDownload={onDownload} isDownloading={isDownloading} activeFormatId={activeFormatId} selectedFormatId={selectedFormatId} setSelectedFormatId={setSelectedFormatId} />;
 }
 
@@ -245,6 +249,69 @@ function FormatButton({ format, isSelected, isActive, isDownloading, onClick }: 
         <div className="absolute -top-1 -right-1 w-3 h-3 rounded-full bg-violet-500 border-2 border-zinc-900" />
       )}
     </button>
+  );
+}
+
+/* ─── Instagram Options ─── */
+
+interface InstagramOptionsProps {
+  metadata: VideoMetadata;
+  onDownload: (formatId: string, label: string) => void;
+  isDownloading: boolean;
+  activeFormatId: string | null;
+}
+
+function InstagramOptions({ metadata, onDownload, isDownloading, activeFormatId }: InstagramOptionsProps) {
+  const videoFormat = metadata.formats.find((f) => !f.is_audio_only);
+  const audioFormat = metadata.formats.find((f) => f.is_audio_only);
+
+  const buttons = [
+    { format: videoFormat, icon: Sparkles, label: "Download Reel (HD)", sublabel: "MP4 Video format" },
+    { format: audioFormat, icon: Music, label: "Extract Audio", sublabel: "MP3 Audio format" },
+  ].filter((b) => b.format);
+
+  return (
+    <Card className="animate-in fade-in-0 slide-in-from-bottom-4 duration-500 delay-150">
+      <CardHeader className="pb-4">
+        <CardTitle className="text-base flex items-center gap-2">
+          <Download className="w-4 h-4 text-pink-400" />
+          Instagram Reel Download
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        {metadata.notice && (
+          <div className="p-3 text-sm rounded-lg bg-amber-500/10 border border-amber-500/20 text-amber-300">
+            {metadata.notice}
+          </div>
+        )}
+        <div className="grid gap-3">
+          {buttons.map(({ format, icon: Icon, label, sublabel }) => (
+            <Button
+              key={format!.format_id}
+              variant="outline"
+              className={cn(
+                "h-auto py-4 px-4 justify-start gap-4 hover:border-pink-500/50 hover:bg-pink-500/5 transition-all",
+                activeFormatId === format!.format_id && isDownloading && "border-pink-500/50 bg-pink-500/5"
+              )}
+              disabled={isDownloading}
+              onClick={() => onDownload(format!.format_id, label)}
+            >
+              <div className="flex items-center justify-center w-10 h-10 rounded-xl bg-pink-500/10">
+                {isDownloading && activeFormatId === format!.format_id ? (
+                  <Loader2 className="w-5 h-5 text-pink-400 animate-spin" />
+                ) : (
+                  <Icon className="w-5 h-5 text-pink-400" />
+                )}
+              </div>
+              <div className="text-left">
+                <div className="font-medium text-white text-sm">{label}</div>
+                <div className="text-xs text-zinc-500 mt-0.5">{sublabel}</div>
+              </div>
+            </Button>
+          ))}
+        </div>
+      </CardContent>
+    </Card>
   );
 }
 
