@@ -1,6 +1,7 @@
 fastapi>=0.110.0
 uvicorn[standard]>=0.28.0
-yt-dlp>=2024.3.10
+yt-dlp>=2025.1.15
+yt-dlp-get-pot>=0.2.0
 pydantic>=2.6.0
 sse-starlette>=2.0.0
 slowapi>=0.1.9

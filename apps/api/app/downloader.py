@@ -37,12 +37,17 @@ INSTAGRAM_REGEX = re.compile(
     r"^(https?://)?(www\.)?instagram\.com/(reel|reels|p|tv|share/reel)/[\w-]+"
 )
 
-# Modern working client profiles: default smart suite -> mobile clients -> embedded/tv clients
+# Modern working client profiles ordered by reliability on datacenter IPs.
+# web+mweb first (least restricted), then mobile app clients, then embedded fallback.
+# tv client excluded — it frequently throws DRM/format errors.
 YOUTUBE_CLIENT_PROFILES: List[List[str]] = [
-    ["default"],
+    ["web", "mweb"],
     ["android", "ios"],
-    ["web_embedded", "tv_samsung"],
+    ["mediaconnect", "web_embedded"],
 ]
+
+# InnerTube stream URLs expire after ~6 hours; cache entries older than this are stale.
+_INNERTUBE_CACHE_TTL_SECONDS = 5 * 60 * 60  # 5 hours (conservative margin)
 
 BOT_BLOCK_COOLDOWN_SECONDS = int(os.getenv("BOT_BLOCK_COOLDOWN_SECONDS", "60"))
 _youtube_bot_block_until: float = 0.0
@@ -231,20 +236,25 @@ _innertube_stream_cache: Dict[str, Dict[str, Any]] = {}
 INNERTUBE_CLIENTS_CONFIG = [
     {
         "clientName": "ANDROID",
-        "clientVersion": "19.29.35",
-        "androidSdkVersion": 30,
-        "userAgent": "com.google.android.youtube/19.29.35 (Linux; U; Android 11; en_US) gzip",
+        "clientVersion": "20.10.38",
+        "androidSdkVersion": 34,
+        "userAgent": "com.google.android.youtube/20.10.38 (Linux; U; Android 14; en_US) gzip",
     },
     {
         "clientName": "IOS",
-        "clientVersion": "19.29.1",
-        "deviceModel": "iPhone16,2",
-        "userAgent": "com.google.ios.youtube/19.29.1 (iPhone16,2; U; CPU iOS 17_5_1 like Mac OS X; en_US)",
+        "clientVersion": "20.50.10",
+        "deviceModel": "iPhone17,1",
+        "userAgent": "com.google.ios.youtube/20.50.10 (iPhone17,1; U; CPU iOS 18_1 like Mac OS X; en_US)",
+    },
+    {
+        "clientName": "MWEB",
+        "clientVersion": "2.20261103.01.00",
+        "userAgent": "Mozilla/5.0 (Linux; Android 14; Pixel 8 Pro) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Mobile Safari/537.36",
     },
     {
         "clientName": "TVHTML5_SIMPLY_EMBEDDED_PLAYER",
         "clientVersion": "2.0",
-        "userAgent": "Mozilla/5.0 (SMART-TV; Linux; Tizen 5.0) AppleWebKit/538.1 (KHTML, like Gecko) Version/5.0 TV Safari/538.1",
+        "userAgent": "Mozilla/5.0 (SMART-TV; Linux; Tizen 7.0) AppleWebKit/538.1 (KHTML, like Gecko) Version/7.0 TV Safari/538.1",
         "thirdParty": {"embedUrl": "https://www.youtube.com"},
     },
 ]
@@ -253,7 +263,7 @@ INNERTUBE_CLIENTS_CONFIG = [
 def fetch_youtube_innertube(video_id: str) -> Optional[VideoMetadata]:
     """
     Built-in native YouTube InnerTube extractor.
-    Queries YouTube's official InnerTube API across Android, iOS, and TV clients
+    Queries YouTube's official InnerTube API across Android, iOS, MWEB, and TV clients
     to obtain real streaming URLs directly without relying on external third-party services.
     """
     endpoint = "https://www.youtube.com/youtubei/v1/player"
@@ -265,7 +275,7 @@ def fetch_youtube_innertube(video_id: str) -> Optional[VideoMetadata]:
         or os.getenv("http_proxy")
         or os.getenv("https_proxy")
     )
-    client_kwargs: Dict[str, Any] = {"timeout": 8.0, "follow_redirects": True}
+    client_kwargs: Dict[str, Any] = {"timeout": 10.0, "follow_redirects": True}
     if proxy:
         client_kwargs["proxy"] = proxy
 
@@ -292,17 +302,29 @@ def fetch_youtube_innertube(video_id: str) -> Optional[VideoMetadata]:
             "User-Agent": cfg["userAgent"],
             "Content-Type": "application/json",
             "Origin": "https://www.youtube.com",
+            "Referer": "https://www.youtube.com/",
         }
 
         try:
             with httpx.Client(**client_kwargs) as client:
                 resp = client.post(endpoint, json=payload, headers=headers)
                 if resp.status_code != 200:
+                    logger.debug(
+                        "InnerTube %s returned HTTP %d for %s",
+                        cfg["clientName"], resp.status_code, video_id,
+                    )
                     continue
                 data = resp.json()
                 playability = data.get("playabilityStatus", {})
                 status = playability.get("status")
                 if status != "OK":
+                    reason = playability.get("reason", "")
+                    subreasons = playability.get("messages", [])
+                    logger.debug(
+                        "InnerTube %s playability '%s' for %s: %s %s",
+                        cfg["clientName"], status, video_id, reason,
+                        subreasons[:1] if subreasons else "",
+                    )
                     continue
 
                 details = data.get("videoDetails", {})
@@ -379,6 +401,7 @@ def fetch_youtube_innertube(video_id: str) -> Optional[VideoMetadata]:
 
                 if formats:
                     stream_map["_title"] = title
+                    stream_map["_cached_at"] = time.time()
                     _innertube_stream_cache[video_id] = stream_map
                     logger.info(
                         "Extracted %d formats via built-in InnerTube (%s) for %s: %s",
@@ -415,8 +438,18 @@ def download_youtube_innertube_stream(
     """
     Downloads media streams directly from Google's CDN via InnerTube stream URLs.
     Runs entirely within our own backend with zero third-party dependencies.
+    Evicts stale cache entries whose stream URLs have likely expired.
     """
     stream_map = _innertube_stream_cache.get(video_id)
+
+    # Evict stale cache entries — YouTube stream URLs expire after ~6 hours
+    if stream_map:
+        cached_at = stream_map.get("_cached_at", 0)
+        if time.time() - cached_at > _INNERTUBE_CACHE_TTL_SECONDS:
+            logger.debug("Evicting stale InnerTube cache for %s (age %.0fs)", video_id, time.time() - cached_at)
+            _innertube_stream_cache.pop(video_id, None)
+            stream_map = None
+
     if not stream_map:
         meta = fetch_youtube_innertube(video_id)
         if meta:
@@ -600,6 +633,18 @@ def get_base_ydl_opts(platform: str, client_override: Optional[List[str]] = None
         "playlist_items": "1",
         "extract_flat": False,
         "nocheckcertificate": True,
+        # Modern desktop browser headers to reduce fingerprinting surface
+        "http_headers": {
+            "User-Agent": (
+                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                "AppleWebKit/537.36 (KHTML, like Gecko) "
+                "Chrome/131.0.0.0 Safari/537.36"
+            ),
+            "Accept-Language": "en-US,en;q=0.9",
+            "Sec-Fetch-Mode": "navigate",
+        },
+        # Throttle requests to mimic human browsing patterns
+        "sleep_interval_requests": 1,
     }
     if FFMPEG_PATH:
         opts["ffmpeg_location"] = FFMPEG_PATH
@@ -626,7 +671,6 @@ def get_base_ydl_opts(platform: str, client_override: Optional[List[str]] = None
         opts["proxy"] = proxy
 
     if platform == "youtube":
-        # When cookies are set or by default, use configured profile without ios/android
         clients = client_override if client_override is not None else YOUTUBE_CLIENT_PROFILES[0]
         opts["extractor_args"] = {
             "youtube": {
