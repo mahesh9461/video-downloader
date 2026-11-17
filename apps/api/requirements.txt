@@ -8,4 +8,6 @@ slowapi>=0.1.9
 static-ffmpeg>=2.5
 pytest>=8.0.0
 httpx>=0.27.0
+numpy>=1.24.0
+python-multipart>=0.0.9
 

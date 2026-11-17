@@ -47,3 +47,50 @@ class ApiError(BaseModel):
     detail: str
     error_type: str  # private, geo_restricted, deleted, rate_limit, invalid_url, network, unknown
 
+
+# ---------------------------------------------------------------------------
+# Watermark removal schemas
+# ---------------------------------------------------------------------------
+
+
+class WatermarkRegion(BaseModel):
+    x: int = Field(..., ge=0, description="Left edge of the watermark area in pixels")
+    y: int = Field(..., ge=0, description="Top edge of the watermark area in pixels")
+    w: int = Field(..., ge=10, description="Width of the watermark area in pixels")
+    h: int = Field(..., ge=10, description="Height of the watermark area in pixels")
+
+
+class WatermarkRemoveRequest(BaseModel):
+    mode: str = Field(
+        "auto",
+        description="Removal mode: 'preset' (platform-specific), 'manual' (user coordinates), or 'auto' (detect automatically)",
+    )
+    platform: Optional[str] = Field(
+        None,
+        description="Platform preset name (e.g. 'tiktok'). Required when mode='preset'.",
+    )
+    regions: Optional[List[WatermarkRegion]] = Field(
+        None,
+        description="Watermark regions to remove. Required when mode='manual'.",
+    )
+    band: int = Field(
+        4,
+        ge=0,
+        le=50,
+        description="Edge transition smoothness (0–50). Higher = smoother edges around removed area.",
+    )
+
+
+class WatermarkPresetInfo(BaseModel):
+    platform: str
+    label: str
+    description: str
+    regions: List[WatermarkRegion]
+
+
+class WatermarkResult(BaseModel):
+    filename: str
+    filesize: int
+    download_url: str
+    detected_regions: Optional[List[WatermarkRegion]] = None
+
