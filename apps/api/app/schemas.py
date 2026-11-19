@@ -94,3 +94,85 @@ class WatermarkResult(BaseModel):
     download_url: str
     detected_regions: Optional[List[WatermarkRegion]] = None
 
+
+# ---------------------------------------------------------------------------
+# Viral Clips schemas
+# ---------------------------------------------------------------------------
+
+
+class ClipCandidate(BaseModel):
+    clip_id: str = Field(..., description="Unique ID for this clip segment")
+    start_time: float = Field(..., ge=0, description="Start timestamp in seconds")
+    end_time: float = Field(..., ge=0, description="End timestamp in seconds")
+    duration: float = Field(..., ge=0, description="Clip duration in seconds")
+    viral_score: int = Field(..., ge=0, le=100, description="Engagement virality score (0-100)")
+    hook_title: str = Field(..., description="Generated hook headline for the top banner")
+    summary: str = Field(..., description="Brief summary of what happens in this clip")
+    reason: str = Field(..., description="Why this clip is predicted to perform well")
+    thumbnail_url: Optional[str] = Field(None, description="Visual thumbnail of the video clip")
+    retention_rate: Optional[str] = Field(None, description="Predicted viewer retention percentage")
+    hook_rating: Optional[str] = Field(None, description="Virality percentile badge")
+
+
+class ClipAnalyzeRequest(BaseModel):
+    url: Optional[str] = Field(None, description="YouTube or video URL to analyze")
+    min_duration: int = Field(30, ge=15, le=120, description="Minimum clip duration in seconds")
+    max_duration: int = Field(60, ge=20, le=180, description="Maximum clip duration in seconds")
+    max_clips: int = Field(5, ge=1, le=10, description="Maximum number of clips to return")
+
+
+class ClipAnalyzeResponse(BaseModel):
+    video_id: Optional[str] = None
+    title: str
+    total_duration: float
+    clips: List[ClipCandidate]
+
+
+class ClipRenderRequest(BaseModel):
+    url: Optional[str] = Field(None, description="Source video URL or existing file identifier")
+    start_time: float = Field(..., ge=0, description="Start timestamp in seconds")
+    end_time: float = Field(..., ge=0, description="End timestamp in seconds")
+    layout: str = Field("blurred_background", description="Layout: 'blurred_background', 'center_crop', or 'fit_black'")
+    hook_title: Optional[str] = Field(None, description="Custom top headline banner (empty = no overlay)")
+    hook_style: str = Field("none", description="Headline style: 'none', 'hormozi_bold', 'mrbeast_urgency', 'tiktok_trending', 'cinematic_glow', or 'yellow_box'")
+    background_music: Optional[str] = Field("lofi_chill", description="Preset music: 'lofi_chill', 'energetic_beat', 'dramatic_suspense', 'ambient_drone', or 'none'")
+    music_volume: float = Field(0.12, ge=0.0, le=1.0, description="Background music volume relative to voice (default 0.12 = -18dB)")
+    progress_bar: bool = Field(True, description="Enable kinetic bottom progress bar for higher retention")
+    progress_bar_color: str = Field("yellow", description="Progress bar color: 'yellow', 'cyan', 'violet', or 'red'")
+
+
+class ClipRenderResponse(BaseModel):
+    filename: str
+    filesize: int
+    duration: float
+    download_url: str
+    layout: str
+    hook_title: Optional[str] = None
+
+
+class ClipAiHookRequest(BaseModel):
+    url: Optional[str] = Field(None, description="Video source URL or cached video file")
+    start_time: float = Field(..., ge=0, description="Start timestamp of the clip in seconds")
+    end_time: float = Field(..., ge=0, description="End timestamp of the clip in seconds")
+    video_title: Optional[str] = Field("Video Highlight", description="Original video title for context")
+    clip_dialogue: Optional[str] = Field(None, description="Existing dialogue transcript if available")
+    provider: Optional[str] = Field("free_open_llm", description="Free model engine: 'free_open_llm' or 'ollama'")
+
+
+class ClipAiHookResponse(BaseModel):
+    transcript: str
+    hook_title: str
+    source: str = Field("free_open_llm", description="Generation source: 'free_open_llm', 'ollama', or 'local_nlp'")
+
+
+class PresetOption(BaseModel):
+    id: str
+    label: str
+    description: str
+
+
+class ClipPresetInfo(BaseModel):
+    layouts: List[PresetOption]
+    music_presets: List[PresetOption]
+    hook_styles: List[PresetOption]
+

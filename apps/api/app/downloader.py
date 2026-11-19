@@ -909,7 +909,7 @@ async def download_video_stream(url: str, format_id: str) -> AsyncGenerator[str,
         preferred_codec = "mp3" if "mp3" in format_id or format_id in ("tiktok-audio", "instagram-audio") else "m4a"
         ydl_opts.update(
             {
-                "format": "bestaudio/best",
+                "format": "bestaudio/best/ba/b",
                 "postprocessors": [
                     {
                         "key": "FFmpegExtractAudio",
@@ -924,12 +924,24 @@ async def download_video_stream(url: str, format_id: str) -> AsyncGenerator[str,
             height_match = re.search(r"(\d+)p", format_id)
             if height_match:
                 max_h = height_match.group(1)
-                ydl_opts["format"] = f"bestvideo[height<={max_h}][ext=mp4]+bestaudio[ext=m4a]/bestvideo[height<={max_h}]+bestaudio/best[height<={max_h}]/best"
+                ydl_opts["format"] = (
+                    f"bestvideo[height<={max_h}][ext=mp4]+bestaudio[ext=m4a]/"
+                    f"bestvideo[height<={max_h}]+bestaudio/"
+                    f"bestvideo+bestaudio/"
+                    f"best[height<={max_h}]/"
+                    f"best/"
+                    f"bv*+ba/b"
+                )
             else:
-                ydl_opts["format"] = "bestvideo[ext=mp4]+bestaudio[ext=m4a]/bestvideo+bestaudio/best"
+                ydl_opts["format"] = (
+                    "bestvideo[ext=mp4]+bestaudio[ext=m4a]/"
+                    "bestvideo+bestaudio/"
+                    "best/"
+                    "bv*+ba/b"
+                )
             ydl_opts["merge_output_format"] = "mp4"
         elif platform in ("tiktok", "instagram"):
-            ydl_opts["format"] = "best[ext=mp4]/best"
+            ydl_opts["format"] = "best[ext=mp4]/best/bv*+ba/b"
             ydl_opts["merge_output_format"] = "mp4"
 
     def progress_hook(d: Dict[str, Any]):

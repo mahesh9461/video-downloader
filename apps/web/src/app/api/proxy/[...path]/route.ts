@@ -61,21 +61,53 @@ export async function GET(
   const targetUrl = `${BACKEND_URL}/api/${cleanPath}`;
 
   try {
+    const forwardHeaders: Record<string, string> = {
+      "X-Forwarded-For": request.headers.get("x-forwarded-for") || request.headers.get("x-real-ip") || "127.0.0.1",
+    };
+    const rangeHeader = request.headers.get("range");
+    if (rangeHeader) {
+      forwardHeaders["Range"] = rangeHeader;
+    }
+
     const backendResponse = await fetch(targetUrl, {
-      headers: {
-        "X-Forwarded-For": request.headers.get("x-forwarded-for") || request.headers.get("x-real-ip") || "127.0.0.1",
-      },
+      headers: forwardHeaders,
     });
 
-    // For file downloads
-    if (backendResponse.headers.get("content-disposition")) {
+    const contentType = backendResponse.headers.get("content-type") || "";
+    const contentDisposition = backendResponse.headers.get("content-disposition");
+
+    // For file downloads & video streaming
+    if (contentDisposition || contentType.startsWith("video/") || contentType.startsWith("audio/") || cleanPath.startsWith("file/")) {
       const stream = backendResponse.body;
+      const respHeaders = new Headers();
+
+      let targetContentType = contentType || "video/mp4";
+      if (cleanPath.endsWith(".mp4") && !targetContentType.startsWith("video/")) {
+        targetContentType = "video/mp4";
+      } else if (cleanPath.endsWith(".mp3") && !targetContentType.startsWith("audio/")) {
+        targetContentType = "audio/mpeg";
+      }
+      respHeaders.set("Content-Type", targetContentType);
+
+      if (contentDisposition) {
+        respHeaders.set("Content-Disposition", contentDisposition);
+      }
+      const contentLength = backendResponse.headers.get("content-length");
+      if (contentLength) {
+        respHeaders.set("Content-Length", contentLength);
+      }
+      const acceptRanges = backendResponse.headers.get("accept-ranges");
+      if (acceptRanges) {
+        respHeaders.set("Accept-Ranges", acceptRanges);
+      }
+      const contentRange = backendResponse.headers.get("content-range");
+      if (contentRange) {
+        respHeaders.set("Content-Range", contentRange);
+      }
+
       return new NextResponse(stream, {
-        headers: {
-          "Content-Type": backendResponse.headers.get("content-type") || "application/octet-stream",
-          "Content-Disposition": backendResponse.headers.get("content-disposition") || "attachment",
-          "Content-Length": backendResponse.headers.get("content-length") || "",
-        },
+        status: backendResponse.status,
+        headers: respHeaders,
       });
     }
 

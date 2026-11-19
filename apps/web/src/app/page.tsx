@@ -14,6 +14,9 @@ import {
   ChevronDown,
   Layers,
   HardDrive,
+  Eraser,
+  Scissors,
+  Wand2,
 } from "lucide-react";
 import { Header } from "@/components/header";
 import { UrlInput } from "@/components/url-input";
@@ -22,6 +25,8 @@ import { DownloadOptions } from "@/components/download-options";
 import { ProgressBar } from "@/components/progress-bar";
 import { HistoryDrawer } from "@/components/history-drawer";
 import { ErrorBanner } from "@/components/error-banner";
+import { WatermarkRemover } from "@/components/watermark-remover";
+import { ViralClips } from "@/components/viral-clips";
 import { useDownload } from "@/hooks/use-download";
 import { useHistory } from "@/hooks/use-history";
 import { cleanVideoUrl, detectPlatform } from "@/lib/validators";
@@ -33,6 +38,7 @@ import {
 } from "@/lib/analytics";
 
 export default function Home() {
+  const [activeTab, setActiveTab] = useState<"downloader" | "watermark" | "clips">("downloader");
   const [historyOpen, setHistoryOpen] = useState(false);
   const [currentUrl, setCurrentUrl] = useState("");
   const [activeFormatId, setActiveFormatId] = useState<string | null>(null);
@@ -114,89 +120,186 @@ export default function Home() {
         historyCount={history.length}
       />
 
-      <main className="flex-1 flex flex-col items-center px-4 pt-12 sm:pt-20 pb-20">
+      <main className="flex-1 flex flex-col items-center px-4 pt-8 sm:pt-12 pb-20">
         {/* Ambient Top Glow */}
         <div className="absolute top-12 left-1/2 -translate-x-1/2 w-96 h-96 bg-violet-600/10 rounded-full blur-3xl pointer-events-none -z-10" />
 
-        {/* Hero Section */}
-        <section className="text-center space-y-5 mb-10 max-w-2xl">
-          {/* Release Badge */}
-          <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full border border-violet-500/30 bg-violet-500/10 text-violet-300 text-xs font-medium shadow-sm shadow-violet-500/10 animate-in fade-in slide-in-from-top-3 duration-500">
-            <Sparkles className="w-3.5 h-3.5 text-violet-400" />
-            <span>Next-Gen Video Downloader & MP3 Extractor</span>
+        {/* Top Feature Switcher Tabs */}
+        <nav aria-label="Feature navigation" className="w-full max-w-xl mx-auto mb-10 flex items-center p-1.5 rounded-2xl bg-zinc-900/90 border border-zinc-800 shadow-xl backdrop-blur-xl">
+          <button
+            type="button"
+            role="tab"
+            aria-selected={activeTab === "downloader"}
+            onClick={() => setActiveTab("downloader")}
+            className={`flex-1 flex items-center justify-center gap-2 py-2.5 px-3 rounded-xl text-xs sm:text-sm font-semibold transition-all ${
+              activeTab === "downloader"
+                ? "bg-violet-600 text-white shadow-lg shadow-violet-600/30"
+                : "text-zinc-400 hover:text-white"
+            }`}
+          >
+            <Download className="w-4 h-4" />
+            <span>Download Video</span>
+          </button>
+
+          <button
+            type="button"
+            role="tab"
+            aria-selected={activeTab === "watermark"}
+            onClick={() => setActiveTab("watermark")}
+            className={`flex-1 flex items-center justify-center gap-2 py-2.5 px-3 rounded-xl text-xs sm:text-sm font-semibold transition-all ${
+              activeTab === "watermark"
+                ? "bg-violet-600 text-white shadow-lg shadow-violet-600/30"
+                : "text-zinc-400 hover:text-white"
+            }`}
+          >
+            <Eraser className="w-4 h-4" />
+            <span>Watermark Remover</span>
+          </button>
+
+          <button
+            type="button"
+            role="tab"
+            aria-selected={activeTab === "clips"}
+            onClick={() => setActiveTab("clips")}
+            className={`flex-1 flex items-center justify-center gap-2 py-2.5 px-3 rounded-xl text-xs sm:text-sm font-semibold transition-all ${
+              activeTab === "clips"
+                ? "bg-violet-600 text-white shadow-lg shadow-violet-600/30"
+                : "text-zinc-400 hover:text-white"
+            }`}
+          >
+            <Scissors className="w-4 h-4" />
+            <span>Viral Shorts (AI)</span>
+          </button>
+        </nav>
+
+        {/* TAB 1: VIDEO DOWNLOADER */}
+        {activeTab === "downloader" && (
+          <>
+            {/* Hero Section */}
+            <section className="text-center space-y-5 mb-10 max-w-2xl">
+              {/* Release Badge */}
+              <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full border border-violet-500/30 bg-violet-500/10 text-violet-300 text-xs font-medium shadow-sm shadow-violet-500/10 animate-in fade-in slide-in-from-top-3 duration-500">
+                <Sparkles className="w-3.5 h-3.5 text-violet-400" />
+                <span>Next-Gen Video Downloader & MP3 Extractor</span>
+              </div>
+
+              <h1 className="text-4xl sm:text-5xl font-extrabold text-white tracking-tight leading-[1.15]">
+                Save videos in seconds,{" "}
+                <span className="bg-gradient-to-r from-violet-400 via-indigo-300 to-cyan-400 bg-clip-text text-transparent">
+                  without limits.
+                </span>
+              </h1>
+
+              <p className="text-zinc-400 text-base sm:text-lg leading-relaxed max-w-xl mx-auto">
+                High-speed, lossless downloads from YouTube, TikTok, and Instagram. Enjoy watermark-free videos,
+                up to 4K resolutions, and crystal-clear audio extraction.
+              </p>
+
+              {/* Platform Badges */}
+              <div className="flex flex-wrap items-center justify-center gap-3 pt-1">
+                <div className="flex items-center gap-1.5 text-xs font-medium text-zinc-300 bg-zinc-900/80 border border-zinc-800 rounded-full px-3.5 py-1.5 shadow-sm">
+                  <Play className="w-3.5 h-3.5 text-red-500 fill-red-500" />
+                  YouTube (4K, 1080p, MP3)
+                </div>
+                <div className="flex items-center gap-1.5 text-xs font-medium text-zinc-300 bg-zinc-900/80 border border-zinc-800 rounded-full px-3.5 py-1.5 shadow-sm">
+                  <Music2 className="w-3.5 h-3.5 text-cyan-400" />
+                  TikTok (No Watermark)
+                </div>
+                <div className="flex items-center gap-1.5 text-xs font-medium text-zinc-300 bg-zinc-900/80 border border-zinc-800 rounded-full px-3.5 py-1.5 shadow-sm">
+                  <Film className="w-3.5 h-3.5 text-pink-400" />
+                  Instagram (Reels, HD)
+                </div>
+              </div>
+            </section>
+
+            {/* URL Input Bar */}
+            <section className="w-full max-w-2xl relative">
+              <UrlInput
+                onSubmit={handleUrlSubmit}
+                isLoading={isLoadingMetadata}
+                disabled={isDownloading}
+              />
+            </section>
+
+            {/* Content Area (Preview / Options / Progress / Error) */}
+            <section className="w-full max-w-2xl mt-8 space-y-6">
+              {/* Error Banner */}
+              {error && (
+                <ErrorBanner
+                  message={error}
+                  type={errorType}
+                  onDismiss={clearError}
+                />
+              )}
+
+              {/* Video Preview Card */}
+              <VideoPreview metadata={metadata} isLoading={isLoadingMetadata} />
+
+              {/* Download Options */}
+              {metadata && !isLoadingMetadata && (
+                <DownloadOptions
+                  metadata={metadata}
+                  onDownload={handleDownload}
+                  isDownloading={isDownloading}
+                  activeFormatId={activeFormatId}
+                />
+              )}
+
+              {/* Progress Bar */}
+              {progress && (
+                <ProgressBar
+                  progress={progress}
+                  onCancel={cancelDownload}
+                  onReset={reset}
+                />
+              )}
+            </section>
+          </>
+        )}
+
+        {/* TAB 2: WATERMARK REMOVER */}
+        {activeTab === "watermark" && (
+          <div className="w-full flex flex-col items-center">
+            <section className="text-center space-y-4 mb-8 max-w-2xl">
+              <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full border border-violet-500/30 bg-violet-500/10 text-violet-300 text-xs font-medium shadow-sm shadow-violet-500/10">
+                <Eraser className="w-3.5 h-3.5 text-violet-400" />
+                <span>AI-Powered Watermark Removal</span>
+              </div>
+              <h1 className="text-3xl sm:text-5xl font-extrabold text-white tracking-tight">
+                Remove Watermarks{" "}
+                <span className="bg-gradient-to-r from-violet-400 via-indigo-300 to-cyan-400 bg-clip-text text-transparent">
+                  from Any Video.
+                </span>
+              </h1>
+              <p className="text-zinc-400 text-sm sm:text-base max-w-lg mx-auto">
+                Clean TikTok logos, creator usernames, and unwanted static overlays with precision FFmpeg inpainting.
+              </p>
+            </section>
+            <WatermarkRemover />
           </div>
+        )}
 
-          <h1 className="text-4xl sm:text-5xl font-extrabold text-white tracking-tight leading-[1.15]">
-            Save videos in seconds,{" "}
-            <span className="bg-gradient-to-r from-violet-400 via-indigo-300 to-cyan-400 bg-clip-text text-transparent">
-              without limits.
-            </span>
-          </h1>
-
-          <p className="text-zinc-400 text-base sm:text-lg leading-relaxed max-w-xl mx-auto">
-            High-speed, lossless downloads from YouTube, TikTok, and Instagram. Enjoy watermark-free videos,
-            up to 4K resolutions, and crystal-clear audio extraction.
-          </p>
-
-          {/* Platform Badges */}
-          <div className="flex flex-wrap items-center justify-center gap-3 pt-1">
-            <div className="flex items-center gap-1.5 text-xs font-medium text-zinc-300 bg-zinc-900/80 border border-zinc-800 rounded-full px-3.5 py-1.5 shadow-sm">
-              <Play className="w-3.5 h-3.5 text-red-500 fill-red-500" />
-              YouTube (4K, 1080p, MP3)
-            </div>
-            <div className="flex items-center gap-1.5 text-xs font-medium text-zinc-300 bg-zinc-900/80 border border-zinc-800 rounded-full px-3.5 py-1.5 shadow-sm">
-              <Music2 className="w-3.5 h-3.5 text-cyan-400" />
-              TikTok (No Watermark)
-            </div>
-            <div className="flex items-center gap-1.5 text-xs font-medium text-zinc-300 bg-zinc-900/80 border border-zinc-800 rounded-full px-3.5 py-1.5 shadow-sm">
-              <Film className="w-3.5 h-3.5 text-pink-400" />
-              Instagram (Reels, HD)
-            </div>
+        {/* TAB 3: VIRAL CLIPS (AI SHORTS) */}
+        {activeTab === "clips" && (
+          <div className="w-full flex flex-col items-center">
+            <section className="text-center space-y-4 mb-8 max-w-2xl">
+              <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full border border-violet-500/30 bg-violet-500/10 text-violet-300 text-xs font-medium shadow-sm shadow-violet-500/10">
+                <Scissors className="w-3.5 h-3.5 text-violet-400" />
+                <span>Viral Shorts & Reel Generator</span>
+              </div>
+              <h1 className="text-3xl sm:text-5xl font-extrabold text-white tracking-tight">
+                Turn Long Videos into{" "}
+                <span className="bg-gradient-to-r from-violet-400 via-indigo-300 to-cyan-400 bg-clip-text text-transparent">
+                  Viral 9:16 Shorts.
+                </span>
+              </h1>
+              <p className="text-zinc-400 text-sm sm:text-base max-w-lg mx-auto">
+                Opus Clip style workflow: auto-detects high-retention hooks, reframes to vertical 9:16, and adds headline banners & background music.
+              </p>
+            </section>
+            <ViralClips />
           </div>
-        </section>
-
-        {/* URL Input Bar */}
-        <section className="w-full max-w-2xl relative">
-          <UrlInput
-            onSubmit={handleUrlSubmit}
-            isLoading={isLoadingMetadata}
-            disabled={isDownloading}
-          />
-        </section>
-
-        {/* Content Area (Preview / Options / Progress / Error) */}
-        <section className="w-full max-w-2xl mt-8 space-y-6">
-          {/* Error Banner */}
-          {error && (
-            <ErrorBanner
-              message={error}
-              type={errorType}
-              onDismiss={clearError}
-            />
-          )}
-
-          {/* Video Preview Card */}
-          <VideoPreview metadata={metadata} isLoading={isLoadingMetadata} />
-
-          {/* Download Options */}
-          {metadata && !isLoadingMetadata && (
-            <DownloadOptions
-              metadata={metadata}
-              onDownload={handleDownload}
-              isDownloading={isDownloading}
-              activeFormatId={activeFormatId}
-            />
-          )}
-
-          {/* Progress Bar */}
-          {progress && (
-            <ProgressBar
-              progress={progress}
-              onCancel={cancelDownload}
-              onReset={reset}
-            />
-          )}
-        </section>
+        )}
 
         {/* Features Grid (SEO & Value Prop) */}
         {!metadata && (

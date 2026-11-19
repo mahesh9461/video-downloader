@@ -1,4 +1,17 @@
-import { VideoMetadata, DownloadProgress, ApiError } from "./types";
+import {
+  VideoMetadata,
+  DownloadProgress,
+  ApiError,
+  WatermarkResult,
+  WatermarkPresetInfo,
+  ClipCandidate,
+  ClipAnalyzeResponse,
+  ClipRenderRequest,
+  ClipRenderResponse,
+  ClipAiHookRequest,
+  ClipAiHookResponse,
+  ClipPresetInfo,
+} from "./types";
 
 const getApiBase = () => {
   if (process.env.NEXT_PUBLIC_API_URL !== undefined && process.env.NEXT_PUBLIC_API_URL !== "") {
@@ -109,6 +122,129 @@ class ApiClient {
     run();
 
     return () => abortController.abort();
+  }
+
+  async removeWatermark(formData: FormData): Promise<WatermarkResult> {
+    const response = await fetch(this.resolveUrl("/api/watermark/remove"), {
+      method: "POST",
+      body: formData,
+    });
+
+    if (!response.ok) {
+      let detail = "Failed to process watermark removal";
+      let errorType = "unknown";
+      try {
+        const err = await response.json();
+        detail = err.detail || detail;
+        errorType = err.error_type || errorType;
+      } catch {
+        // fallback
+      }
+      throw new DownloadError(detail, errorType);
+    }
+
+    const data: WatermarkResult = await response.json();
+    return {
+      ...data,
+      download_url: this.resolveUrl(data.download_url),
+    };
+  }
+
+  async fetchWatermarkPresets(): Promise<WatermarkPresetInfo[]> {
+    const response = await fetch(this.resolveUrl("/api/watermark/presets"));
+    if (!response.ok) {
+      throw new DownloadError("Failed to fetch watermark presets", "unknown");
+    }
+    return response.json();
+  }
+
+  async analyzeClips(
+    url: string,
+    minDuration = 30,
+    maxDuration = 60,
+    maxClips = 5
+  ): Promise<ClipAnalyzeResponse> {
+    const response = await fetch(this.resolveUrl("/api/clips/analyze"), {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        url,
+        min_duration: minDuration,
+        max_duration: maxDuration,
+        max_clips: maxClips,
+      }),
+    });
+
+    if (!response.ok) {
+      let detail = "Failed to analyze video clips";
+      let errorType = "unknown";
+      try {
+        const err = await response.json();
+        detail = err.detail || detail;
+        errorType = err.error_type || errorType;
+      } catch {
+        // fallback
+      }
+      throw new DownloadError(detail, errorType);
+    }
+
+    return response.json();
+  }
+
+  async renderClip(request: ClipRenderRequest): Promise<ClipRenderResponse> {
+    const response = await fetch(this.resolveUrl("/api/clips/render"), {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(request),
+    });
+
+    if (!response.ok) {
+      let detail = "Failed to render clip";
+      let errorType = "unknown";
+      try {
+        const err = await response.json();
+        detail = err.detail || detail;
+        errorType = err.error_type || errorType;
+      } catch {
+        // fallback
+      }
+      throw new DownloadError(detail, errorType);
+    }
+
+    const data: ClipRenderResponse = await response.json();
+    return {
+      ...data,
+      download_url: this.resolveUrl(data.download_url),
+    };
+  }
+
+  async generateClipAiHook(request: ClipAiHookRequest): Promise<ClipAiHookResponse> {
+    const response = await fetch(this.resolveUrl("/api/clips/ai-hook"), {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(request),
+    });
+
+    if (!response.ok) {
+      let detail = "Failed to generate AI hook headline";
+      let errorType = "unknown";
+      try {
+        const err = await response.json();
+        detail = err.detail || detail;
+        errorType = err.error_type || errorType;
+      } catch {}
+      throw new DownloadError(detail, errorType);
+    }
+
+    return response.json();
+  }
+
+  async fetchClipPresets(): Promise<ClipPresetInfo> {
+    const response = await fetch(this.resolveUrl("/api/clips/presets"));
+    if (!response.ok) {
+      throw new DownloadError("Failed to fetch clip presets", "unknown");
+    }
+    return response.json();
   }
 }
 

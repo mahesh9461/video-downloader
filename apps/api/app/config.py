@@ -109,3 +109,5 @@ else:
 # Optional Cobalt configuration
 COBALT_API_URL: Optional[str] = os.getenv("COBALT_API_URL")
 COBALT_API_KEY: Optional[str] = os.getenv("COBALT_API_KEY")
+
+

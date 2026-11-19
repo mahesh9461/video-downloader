@@ -21,13 +21,35 @@ from app.config import (
     COOKIE_FILE_PATH,
     COBALT_API_URL,
 )
-from app.schemas import MetadataRequest, DownloadRequest, VideoMetadata, ApiError
-from app.schemas import WatermarkRemoveRequest, WatermarkPresetInfo, WatermarkResult, WatermarkRegion
+from app.schemas import (
+    MetadataRequest,
+    DownloadRequest,
+    VideoMetadata,
+    ApiError,
+    WatermarkRemoveRequest,
+    WatermarkPresetInfo,
+    WatermarkResult,
+    WatermarkRegion,
+    ClipCandidate,
+    ClipAnalyzeRequest,
+    ClipAnalyzeResponse,
+    ClipRenderRequest,
+    ClipRenderResponse,
+    ClipAiHookRequest,
+    ClipAiHookResponse,
+    ClipPresetInfo,
+)
+from app.ai_hook import generate_ai_hook
 from app.downloader import (
     extract_metadata,
     download_video_stream,
     DownloadException,
     is_youtube_cooldown_active,
+    get_base_ydl_opts,
+    sanitize_url,
+    YOUTUBE_CLIENT_PROFILES,
+    extract_youtube_id,
+    download_youtube_innertube_stream,
 )
 from app.watermark import (
     process_watermark_removal,
@@ -35,6 +57,14 @@ from app.watermark import (
     PLATFORM_PRESETS,
     MAX_UPLOAD_BYTES,
     ALLOWED_EXTENSIONS,
+)
+from app.clip_scorer import analyze_and_score_clips, parse_vtt_or_srt
+from app.clip_renderer import (
+    process_clip_render,
+    ClipRenderException,
+    LAYOUT_PRESETS,
+    MUSIC_PRESETS,
+    HOOK_STYLES,
 )
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(name)s: %(message)s")
@@ -148,6 +178,14 @@ async def watermark_exception_handler(request: Request, exc: WatermarkException)
     )
 
 
+@app.exception_handler(ClipRenderException)
+async def clip_render_exception_handler(request: Request, exc: ClipRenderException):
+    return JSONResponse(
+        status_code=exc.status_code,
+        content={"detail": exc.detail, "error_type": exc.error_type},
+    )
+
+
 @app.exception_handler(HTTPException)
 async def http_exception_handler(request: Request, exc: HTTPException):
     return JSONResponse(
@@ -249,13 +287,27 @@ async def serve_downloaded_file(filename: str, background_tasks: BackgroundTasks
         if len(prefix) == 10 and rest:
             display_name = rest[0]
 
+    # Ensure correct extension in display name so browser never defaults to .txt
+    ext = os.path.splitext(safe_filename)[1].lower()
+    if not display_name.lower().endswith(ext):
+        display_name += ext
+
+    media_type = "video/mp4"
+    if ext == ".mp3":
+        media_type = "audio/mpeg"
+    elif ext == ".webm":
+        media_type = "video/webm"
+    elif ext == ".mov":
+        media_type = "video/quicktime"
+    elif ext == ".mkv":
+        media_type = "video/x-matroska"
+    elif ext == ".mp4":
+        media_type = "video/mp4"
+
     return FileResponse(
         path=str(file_path),
         filename=display_name,
-        media_type="application/octet-stream",
-        headers={
-            "Content-Disposition": f'attachment; filename="{display_name}"',
-        },
+        media_type=media_type,
     )
 
 
@@ -478,3 +530,324 @@ async def remove_watermark_endpoint(
         ]
 
     return response
+
+
+
+# ---------------------------------------------------------------------------
+# Viral Clips endpoints (Opus Clip style)
+# ---------------------------------------------------------------------------
+
+
+@app.get("/api/clips/presets", response_model=ClipPresetInfo)
+async def list_clip_presets():
+    """List available vertical layouts, music synthesizers, and hook styles."""
+    return ClipPresetInfo(
+        layouts=LAYOUT_PRESETS,
+        music_presets=MUSIC_PRESETS,
+        hook_styles=HOOK_STYLES,
+    )
+
+
+@app.post("/api/clips/analyze", response_model=ClipAnalyzeResponse)
+async def analyze_viral_clips(req: ClipAnalyzeRequest, request: Request):
+    """
+    Analyzes a video to find the most engaging, viral moments.
+    Returns 3-5 ranked clip candidates with timestamps and virality scores.
+    """
+    client_ip = get_client_ip(request)
+    allowed = await check_rate_limit(client_ip)
+    if not allowed:
+        return JSONResponse(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            content={
+                "detail": f"Rate limit exceeded. Maximum {RATE_LIMIT_PER_MINUTE} requests per minute.",
+                "error_type": "rate_limit",
+            },
+        )
+
+    if not req.url or not req.url.strip():
+        raise DownloadException("URL cannot be empty.", "invalid_url", 400)
+
+    url = sanitize_url(req.url.strip())
+    meta = await asyncio.to_thread(extract_metadata, url)
+
+    # Attempt to extract subtitle cues for hook and sentiment analysis
+    cues = None
+    try:
+        import yt_dlp
+        ydl_opts = get_base_ydl_opts("youtube")
+        ydl_opts.update({
+            "skip_download": True,
+            "writesubtitles": True,
+            "writeautomaticsub": True,
+            "subtitleslangs": ["en", "en-US", "en.*"],
+        })
+        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+            info = await asyncio.to_thread(ydl.extract_info, url, download=False)
+            if info:
+                sub_dict = info.get("subtitles") or info.get("automatic_captions") or {}
+                en_subs = sub_dict.get("en") or sub_dict.get("en-US") or []
+                vtt_url = None
+                for fmt in en_subs:
+                    if fmt.get("ext") in ("vtt", "srt"):
+                        vtt_url = fmt.get("url")
+                        break
+                if vtt_url:
+                    import httpx
+                    with httpx.Client(timeout=10.0) as client:
+                        sub_resp = client.get(vtt_url)
+                        if sub_resp.status_code == 200:
+                            cues = parse_vtt_or_srt(sub_resp.text)
+    except Exception as e:
+        logger.debug("Subtitle extraction skipped or failed for %s: %s", url, e)
+
+    clips = analyze_and_score_clips(
+        cues=cues,
+        total_duration=float(meta.duration or 300),
+        video_title=meta.title,
+        min_duration=req.min_duration,
+        max_duration=req.max_duration,
+        max_clips=req.max_clips,
+        video_id=meta.id,
+        thumbnail_url=meta.thumbnail,
+    )
+
+    return ClipAnalyzeResponse(
+        video_id=meta.id,
+        title=meta.title,
+        total_duration=float(meta.duration or 300),
+        clips=clips,
+    )
+
+
+@app.post("/api/clips/render", response_model=ClipRenderResponse)
+async def render_viral_clip_endpoint(
+    req: ClipRenderRequest,
+    request: Request,
+    background_tasks: BackgroundTasks,
+):
+    """
+    Renders a selected clip into a vertical 9:16 Short/Reel/TikTok with:
+    - Blurred background or center crop layout.
+    - Top headline banner.
+    - Subtle background music ducking.
+    """
+    client_ip = get_client_ip(request)
+    allowed = await check_rate_limit(client_ip)
+    if not allowed:
+        return JSONResponse(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            content={
+                "detail": f"Rate limit exceeded. Maximum {RATE_LIMIT_PER_MINUTE} requests per minute.",
+                "error_type": "rate_limit",
+            },
+        )
+
+    if not req.url or not req.url.strip():
+        raise ClipRenderException("A valid video URL or file path is required.", "missing_url")
+
+    source_input = req.url.strip()
+    temp_source_path: Optional[str] = None
+
+    # Check if source_input is an existing local file in DOWNLOAD_DIR
+    local_candidate = DOWNLOAD_DIR / os.path.basename(source_input)
+    if local_candidate.is_file():
+        actual_input_path = str(local_candidate)
+        title_hint = local_candidate.stem
+    else:
+        # Download the video source with multi-client resilience and universal format fallback
+        import yt_dlp
+        import uuid as _uuid
+        job_id = _uuid.uuid4().hex[:10]
+        temp_source_path = str(DOWNLOAD_DIR / f"source_{job_id}.mp4")
+
+        # Universal fallback format string that accepts ANY audio/video stream combination
+        format_selector = (
+            "bestvideo[height<=720][ext=mp4]+bestaudio[ext=m4a]/"
+            "bestvideo[height<=720]+bestaudio/"
+            "bestvideo[height<=1080]+bestaudio/"
+            "bestvideo+bestaudio/"
+            "best[height<=720]/"
+            "best/"
+            "bv*+ba/b"
+        )
+
+        is_yt = "youtube" in source_input.lower() or "youtu.be" in source_input.lower()
+        client_candidates = YOUTUBE_CLIENT_PROFILES if is_yt else [None]
+        download_success = False
+        last_error = None
+        title_hint = "clip"
+
+        for client_profile in client_candidates:
+            ydl_opts = get_base_ydl_opts("youtube" if is_yt else "general", client_override=client_profile)
+            ydl_opts.update({
+                "outtmpl": temp_source_path,
+                "format": format_selector,
+                "merge_output_format": "mp4",
+                "noplaylist": True,
+            })
+            try:
+                with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                    info = await asyncio.to_thread(ydl.extract_info, source_input, download=True)
+                    if info:
+                        title_hint = info.get("title", title_hint)
+                if os.path.exists(temp_source_path) and os.path.getsize(temp_source_path) > 0:
+                    actual_input_path = temp_source_path
+                    download_success = True
+                    break
+            except Exception as e:
+                last_error = e
+                logger.warning("yt-dlp profile %s failed to fetch video source: %s", client_profile, e)
+                continue
+
+        # If yt-dlp failed (e.g. format issues or bot challenge), try our built-in InnerTube CDN streamer
+        if not download_success and is_yt:
+            vid_id = extract_youtube_id(source_input)
+            if vid_id:
+                try:
+                    logger.info("Attempting built-in InnerTube fallback download for %s", vid_id)
+                    dummy_queue = asyncio.Queue()
+                    stream_res = await asyncio.to_thread(
+                        download_youtube_innertube_stream,
+                        vid_id,
+                        "yt-720p",
+                        job_id,
+                        asyncio.get_running_loop(),
+                        dummy_queue,
+                    )
+                    if stream_res and stream_res.get("filename"):
+                        it_path = str(DOWNLOAD_DIR / stream_res["filename"])
+                        if os.path.exists(it_path) and os.path.getsize(it_path) > 0:
+                            temp_source_path = it_path
+                            actual_input_path = it_path
+                            download_success = True
+                except Exception as it_err:
+                    logger.warning("Built-in InnerTube fallback failed for %s: %s", vid_id, it_err)
+
+        if not download_success:
+            if temp_source_path and os.path.exists(temp_source_path):
+                try:
+                    os.remove(temp_source_path)
+                except Exception:
+                    pass
+            raise ClipRenderException(f"Failed to fetch video source: {last_error}", "source_download_error", 500)
+
+    try:
+        result = await process_clip_render(
+            input_path=actual_input_path,
+            original_title=title_hint,
+            start_time=req.start_time,
+            end_time=req.end_time,
+            layout=req.layout,
+            hook_title=req.hook_title,
+            hook_style=req.hook_style,
+            background_music=req.background_music,
+            music_volume=req.music_volume,
+            progress_bar=req.progress_bar,
+            progress_bar_color=req.progress_bar_color,
+        )
+    finally:
+        # If we downloaded a temporary source video, clean it up
+        if temp_source_path and os.path.exists(temp_source_path):
+            try:
+                os.remove(temp_source_path)
+            except Exception:
+                pass
+
+    # Schedule cleanup of the rendered clip
+    output_file_path = str(DOWNLOAD_DIR / result["filename"])
+    background_tasks.add_task(remove_file_delayed, output_file_path)
+
+    return ClipRenderResponse(
+        filename=result["filename"],
+        filesize=result["filesize"],
+        duration=result["duration"],
+        download_url=result["download_url"],
+        layout=result["layout"],
+        hook_title=result["hook_title"],
+    )
+
+
+@app.post("/api/clips/ai-hook", response_model=ClipAiHookResponse)
+async def generate_ai_hook_endpoint(req: ClipAiHookRequest, request: Request):
+    """
+    Transcribes clip audio using OpenAI Whisper, and passes the transcript to
+    an OpenAI LLM (gpt-4o-mini) to craft the ultimate viral hook headline for video overlays.
+    Gracefully falls back to local heuristic if OpenAI API key is unavailable.
+    """
+    client_ip = get_client_ip(request)
+    allowed = await check_rate_limit(client_ip)
+    if not allowed:
+        return JSONResponse(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            content={
+                "detail": f"Rate limit exceeded. Maximum {RATE_LIMIT_PER_MINUTE} requests per minute.",
+                "error_type": "rate_limit",
+            },
+        )
+
+    if not req.url or not req.url.strip():
+        raise HTTPException(status_code=400, detail="A video URL or identifier is required.")
+
+    source_input = req.url.strip()
+    temp_source_path: Optional[str] = None
+    actual_input_path: Optional[str] = None
+
+    local_candidate = DOWNLOAD_DIR / os.path.basename(source_input)
+    if local_candidate.is_file():
+        actual_input_path = str(local_candidate)
+    else:
+        import yt_dlp
+        import uuid as _uuid
+        job_id = _uuid.uuid4().hex[:10]
+        temp_source_path = str(DOWNLOAD_DIR / f"ai_source_{job_id}.mp4")
+
+        is_yt = "youtube" in source_input.lower() or "youtu.be" in source_input.lower()
+        client_candidates = YOUTUBE_CLIENT_PROFILES if is_yt else [None]
+
+        for client_profile in client_candidates:
+            ydl_opts = get_base_ydl_opts("youtube" if is_yt else "general", client_override=client_profile)
+            ydl_opts.update({
+                "outtmpl": temp_source_path,
+                "format": "bestaudio/bestvideo[height<=360]+bestaudio/best[height<=360]/best/bv*+ba/b",
+                "noplaylist": True,
+            })
+            try:
+                with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                    await asyncio.to_thread(ydl.extract_info, source_input, download=True)
+                if os.path.exists(temp_source_path) and os.path.getsize(temp_source_path) > 0:
+                    actual_input_path = temp_source_path
+                    break
+            except Exception:
+                continue
+
+    if not actual_input_path:
+        fallback = generate_ai_hook(
+            video_path="",
+            start_time=req.start_time,
+            end_time=req.end_time,
+            video_title=req.video_title or "Video Highlight",
+            source_url=source_input,
+            clip_dialogue=getattr(req, "clip_dialogue", None),
+            provider=getattr(req, "provider", "free_open_llm"),
+        )
+        return ClipAiHookResponse(**fallback)
+
+    try:
+        hook_res = await asyncio.to_thread(
+            generate_ai_hook,
+            video_path=actual_input_path,
+            start_time=req.start_time,
+            end_time=req.end_time,
+            video_title=req.video_title or "Video Highlight",
+            source_url=source_input,
+            clip_dialogue=getattr(req, "clip_dialogue", None),
+            provider=getattr(req, "provider", "free_open_llm"),
+        )
+        return ClipAiHookResponse(**hook_res)
+    finally:
+        if temp_source_path and os.path.exists(temp_source_path):
+            try:
+                os.remove(temp_source_path)
+            except Exception:
+                pass
