@@ -111,9 +111,7 @@ describe("ViralClips", () => {
       expect(await screen.findByText("Viral Short Ready!")).toBeInTheDocument();
       expect(screen.getByRole("link", { name: /download 9:16 short/i })).toBeInTheDocument();
     });
-  });
 
-  describe("Redux state verification", () => {
     it("should allow 1-click downloading the #1 most viral clip immediately", async () => {
       // Arrange
       const user = userEvent.setup();

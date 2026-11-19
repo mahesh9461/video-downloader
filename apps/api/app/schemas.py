@@ -132,13 +132,15 @@ class ClipRenderRequest(BaseModel):
     url: Optional[str] = Field(None, description="Source video URL or existing file identifier")
     start_time: float = Field(..., ge=0, description="Start timestamp in seconds")
     end_time: float = Field(..., ge=0, description="End timestamp in seconds")
-    layout: str = Field("blurred_background", description="Layout: 'blurred_background', 'center_crop', or 'fit_black'")
+    layout: str = Field("center_crop", description="Layout: 'center_crop', 'split_screen', 'blurred_background', or 'fit_black'")
     hook_title: Optional[str] = Field(None, description="Custom top headline banner (empty = no overlay)")
     hook_style: str = Field("none", description="Headline style: 'none', 'hormozi_bold', 'mrbeast_urgency', 'tiktok_trending', 'cinematic_glow', or 'yellow_box'")
-    background_music: Optional[str] = Field("lofi_chill", description="Preset music: 'lofi_chill', 'energetic_beat', 'dramatic_suspense', 'ambient_drone', or 'none'")
+    background_music: Optional[str] = Field("none", description="Preset music: 'none', 'lofi_chill', 'energetic_beat', 'dramatic_suspense', or 'ambient_drone'")
     music_volume: float = Field(0.12, ge=0.0, le=1.0, description="Background music volume relative to voice (default 0.12 = -18dB)")
     progress_bar: bool = Field(True, description="Enable kinetic bottom progress bar for higher retention")
     progress_bar_color: str = Field("yellow", description="Progress bar color: 'yellow', 'cyan', 'violet', or 'red'")
+    burn_captions: bool = Field(False, description="Burn in Ssemble-style viral subtitle captions")
+    caption_style: str = Field("viral_yellow", description="Caption style: 'viral_yellow' or 'clean_white'")
 
 
 class ClipRenderResponse(BaseModel):
@@ -156,7 +158,7 @@ class ClipAiHookRequest(BaseModel):
     end_time: float = Field(..., ge=0, description="End timestamp of the clip in seconds")
     video_title: Optional[str] = Field("Video Highlight", description="Original video title for context")
     clip_dialogue: Optional[str] = Field(None, description="Existing dialogue transcript if available")
-    provider: Optional[str] = Field("free_open_llm", description="Free model engine: 'free_open_llm' or 'ollama'")
+    provider: Optional[str] = Field("deepseek", description="Free model engine: 'deepseek', 'free_open_llm', or 'ollama'")
 
 
 class ClipAiHookResponse(BaseModel):

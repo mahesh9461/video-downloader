@@ -112,10 +112,15 @@ def fetch_free_youtube_transcript(url: str, start_time: float, end_time: float) 
     return None
 
 
-def generate_hook_from_free_open_llm(transcript: str, video_title: str = "") -> Optional[str]:
+def generate_hook_from_free_open_llm(
+    transcript: str, video_title: str = "", provider: str = "deepseek"
+) -> Optional[str]:
     """
-    Generates a viral hook headline using completely free, open-weights LLMs
-    (Mistral / Llama via open public REST endpoints) with NO API keys or subscriptions.
+    Generates a viral hook headline using free, open DeepSeek / Mistral / Llama models.
+    Supports:
+    1. Local Ollama (deepseek-r1 on localhost:11434).
+    2. DeepSeek API (https://api.deepseek.com) with optional free key if set.
+    3. Free open public inference proxies.
     """
     if not transcript and not video_title:
         return None
@@ -139,39 +144,71 @@ def generate_hook_from_free_open_llm(transcript: str, video_title: str = "") -> 
         "4. NO emojis, NO quotes, NO hashtags, NO periods."
     )
 
-    # 1. Try local Ollama if user is running it locally (http://localhost:11434)
+    # 1. Try local Ollama with DeepSeek-R1 (Zero API key, 100% free offline)
     try:
         ollama_url = os.getenv("OLLAMA_API_URL", "http://localhost:11434/api/generate")
+        model_name = "deepseek-r1" if provider == "deepseek" else "llama3"
         with httpx.Client(timeout=3.0) as client:
             resp = client.post(
                 ollama_url,
-                json={"model": "llama3", "prompt": prompt, "stream": False},
+                json={"model": model_name, "prompt": prompt, "stream": False},
             )
             if resp.status_code == 200:
                 res = resp.json().get("response", "").strip()
                 clean = re.sub(r'["\']', "", res).strip()
                 clean = re.sub(r"[^\x20-\x7E]", "", clean).strip()
                 if clean and 2 <= len(clean.split()) <= 8:
-                    logger.info("Ollama local free LLM hook generated: %s", clean)
+                    logger.info("Ollama local free DeepSeek hook generated: %s", clean)
                     return clean
     except Exception:
         pass
 
-    # 2. Try free open-access Mistral via public Pollinations inference (100% Free, No Key Required)
+    # 2. Try official DeepSeek API if DEEPSEEK_API_KEY environment variable is configured
+    deepseek_key = os.getenv("DEEPSEEK_API_KEY")
+    if deepseek_key:
+        try:
+            with httpx.Client(timeout=8.0) as client:
+                resp = client.post(
+                    "https://api.deepseek.com/chat/completions",
+                    headers={
+                        "Authorization": f"Bearer {deepseek_key}",
+                        "Content-Type": "application/json",
+                    },
+                    json={
+                        "model": "deepseek-chat",
+                        "messages": [
+                            {"role": "system", "content": "You are a viral YouTube Shorts headline creator. Output ONLY a 3-5 word plain text hook in uppercase."},
+                            {"role": "user", "content": prompt},
+                        ],
+                        "temperature": 0.7,
+                    },
+                )
+                if resp.status_code == 200:
+                    data = resp.json()
+                    content = data["choices"][0]["message"]["content"].strip()
+                    clean = re.sub(r'["\']', "", content).strip()
+                    clean = re.sub(r"[^\x20-\x7E]", "", clean).strip()
+                    if clean and 2 <= len(clean.split()) <= 8:
+                        logger.info("DeepSeek official API hook generated: %s", clean)
+                        return clean
+        except Exception as e:
+            logger.debug("DeepSeek API request failed: %s", e)
+
+    # 3. Try free public open inference endpoints (Zero keys required)
     try:
         pollinations_url = "https://text.pollinations.ai/"
-        with httpx.Client(timeout=10.0) as client:
+        with httpx.Client(timeout=8.0) as client:
             resp = client.post(
                 pollinations_url,
                 json={
                     "messages": [
                         {
                             "role": "system",
-                            "content": "You are a YouTube Shorts headline writer. Write only a 3-6 word plain text headline. No emojis. No quotes.",
+                            "content": "You are a YouTube Shorts headline writer. Write only a 3-5 word plain text headline in uppercase. No emojis. No quotes.",
                         },
                         {"role": "user", "content": prompt},
                     ],
-                    "model": "mistral",
+                    "model": "openai-fast",
                     "temperature": 0.7,
                 },
             )
@@ -183,7 +220,7 @@ def generate_hook_from_free_open_llm(transcript: str, video_title: str = "") -> 
                     clean = clean.split(":", 1)[1].strip()
                 words = clean.split()
                 if 2 <= len(words) <= 8:
-                    logger.info("Free Open LLM (Mistral) hook generated: %s", clean)
+                    logger.info("Free Open LLM hook generated: %s", clean)
                     return clean
     except Exception as e:
         logger.debug("Free open LLM public inference skipped or unreachable: %s", e)
@@ -198,13 +235,13 @@ def generate_ai_hook(
     video_title: str = "Video Highlight",
     source_url: Optional[str] = None,
     clip_dialogue: Optional[str] = None,
-    provider: str = "free_open_llm",
+    provider: str = "deepseek",
     **kwargs,
 ) -> Dict[str, str]:
     """
     100% Free AI Hook pipeline:
     1. Obtains clip transcript for FREE via YouTube subtitles or dialogue cues.
-    2. Uses Free Open LLM (Mistral / Llama / Ollama) with ZERO API keys required.
+    2. Uses Free DeepSeek / Open LLM with ZERO API keys required.
     3. Seamlessly falls back to local dialogue NLP heuristics if offline.
     """
     # Step 1: Obtain Dialogue Transcript (Free YouTube Subtitles first)
@@ -212,14 +249,14 @@ def generate_ai_hook(
     if not transcript and source_url:
         transcript = fetch_free_youtube_transcript(source_url, start_time, end_time)
 
-    # Step 2: Generate Viral Hook Headline using Free Open LLM or Local NLP
+    # Step 2: Generate Viral Hook Headline using DeepSeek / Free Open LLM or Local NLP
     hook: Optional[str] = None
-    source = "free_open_llm"
+    source = provider or "deepseek"
 
-    # Option A: Free Open LLM (Mistral / Llama / Ollama - Zero API Key Needed)
-    hook = generate_hook_from_free_open_llm(transcript or video_title, video_title)
+    # Option A: DeepSeek / Free Open LLM
+    hook = generate_hook_from_free_open_llm(transcript or video_title, video_title, provider=provider)
     if hook:
-        source = "free_open_llm"
+        source = "deepseek" if provider == "deepseek" else ("ollama" if provider == "ollama" else "free_open_llm")
 
     # Option B: Instant Local NLP Hook Analyzer (100% Offline, Pure Python, Instant)
     if not hook:

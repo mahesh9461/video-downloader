@@ -26,12 +26,17 @@ logger = logging.getLogger(__name__)
 LAYOUT_PRESETS: List[PresetOption] = [
     PresetOption(
         id="center_crop",
-        label="Full Screen 9:16 (TikTok & Shorts Standard)",
+        label="Full Screen 9:16 (Smart Speaker Focus)",
         description="Fills the entire 9:16 vertical screen with high-impact edge-to-edge action.",
     ),
     PresetOption(
+        id="split_screen",
+        label="Viral Split Screen (Ssemble Trend)",
+        description="Top half main video + bottom half dynamic ambient mirror stack.",
+    ),
+    PresetOption(
         id="blurred_background",
-        label="Blurred Backdrop (Opus Clip Style)",
+        label="Blurred Backdrop (Opus / Ssemble Style)",
         description="Centered 16:9 video over a heavily blurred, zoomed vertical background.",
     ),
     PresetOption(
@@ -143,6 +148,24 @@ def _require_ffmpeg() -> str:
     return ffmpeg
 
 
+def probe_video_duration(video_path: str) -> float:
+    """Probes the total duration in seconds of a video file using FFmpeg."""
+    ffmpeg = FFMPEG_PATH or shutil.which("ffmpeg")
+    if not ffmpeg or not os.path.exists(video_path):
+        return 60.0
+
+    try:
+        cmd = [ffmpeg, "-i", video_path]
+        res = subprocess.run(cmd, capture_output=True, text=True, timeout=10)
+        dur_match = re.search(r"Duration:\s*(\d+):(\d+):(\d+(?:\.\d+)?)", res.stderr)
+        if dur_match:
+            h, m, s = dur_match.groups()
+            return round(int(h) * 3600 + int(m) * 60 + float(s), 2)
+    except Exception as e:
+        logger.debug("Failed to probe video duration: %s", e)
+    return 60.0
+
+
 def sanitize_drawtext_string(text: str) -> str:
     """Escapes characters and strips unsupported non-ASCII / emojis to avoid broken tofu boxes."""
     # Remove emojis and non-ASCII glyphs that default FFmpeg fonts cannot render (avoid ⮽ tofu boxes)
@@ -156,6 +179,77 @@ def sanitize_drawtext_string(text: str) -> str:
     return text.strip()
 
 
+def format_ass_time(seconds: float) -> str:
+    """Formats seconds into ASS subtitle timestamp string: H:MM:SS.cs"""
+    h = int(seconds // 3600)
+    m = int((seconds % 3600) // 60)
+    s = int(seconds % 60)
+    cs = int(round((seconds - int(seconds)) * 100))
+    if cs >= 100:
+        cs = 99
+    return f"{h}:{m:02d}:{s:02d}.{cs:02d}"
+
+
+def generate_ass_subtitles(
+    cues: List[Dict[str, Any]],
+    start_time: float,
+    end_time: float,
+    output_path: str,
+    style: str = "viral_yellow",
+) -> bool:
+    """Generates an ASS subtitle file for burning in Ssemble-style viral captions."""
+    if not cues:
+        return False
+
+    relevant_cues = []
+    for c in cues:
+        c_start = float(c.get("start", 0))
+        c_end = float(c.get("end", 0))
+        text = str(c.get("text", "")).strip()
+        if not text:
+            continue
+        if c_end >= start_time and c_start <= end_time:
+            # Shift relative to start_time
+            rel_start = max(0.0, c_start - start_time)
+            rel_end = min(end_time - start_time, c_end - start_time)
+            if rel_end > rel_start:
+                clean_text = sanitize_drawtext_string(text).replace("\n", "\\N")
+                relevant_cues.append((rel_start, rel_end, clean_text))
+
+    if not relevant_cues:
+        return False
+
+    # PrimaryColour in ASS is &HAABBGGRR (Hex BGR)
+    primary_color = "&H0000FFFF" if style == "viral_yellow" else "&H00FFFFFF"
+
+    ass_content = [
+        "[Script Info]",
+        "ScriptType: v4.00+",
+        "PlayResX: 1080",
+        "PlayResY: 1920",
+        "",
+        "[V4+ Styles]",
+        "Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding",
+        f"Style: ViralCaptions,Helvetica,52,{primary_color},&H00000000,&H00000000,&H80000000,-1,0,0,0,100,100,0,0,1,4,2,2,40,40,280,1",
+        "",
+        "[Events]",
+        "Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text",
+    ]
+
+    for s, e, txt in relevant_cues:
+        ass_content.append(
+            f"Dialogue: 0,{format_ass_time(s)},{format_ass_time(e)},ViralCaptions,,0,0,0,,{txt}"
+        )
+
+    try:
+        with open(output_path, "w", encoding="utf-8") as f:
+            f.write("\n".join(ass_content))
+        return True
+    except Exception as err:
+        logger.warning("Failed to write ASS subtitle file: %s", err)
+        return False
+
+
 def build_video_filtergraph(
     layout: str,
     hook_title: Optional[str] = None,
@@ -163,10 +257,18 @@ def build_video_filtergraph(
     clip_duration: float = 30.0,
     progress_bar: bool = True,
     progress_bar_color: str = "yellow",
+    subtitles_path: Optional[str] = None,
 ) -> str:
-    """Builds the 1080x1920 vertical layout filtergraph with optional hook text overlay and kinetic progress bar."""
+    """Builds the 1080x1920 vertical layout filtergraph with optional hook text overlay, subtitles, and kinetic progress bar."""
     if layout == "center_crop":
         base_v = "[0:v]crop=ih*9/16:ih:(iw-ow)/2:0,scale=1080:1920[framed]"
+    elif layout == "split_screen":
+        base_v = (
+            "[0:v]split=2[top_raw][bot_raw];"
+            "[top_raw]scale=1080:960:force_original_aspect_ratio=increase,crop=1080:960[top_v];"
+            "[bot_raw]scale=1080:960:force_original_aspect_ratio=increase,crop=1080:960,boxblur=18:4[bot_v];"
+            "[top_v][bot_v]vstack=inputs=2[framed]"
+        )
     elif layout == "fit_black":
         base_v = "[0:v]scale=1080:1920:force_original_aspect_ratio=decrease,pad=1080:1920:(ow-iw)/2:(oh-ih)/2:black[framed]"
     else:
@@ -222,7 +324,11 @@ def build_video_filtergraph(
                     "x=(w-text_w)/2:y=240:line_spacing=10"
                 )
 
-    # 2. Dynamic Kinetic Progress Bar (Left-to-Right Animated Fill at Bottom)
+    # 2. Ssemble-Style Viral Auto-Captions Burn-in
+    if subtitles_path and os.path.exists(subtitles_path):
+        filters.append(f"subtitles='{subtitles_path}'")
+
+    # 3. Dynamic Kinetic Progress Bar (Left-to-Right Animated Fill at Bottom)
     if progress_bar:
         bar_color = PROGRESS_BAR_COLORS.get(progress_bar_color, "0xFFE600@0.95")
         safe_dur = max(0.1, round(clip_duration, 2))
@@ -249,13 +355,14 @@ def render_viral_clip(
     output_path: str,
     start_time: float,
     end_time: float,
-    layout: str = "blurred_background",
+    layout: str = "center_crop",
     hook_title: Optional[str] = None,
     hook_style: str = "none",
-    background_music: Optional[str] = "lofi_chill",
+    background_music: Optional[str] = "none",
     music_volume: float = 0.12,
     progress_bar: bool = True,
     progress_bar_color: str = "yellow",
+    subtitles_path: Optional[str] = None,
 ) -> Dict[str, Any]:
     """
     Renders a vertical 9:16 viral short using FFmpeg.
@@ -276,6 +383,7 @@ def render_viral_clip(
         clip_duration=clip_duration,
         progress_bar=progress_bar,
         progress_bar_color=progress_bar_color,
+        subtitles_path=subtitles_path,
     )
 
     has_music = (
@@ -351,13 +459,14 @@ async def process_clip_render(
     original_title: str,
     start_time: float,
     end_time: float,
-    layout: str = "blurred_background",
+    layout: str = "center_crop",
     hook_title: Optional[str] = None,
     hook_style: str = "none",
-    background_music: Optional[str] = "lofi_chill",
+    background_music: Optional[str] = "none",
     music_volume: float = 0.12,
     progress_bar: bool = True,
     progress_bar_color: str = "yellow",
+    subtitles_path: Optional[str] = None,
 ) -> Dict[str, Any]:
     """Async wrapper that renders the viral short in a background thread."""
     job_id = uuid.uuid4().hex[:10]
@@ -378,6 +487,7 @@ async def process_clip_render(
         music_volume=music_volume,
         progress_bar=progress_bar,
         progress_bar_color=progress_bar_color,
+        subtitles_path=subtitles_path,
     )
     result["download_url"] = f"/api/file/{result['filename']}"
     return result

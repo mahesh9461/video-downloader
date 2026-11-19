@@ -101,6 +101,8 @@ export interface ClipRenderRequest {
   music_volume?: number;
   progress_bar?: boolean;
   progress_bar_color?: string;
+  burn_captions?: boolean;
+  caption_style?: string;
 }
 
 export interface ClipRenderResponse {
@@ -118,7 +120,7 @@ export interface ClipAiHookRequest {
   end_time: number;
   video_title?: string;
   clip_dialogue?: string;
-  provider?: "free_open_llm" | "ollama";
+  provider?: "deepseek" | "free_open_llm" | "ollama";
 }
 
 export interface ClipAiHookResponse {

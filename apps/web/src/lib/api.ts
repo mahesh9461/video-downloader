@@ -246,6 +246,26 @@ class ApiClient {
     }
     return response.json();
   }
+
+  async uploadClipVideo(formData: FormData): Promise<{ file_id: string; filename: string; duration: number; download_url: string }> {
+    const response = await fetch(this.resolveUrl("/api/clips/upload"), {
+      method: "POST",
+      body: formData,
+    });
+
+    if (!response.ok) {
+      let detail = "Failed to upload video";
+      let errorType = "unknown";
+      try {
+        const err = await response.json();
+        detail = err.detail || detail;
+        errorType = err.error_type || errorType;
+      } catch {}
+      throw new DownloadError(detail, errorType);
+    }
+
+    return response.json();
+  }
 }
 
 export class DownloadError extends Error {

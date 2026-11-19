@@ -62,6 +62,8 @@ from app.clip_scorer import analyze_and_score_clips, parse_vtt_or_srt
 from app.clip_renderer import (
     process_clip_render,
     ClipRenderException,
+    generate_ass_subtitles,
+    probe_video_duration,
     LAYOUT_PRESETS,
     MUSIC_PRESETS,
     HOOK_STYLES,
@@ -568,6 +570,27 @@ async def analyze_viral_clips(req: ClipAnalyzeRequest, request: Request):
     if not req.url or not req.url.strip():
         raise DownloadException("URL cannot be empty.", "invalid_url", 400)
 
+    # Check if req.url refers to an uploaded local file in DOWNLOAD_DIR
+    local_path = DOWNLOAD_DIR / os.path.basename(req.url.strip())
+    if local_path.is_file():
+        dur = probe_video_duration(str(local_path))
+        title = local_path.stem.replace("upload_", "")
+        clips = analyze_and_score_clips(
+            cues=None,
+            total_duration=dur,
+            video_title=title,
+            min_duration=req.min_duration,
+            max_duration=req.max_duration,
+            max_clips=req.max_clips,
+            video_id=local_path.name,
+        )
+        return ClipAnalyzeResponse(
+            video_id=local_path.name,
+            title=title,
+            total_duration=dur,
+            clips=clips,
+        )
+
     url = sanitize_url(req.url.strip())
     meta = await asyncio.to_thread(extract_metadata, url)
 
@@ -620,6 +643,51 @@ async def analyze_viral_clips(req: ClipAnalyzeRequest, request: Request):
     )
 
 
+@app.post("/api/clips/upload")
+async def upload_clip_video(request: Request):
+    """
+    Uploads a local video file (MP4, MOV, WebM) for AI clip discovery and vertical clipping.
+    """
+    content_type = request.headers.get("content-type", "")
+    original_filename = "uploaded_video.mp4"
+    video_bytes = None
+
+    if "multipart/form-data" in content_type:
+        form = await request.form()
+        upload = form.get("video")
+        if upload is not None and hasattr(upload, "filename"):
+            original_filename = upload.filename
+            video_bytes = await upload.read()
+    else:
+        original_filename = request.headers.get("x-filename", "uploaded_video.mp4")
+        video_bytes = await request.body()
+
+    if not video_bytes or len(video_bytes) == 0:
+        raise HTTPException(status_code=400, detail="No video file provided.")
+
+    if len(video_bytes) > MAX_UPLOAD_BYTES:
+        max_mb = MAX_UPLOAD_BYTES // (1024 * 1024)
+        raise HTTPException(status_code=413, detail=f"File too large. Maximum size is {max_mb} MB.")
+
+    import uuid as _uuid
+    from pathlib import Path as _P
+    ext = _P(original_filename).suffix.lower() or ".mp4"
+    upload_id = _uuid.uuid4().hex[:10]
+    upload_filename = f"upload_{upload_id}{ext}"
+    upload_path = DOWNLOAD_DIR / upload_filename
+
+    with open(upload_path, "wb") as f:
+        f.write(video_bytes)
+
+    duration = probe_video_duration(str(upload_path))
+    return {
+        "file_id": upload_filename,
+        "filename": original_filename,
+        "duration": duration,
+        "download_url": f"/api/file/{upload_filename}",
+    }
+
+
 @app.post("/api/clips/render", response_model=ClipRenderResponse)
 async def render_viral_clip_endpoint(
     req: ClipRenderRequest,
@@ -628,7 +696,8 @@ async def render_viral_clip_endpoint(
 ):
     """
     Renders a selected clip into a vertical 9:16 Short/Reel/TikTok with:
-    - Blurred background or center crop layout.
+    - Smart center crop, split screen, or blurred background layout.
+    - Ssemble-style viral subtitle burn-in.
     - Top headline banner.
     - Subtle background music ducking.
     """
@@ -648,6 +717,7 @@ async def render_viral_clip_endpoint(
 
     source_input = req.url.strip()
     temp_source_path: Optional[str] = None
+    subtitles_temp_path: Optional[str] = None
 
     # Check if source_input is an existing local file in DOWNLOAD_DIR
     local_candidate = DOWNLOAD_DIR / os.path.basename(source_input)
@@ -732,6 +802,49 @@ async def render_viral_clip_endpoint(
                     pass
             raise ClipRenderException(f"Failed to fetch video source: {last_error}", "source_download_error", 500)
 
+    # Optional Ssemble-style Subtitles Burn-in
+    if req.burn_captions:
+        try:
+            import uuid as _uuid
+            sub_job_id = _uuid.uuid4().hex[:8]
+            sub_path = str(DOWNLOAD_DIR / f"sub_{sub_job_id}.ass")
+            cues_to_burn = []
+            is_yt = "youtube" in source_input.lower() or "youtu.be" in source_input.lower()
+            if is_yt:
+                import yt_dlp
+                ydl_sub_opts = get_base_ydl_opts("youtube")
+                ydl_sub_opts.update({
+                    "skip_download": True,
+                    "writesubtitles": True,
+                    "writeautomaticsub": True,
+                    "subtitleslangs": ["en", "en-US", "en.*"],
+                })
+                with yt_dlp.YoutubeDL(ydl_sub_opts) as ydl:
+                    info_sub = await asyncio.to_thread(ydl.extract_info, source_input, download=False)
+                    if info_sub:
+                        sub_dict = info_sub.get("subtitles") or info_sub.get("automatic_captions") or {}
+                        en_subs = sub_dict.get("en") or sub_dict.get("en-US") or []
+                        for fmt in en_subs:
+                            if fmt.get("ext") in ("vtt", "srt") and fmt.get("url"):
+                                import httpx
+                                with httpx.Client(timeout=8.0) as client:
+                                    sub_resp = client.get(fmt["url"])
+                                    if sub_resp.status_code == 200:
+                                        cues_to_burn = parse_vtt_or_srt(sub_resp.text)
+                                        break
+            if cues_to_burn:
+                ok = generate_ass_subtitles(
+                    cues=cues_to_burn,
+                    start_time=req.start_time,
+                    end_time=req.end_time,
+                    output_path=sub_path,
+                    style=req.caption_style or "viral_yellow",
+                )
+                if ok and os.path.exists(sub_path):
+                    subtitles_temp_path = sub_path
+        except Exception as sub_err:
+            logger.debug("Failed to burn in captions: %s", sub_err)
+
     try:
         result = await process_clip_render(
             input_path=actual_input_path,
@@ -745,11 +858,20 @@ async def render_viral_clip_endpoint(
             music_volume=req.music_volume,
             progress_bar=req.progress_bar,
             progress_bar_color=req.progress_bar_color,
+            subtitles_path=subtitles_temp_path,
         )
     finally:
-        # If we downloaded a temporary source video, clean it up
+        # If we downloaded a temporary source video or created a temporary sub file, clean it up
         if temp_source_path and os.path.exists(temp_source_path):
             try:
+                os.remove(temp_source_path)
+            except Exception:
+                pass
+        if subtitles_temp_path and os.path.exists(subtitles_temp_path):
+            try:
+                os.remove(subtitles_temp_path)
+            except Exception:
+                pass
                 os.remove(temp_source_path)
             except Exception:
                 pass

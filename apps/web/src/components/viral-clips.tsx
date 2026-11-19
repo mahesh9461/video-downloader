@@ -19,6 +19,7 @@ import {
   Music2,
   TrendingUp,
   Zap,
+  Upload,
 } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -44,6 +45,9 @@ export function ViralClips() {
   const [musicVolume, setMusicVolume] = useState<number>(0.12);
   const [progressBar, setProgressBar] = useState<boolean>(true);
   const [progressBarColor, setProgressBarColor] = useState<string>("yellow");
+  const [burnCaptions, setBurnCaptions] = useState<boolean>(false);
+  const [captionStyle, setCaptionStyle] = useState<string>("viral_yellow");
+  const [isUploading, setIsUploading] = useState<boolean>(false);
 
   // Inline previewing clip ID
   const [previewingClipId, setPreviewingClipId] = useState<string | null>(null);
@@ -57,7 +61,7 @@ export function ViralClips() {
   const [isGeneratingAiHook, setIsGeneratingAiHook] = useState(false);
   const [aiTranscript, setAiTranscript] = useState<string | null>(null);
   const [aiHookSource, setAiHookSource] = useState<string | null>(null);
-  const [aiProvider, setAiProvider] = useState<"free_open_llm" | "ollama">("free_open_llm");
+  const [aiProvider, setAiProvider] = useState<"deepseek" | "free_open_llm" | "ollama">("deepseek");
 
   const handleAnalyze = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -80,6 +84,38 @@ export function ViralClips() {
     } catch (err: any) {
       setAnalysisError(err?.message || "Failed to analyze video. Please check the URL and try again.");
     } finally {
+      setIsAnalyzing(false);
+    }
+  };
+
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setIsUploading(true);
+    setAnalysisError(null);
+    setClips([]);
+    setSelectedClip(null);
+    setRenderedClip(null);
+
+    try {
+      const formData = new FormData();
+      formData.append("video", file);
+      const uploadRes = await apiClient.uploadClipVideo(formData);
+      setUrl(uploadRes.file_id);
+      setVideoTitle(uploadRes.filename);
+
+      setIsAnalyzing(true);
+      const res = await apiClient.analyzeClips(uploadRes.file_id, 30, 60, 4);
+      setClips(res.clips);
+      if (res.clips.length > 0) {
+        setSelectedClip(res.clips[0]);
+        setHookTitle("");
+      }
+    } catch (err: any) {
+      setAnalysisError(err?.message || "Failed to upload or analyze local video file.");
+    } finally {
+      setIsUploading(false);
       setIsAnalyzing(false);
     }
   };
@@ -163,6 +199,8 @@ export function ViralClips() {
         music_volume: musicVolume,
         progress_bar: progressBar,
         progress_bar_color: progressBarColor,
+        burn_captions: burnCaptions,
+        caption_style: captionStyle,
       });
       setRenderedClip(res);
     } catch (err: any) {
@@ -188,6 +226,17 @@ export function ViralClips() {
               className="w-full bg-transparent text-white placeholder-zinc-500 text-sm focus:outline-none py-2"
             />
           </div>
+          <label className="cursor-pointer inline-flex items-center gap-1.5 px-3 py-2 rounded-xl border border-zinc-700/80 bg-zinc-800/80 hover:bg-zinc-800 text-xs font-semibold text-zinc-200 shrink-0 transition-colors">
+            <Upload className="w-3.5 h-3.5 text-violet-400" />
+            <span>{isUploading ? "Uploading..." : "Upload Video"}</span>
+            <input
+              type="file"
+              accept="video/mp4,video/quicktime,video/webm"
+              onChange={handleFileUpload}
+              disabled={isUploading || isAnalyzing}
+              className="hidden"
+            />
+          </label>
           <Button
             type="submit"
             variant="gradient"
@@ -443,44 +492,57 @@ export function ViralClips() {
                 <Layers className="w-3.5 h-3.5 text-violet-400" />
                 Vertical 9:16 Layout
               </label>
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
-                <button
-                  type="button"
-                  onClick={() => setLayout("blurred_background")}
-                  className={`p-3.5 rounded-xl border text-left transition-all ${
-                    layout === "blurred_background"
-                      ? "border-violet-500 bg-violet-500/10 text-white shadow-sm shadow-violet-500/10"
-                      : "border-zinc-800 bg-zinc-950/40 text-zinc-400 hover:border-zinc-700 hover:text-zinc-200"
-                  }`}
-                >
-                  <div className="font-medium text-sm text-white">Blurred Backdrop</div>
-                  <div className="text-xs text-zinc-400 mt-1">Opus Clip aesthetic</div>
-                </button>
-
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
                 <button
                   type="button"
                   onClick={() => setLayout("center_crop")}
-                  className={`p-3.5 rounded-xl border text-left transition-all ${
+                  className={`p-3 rounded-xl border text-left transition-all ${
                     layout === "center_crop"
                       ? "border-violet-500 bg-violet-500/10 text-white shadow-sm shadow-violet-500/10"
                       : "border-zinc-800 bg-zinc-950/40 text-zinc-400 hover:border-zinc-700 hover:text-zinc-200"
                   }`}
                 >
-                  <div className="font-medium text-sm text-white">Center Crop</div>
-                  <div className="text-xs text-zinc-400 mt-1">9:16 Full Screen Action</div>
+                  <div className="font-medium text-xs sm:text-sm text-white">Full Screen</div>
+                  <div className="text-[10px] text-zinc-400 mt-0.5">Smart 9:16 Action</div>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setLayout("split_screen")}
+                  className={`p-3 rounded-xl border text-left transition-all ${
+                    layout === "split_screen"
+                      ? "border-violet-500 bg-violet-500/10 text-white shadow-sm shadow-violet-500/10"
+                      : "border-zinc-800 bg-zinc-950/40 text-zinc-400 hover:border-zinc-700 hover:text-zinc-200"
+                  }`}
+                >
+                  <div className="font-medium text-xs sm:text-sm text-white">Split Screen</div>
+                  <div className="text-[10px] text-zinc-400 mt-0.5">Ssemble Viral Stack</div>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setLayout("blurred_background")}
+                  className={`p-3 rounded-xl border text-left transition-all ${
+                    layout === "blurred_background"
+                      ? "border-violet-500 bg-violet-500/10 text-white shadow-sm shadow-violet-500/10"
+                      : "border-zinc-800 bg-zinc-950/40 text-zinc-400 hover:border-zinc-700 hover:text-zinc-200"
+                  }`}
+                >
+                  <div className="font-medium text-xs sm:text-sm text-white">Blurred Backdrop</div>
+                  <div className="text-[10px] text-zinc-400 mt-0.5">Opus / Ssemble Canvas</div>
                 </button>
 
                 <button
                   type="button"
                   onClick={() => setLayout("fit_black")}
-                  className={`p-3.5 rounded-xl border text-left transition-all ${
+                  className={`p-3 rounded-xl border text-left transition-all ${
                     layout === "fit_black"
                       ? "border-violet-500 bg-violet-500/10 text-white shadow-sm shadow-violet-500/10"
                       : "border-zinc-800 bg-zinc-950/40 text-zinc-400 hover:border-zinc-700 hover:text-zinc-200"
                   }`}
                 >
-                  <div className="font-medium text-sm text-white">Classic Letterbox</div>
-                  <div className="text-xs text-zinc-400 mt-1">Black canvas padding</div>
+                  <div className="font-medium text-xs sm:text-sm text-white">Letterbox</div>
+                  <div className="text-[10px] text-zinc-400 mt-0.5">Black Canvas Padding</div>
                 </button>
               </div>
             </div>
@@ -551,8 +613,9 @@ export function ViralClips() {
                 <div className="flex flex-wrap items-center gap-1.5 pt-1 border-t border-violet-500/15 text-[11px]">
                   <span className="text-zinc-500 text-[10px] uppercase font-semibold mr-1">Free Model Engine:</span>
                   {[
-                    { id: "free_open_llm", label: "Free Open LLM (Mistral / Llama)" },
-                    { id: "ollama", label: "Local Ollama (localhost:11434)" },
+                    { id: "deepseek", label: "DeepSeek (Free AI)" },
+                    { id: "free_open_llm", label: "Mistral / Llama" },
+                    { id: "ollama", label: "Local Ollama" },
                   ].map((p) => (
                     <button
                       key={p.id}
@@ -575,12 +638,12 @@ export function ViralClips() {
                   <span className="text-[11px] font-semibold text-zinc-400 uppercase tracking-wider flex items-center justify-between">
                     <span>Detected Dialogue Transcript:</span>
                     <Badge variant="outline" className="text-[10px] border-emerald-500/30 text-emerald-400">
-                      {aiHookSource === "free_open_llm"
-                        ? "Free Open LLM (Mistral)"
+                      {aiHookSource === "deepseek"
+                        ? "DeepSeek AI (Free)"
+                        : aiHookSource === "free_open_llm"
+                        ? "Free Open LLM"
                         : aiHookSource === "ollama"
                         ? "Local Ollama"
-                        : aiHookSource === "openai_whisper_gpt"
-                        ? "OpenAI GPT"
                         : "Local NLP Engine"}
                     </Badge>
                   </span>
@@ -675,6 +738,55 @@ export function ViralClips() {
                       }`}
                     >
                       <span className={`w-2.5 h-2.5 rounded-full ${c.color}`} />
+                      {c.label}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* Ssemble Viral Subtitles & Auto-Captions */}
+            <div className="space-y-3 p-4 rounded-xl border border-zinc-800 bg-zinc-950/50">
+              <div className="flex items-center justify-between">
+                <div>
+                  <label className="text-xs font-semibold text-white uppercase tracking-wider flex items-center gap-1.5">
+                    <Type className="w-3.5 h-3.5 text-amber-400" />
+                    Ssemble-Style Viral Captions (Subtitles)
+                  </label>
+                  <p className="text-[11px] text-zinc-400 mt-0.5">
+                    Burn-in high-engagement animated captions in TikTok & Reels safe zone.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setBurnCaptions(!burnCaptions)}
+                  className={`text-xs px-2.5 py-1 rounded-full font-medium transition-colors ${
+                    burnCaptions
+                      ? "bg-amber-500/20 border border-amber-500/40 text-amber-300"
+                      : "bg-zinc-800 text-zinc-400 hover:text-white"
+                  }`}
+                >
+                  {burnCaptions ? "Captions ON" : "Captions OFF"}
+                </button>
+              </div>
+
+              {burnCaptions && (
+                <div className="pt-1 flex flex-wrap items-center gap-2">
+                  <span className="text-[11px] text-zinc-400 font-medium">Caption Style:</span>
+                  {[
+                    { id: "viral_yellow", label: "⚡ Viral Yellow (Ssemble / Hormozi)", desc: "Yellow Bold Stroke" },
+                    { id: "clean_white", label: "✨ Clean White", desc: "Crisp Drop Shadow" },
+                  ].map((c) => (
+                    <button
+                      key={c.id}
+                      type="button"
+                      onClick={() => setCaptionStyle(c.id)}
+                      className={`text-xs px-3 py-1.5 rounded-lg border flex items-center gap-1.5 transition-all ${
+                        captionStyle === c.id
+                          ? "border-amber-400/80 bg-amber-500/10 text-white font-medium shadow-sm ring-1 ring-amber-400/30"
+                          : "border-zinc-800 bg-zinc-900 text-zinc-400 hover:text-zinc-200"
+                      }`}
+                    >
                       {c.label}
                     </button>
                   ))}
