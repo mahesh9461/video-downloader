@@ -122,14 +122,21 @@ def generate_hook_from_free_open_llm(transcript: str, video_title: str = "") -> 
 
     context = transcript[:1000] if transcript else video_title
     prompt = (
-        f"You are a viral video editor for YouTube Shorts and TikTok.\n"
-        f"Read this video clip dialogue:\n"
-        f'"{context}"\n\n'
-        f"Craft a bold, punchy 3 to 6 word viral hook headline for the top overlay banner.\n"
-        f"Rules:\n"
-        f"1. Exactly 3 to 6 words.\n"
-        f"2. Output ONLY the plain text headline.\n"
-        f"3. NO emojis, NO quotes, NO hashtags, NO periods."
+        "You are a top viral video growth specialist for YouTube Shorts and TikTok with 100M+ views.\n"
+        f"Video title: {video_title}\n"
+        f"Context: {context}\n\n"
+        "Generate a high-converting, curiosity-driven 3 to 5 word viral hook headline for this vertical Short.\n"
+        "Examples of viral hooks:\n"
+        "- WAIT FOR THE DROP\n"
+        "- THIS PART HITS DIFFERENT\n"
+        "- NOBODY EXPECTED THIS\n"
+        "- THE HARDEST TRUTH\n"
+        "- THIS CHANGED EVERYTHING\n\n"
+        "Rules:\n"
+        "1. Exactly 3 to 5 words.\n"
+        "2. Output ONLY the plain text headline in UPPERCASE.\n"
+        "3. Never mention 'segment', 'clip', 'highlight', 'key', or 'video'.\n"
+        "4. NO emojis, NO quotes, NO hashtags, NO periods."
     )
 
     # 1. Try local Ollama if user is running it locally (http://localhost:11434)

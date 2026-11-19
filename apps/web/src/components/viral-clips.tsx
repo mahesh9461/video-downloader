@@ -36,11 +36,11 @@ export function ViralClips() {
 
   // Selected clip for rendering
   const [selectedClip, setSelectedClip] = useState<ClipCandidate | null>(null);
-  const [layout, setLayout] = useState<string>("blurred_background");
+  const [layout, setLayout] = useState<string>("center_crop");
   const [showOverlay, setShowOverlay] = useState<boolean>(false);
   const [hookTitle, setHookTitle] = useState<string>("");
   const [hookStyle, setHookStyle] = useState<string>("none");
-  const [backgroundMusic, setBackgroundMusic] = useState<string>("lofi_chill");
+  const [backgroundMusic, setBackgroundMusic] = useState<string>("none");
   const [musicVolume, setMusicVolume] = useState<number>(0.12);
   const [progressBar, setProgressBar] = useState<boolean>(true);
   const [progressBarColor, setProgressBarColor] = useState<string>("yellow");
@@ -90,6 +90,33 @@ export function ViralClips() {
     setAiTranscript(null);
     setAiHookSource(null);
     setRenderedClip(null);
+  };
+
+  const handleQuickRender = async (clip: ClipCandidate) => {
+    setSelectedClip(clip);
+    setIsRendering(true);
+    setRenderError(null);
+    setRenderedClip(null);
+
+    try {
+      const res = await apiClient.renderClip({
+        url: url.trim(),
+        start_time: clip.start_time,
+        end_time: clip.end_time,
+        layout: "center_crop", // Edge-to-edge full screen 9:16 vertical
+        hook_title: "",
+        hook_style: "none", // Clean video without obstructing boxes
+        background_music: "none", // Preserve pure original soundtrack/audio
+        music_volume: 0.12,
+        progress_bar: true,
+        progress_bar_color: progressBarColor,
+      });
+      setRenderedClip(res);
+    } catch (err: any) {
+      setRenderError(err?.message || "Failed to render viral short. Please try again.");
+    } finally {
+      setIsRendering(false);
+    }
   };
 
   const handleGenerateAiHook = async () => {
@@ -210,6 +237,46 @@ export function ViralClips() {
             </span>
           </div>
 
+          {/* ⚡ Instant 1-Click Hero Card for #1 Most Viral Moment */}
+          {clips[0] && (
+            <div className="p-5 sm:p-6 rounded-2xl bg-gradient-to-r from-violet-950/60 via-zinc-900/90 to-amber-950/40 border border-amber-500/30 shadow-2xl flex flex-col sm:flex-row items-center justify-between gap-5">
+              <div className="space-y-2 text-left w-full sm:w-auto">
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-amber-500 text-black shadow-md">
+                    <Flame className="w-3.5 h-3.5 fill-black" />
+                    #1 HIGHEST VIRAL MOMENT ({clips[0].viral_score}/100)
+                  </span>
+                  <span className="text-xs font-semibold px-2.5 py-0.5 rounded-full bg-emerald-500/20 border border-emerald-500/40 text-emerald-300">
+                    {clips[0].retention_rate || "96% Retention"}
+                  </span>
+                </div>
+                <h3 className="text-white font-bold text-base sm:text-lg line-clamp-1">{clips[0].hook_title}</h3>
+                <p className="text-xs text-zinc-400 max-w-xl">
+                  {formatDuration(clips[0].start_time)} → {formatDuration(clips[0].end_time)} • Full-Screen 9:16 Vertical • Kinetic Neon Timeline Bar
+                </p>
+              </div>
+              <Button
+                variant="gradient"
+                size="lg"
+                onClick={() => handleQuickRender(clips[0])}
+                disabled={isRendering}
+                className="w-full sm:w-auto font-bold shrink-0 shadow-lg shadow-violet-500/25 px-6"
+              >
+                {isRendering && selectedClip?.clip_id === clips[0].clip_id ? (
+                  <span className="flex items-center gap-2">
+                    <span className="w-4 h-4 border-2 border-white/20 border-t-white rounded-full animate-spin" />
+                    Generating Short...
+                  </span>
+                ) : (
+                  <span className="flex items-center gap-2">
+                    <Download className="w-4 h-4" />
+                    Download Most Viral Clip (MP4)
+                  </span>
+                )}
+              </Button>
+            </div>
+          )}
+
           <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
             {clips.map((clip) => {
               const isSelected = selectedClip?.clip_id === clip.clip_id;
@@ -294,7 +361,7 @@ export function ViralClips() {
                           </span>
                         </div>
                         <div className="p-2.5 rounded-lg bg-zinc-900/90 border border-zinc-800 text-xs text-zinc-300">
-                          <p className="font-medium text-white mb-1">Snippet Dialogue:</p>
+                          <p className="font-medium text-white mb-1">Snippet Dialogue / Audio:</p>
                           <p className="italic text-zinc-400 leading-relaxed">"{clip.summary}"</p>
                         </div>
                       </div>
@@ -323,18 +390,27 @@ export function ViralClips() {
                     </div>
                   </div>
 
-                  {/* Card Bottom Action */}
-                  <div className="p-4 pt-0">
+                  {/* Card Bottom Actions: 1-Click Short + Customize */}
+                  <div className="p-4 pt-0 grid grid-cols-2 gap-2">
+                    <button
+                      type="button"
+                      onClick={() => handleQuickRender(clip)}
+                      disabled={isRendering}
+                      className="py-2 px-3 rounded-xl text-xs font-bold bg-violet-600 hover:bg-violet-500 text-white flex items-center justify-center gap-1 shadow-md shadow-violet-600/30 transition-all disabled:opacity-50"
+                    >
+                      <Download className="w-3.5 h-3.5" />
+                      1-Click Short
+                    </button>
                     <button
                       type="button"
                       onClick={() => handleSelectClip(clip)}
-                      className={`w-full py-2 px-3 rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5 transition-all ${
+                      className={`py-2 px-3 rounded-xl text-xs font-semibold flex items-center justify-center gap-1 transition-all ${
                         isSelected
-                          ? "bg-violet-600 text-white shadow-md shadow-violet-600/30"
-                          : "bg-zinc-800/80 hover:bg-zinc-800 text-zinc-200 border border-zinc-700/60"
+                          ? "bg-zinc-800 border border-violet-500/60 text-violet-300"
+                          : "bg-zinc-900 hover:bg-zinc-800 text-zinc-400 hover:text-white border border-zinc-800"
                       }`}
                     >
-                      {isSelected ? "Selected for Render" : "Customize & Render"}
+                      Customize
                       <ChevronRight className="w-3.5 h-3.5" />
                     </button>
                   </div>

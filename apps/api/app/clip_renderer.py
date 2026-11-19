@@ -25,14 +25,14 @@ logger = logging.getLogger(__name__)
 # Available 9:16 vertical layouts
 LAYOUT_PRESETS: List[PresetOption] = [
     PresetOption(
+        id="center_crop",
+        label="Full Screen 9:16 (TikTok & Shorts Standard)",
+        description="Fills the entire 9:16 vertical screen with high-impact edge-to-edge action.",
+    ),
+    PresetOption(
         id="blurred_background",
         label="Blurred Backdrop (Opus Clip Style)",
         description="Centered 16:9 video over a heavily blurred, zoomed vertical background.",
-    ),
-    PresetOption(
-        id="center_crop",
-        label="Center Crop (Full Screen)",
-        description="Fills the entire 9:16 vertical screen by cropping the center of the action.",
     ),
     PresetOption(
         id="fit_black",

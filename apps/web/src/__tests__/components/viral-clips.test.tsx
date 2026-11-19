@@ -87,28 +87,89 @@ describe("ViralClips", () => {
       await user.click(screen.getByRole("button", { name: /find viral moments/i }));
 
       // Assert 1: Video card rendered with virality indicators
-      expect(await screen.findByText("THE BIGGEST MISTAKE YOU MAKE")).toBeInTheDocument();
-      expect(screen.getByText(/95\/100 virality/i)).toBeInTheDocument();
-      expect(screen.getByText("96% Retention")).toBeInTheDocument();
-      expect(screen.getByText("Top 1% Virality")).toBeInTheDocument();
+      const titles = await screen.findAllByText("THE BIGGEST MISTAKE YOU MAKE");
+      expect(titles.length).toBeGreaterThanOrEqual(1);
+      expect(screen.getAllByText(/95\/100 virality/i)[0]).toBeInTheDocument();
+      expect(screen.getAllByText("96% Retention")[0]).toBeInTheDocument();
+      expect(screen.getAllByText("Top 1% Virality")[0]).toBeInTheDocument();
 
       // Act 2: Render 9:16 Short
       const renderBtn = screen.getByRole("button", { name: /generate 9:16 viral short/i });
       await user.click(renderBtn);
 
-      // Assert 2: renderClip called with kinetic progress bar enabled
+      // Assert 2: renderClip called with full screen 9:16 and kinetic progress bar enabled
       expect(mockRenderClip).toHaveBeenCalledWith(
         expect.objectContaining({
           url: "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
           start_time: 10,
           end_time: 50,
-          layout: "blurred_background",
+          layout: "center_crop",
           progress_bar: true,
           progress_bar_color: "yellow",
         })
       );
       expect(await screen.findByText("Viral Short Ready!")).toBeInTheDocument();
       expect(screen.getByRole("link", { name: /download 9:16 short/i })).toBeInTheDocument();
+    });
+  });
+
+  describe("Redux state verification", () => {
+    it("should allow 1-click downloading the #1 most viral clip immediately", async () => {
+      // Arrange
+      const user = userEvent.setup();
+      mockAnalyzeClips.mockResolvedValueOnce({
+        video_id: "test12345",
+        title: "Test Music Video",
+        total_duration: 200,
+        clips: [
+          {
+            clip_id: "clip_20_50",
+            start_time: 20,
+            end_time: 50,
+            duration: 30,
+            viral_score: 98,
+            hook_title: "WAIT FOR THE DROP...",
+            summary: "Peak chorus and drop.",
+            reason: "Maximum audio energy",
+            thumbnail_url: "https://i.ytimg.com/vi/test12345/hqdefault.jpg",
+            retention_rate: "98% Retention",
+            hook_rating: "Top 1% Virality",
+          },
+        ],
+      });
+
+      mockRenderClip.mockResolvedValueOnce({
+        filename: "test_quick_viral.mp4",
+        filesize: 4900000,
+        duration: 30,
+        download_url: "/api/file/test_quick_viral.mp4",
+        layout: "center_crop",
+        hook_title: "",
+      });
+
+      renderWithProvider(<ViralClips />, store);
+
+      // Act: Analyze and click 1-Click Hero Button
+      const input = screen.getByPlaceholderText(/paste long youtube video/i);
+      await user.type(input, "https://www.youtube.com/watch?v=dQw4w9WgXcQ");
+      await user.click(screen.getByRole("button", { name: /find viral moments/i }));
+
+      const oneClickBtn = await screen.findByRole("button", { name: /download most viral clip/i });
+      await user.click(oneClickBtn);
+
+      // Assert: Immediate render triggered with clean edge-to-edge vertical short
+      expect(mockRenderClip).toHaveBeenCalledWith(
+        expect.objectContaining({
+          url: "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
+          start_time: 20,
+          end_time: 50,
+          layout: "center_crop",
+          hook_style: "none",
+          background_music: "none",
+          progress_bar: true,
+        })
+      );
+      expect(await screen.findByText("Viral Short Ready!")).toBeInTheDocument();
     });
   });
 
