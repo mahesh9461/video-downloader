@@ -19,6 +19,7 @@ from typing import Any, Dict, List, Optional
 
 from app.config import DOWNLOAD_DIR, FFMPEG_PATH
 from app.schemas import PresetOption
+from app.cache import duration_cache
 
 logger = logging.getLogger(__name__)
 
@@ -149,7 +150,11 @@ def _require_ffmpeg() -> str:
 
 
 def probe_video_duration(video_path: str) -> float:
-    """Probes the total duration in seconds of a video file using FFmpeg."""
+    """Probes the total duration in seconds of a video file using FFmpeg, with in-memory caching."""
+    cached = duration_cache.get(video_path)
+    if cached is not None:
+        return cached
+
     ffmpeg = FFMPEG_PATH or shutil.which("ffmpeg")
     if not ffmpeg or not os.path.exists(video_path):
         return 60.0
@@ -160,7 +165,9 @@ def probe_video_duration(video_path: str) -> float:
         dur_match = re.search(r"Duration:\s*(\d+):(\d+):(\d+(?:\.\d+)?)", res.stderr)
         if dur_match:
             h, m, s = dur_match.groups()
-            return round(int(h) * 3600 + int(m) * 60 + float(s), 2)
+            dur = round(int(h) * 3600 + int(m) * 60 + float(s), 2)
+            duration_cache.set(video_path, dur)
+            return dur
     except Exception as e:
         logger.debug("Failed to probe video duration: %s", e)
     return 60.0
@@ -423,6 +430,8 @@ def render_viral_clip(
     cmd.extend([
         "-c:v", "libx264",
         "-preset", "ultrafast",
+        "-threads", "0",
+        "-tune", "fastdecode",
         "-crf", "23",
         "-c:a", "aac",
         "-b:a", "128k",

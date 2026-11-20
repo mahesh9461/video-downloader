@@ -213,9 +213,12 @@ class TestClipAPI:
     @pytest.fixture(autouse=True)
     def reset_rate_limit(self):
         from app.main import rate_limits
+        from app.cache import clear_all_caches
         rate_limits.clear()
+        clear_all_caches()
         yield
         rate_limits.clear()
+        clear_all_caches()
 
     @pytest.fixture
     def client(self):

@@ -79,6 +79,12 @@ from app.clip_renderer import (
     MUSIC_PRESETS,
     HOOK_STYLES,
 )
+from app.cache import (
+    metadata_cache,
+    subtitle_cache,
+    duration_cache,
+    clear_all_caches,
+)
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(name)s: %(message)s")
 logger = logging.getLogger("video_downloader")
@@ -150,6 +156,18 @@ async def cleanup_old_files():
 async def lifespan(app: FastAPI):
     cleanup_task = asyncio.create_task(cleanup_old_files())
     logger.info("Started video downloader service. FFmpeg: %s", FFMPEG_PATH or "Not Found")
+    # Pre-warm FFmpeg binary into OS memory
+    if FFMPEG_PATH:
+        try:
+            prewarm_proc = await asyncio.create_subprocess_exec(
+                FFMPEG_PATH, "-version",
+                stdout=asyncio.subprocess.DEVNULL,
+                stderr=asyncio.subprocess.DEVNULL,
+            )
+            await prewarm_proc.wait()
+            logger.info("FFmpeg pre-warm complete.")
+        except Exception as e:
+            logger.debug("FFmpeg pre-warm skipped: %s", e)
     yield
     cleanup_task.cancel()
     try:
@@ -230,8 +248,13 @@ async def health_check():
 async def get_metadata(req: MetadataRequest):
     if not req.url or not req.url.strip():
         raise DownloadException("URL cannot be empty.", "invalid_url", 400)
+    cleaned_url = req.url.strip()
+    cached = metadata_cache.get(cleaned_url)
+    if cached is not None:
+        return cached
     try:
-        metadata = await asyncio.to_thread(extract_metadata, req.url.strip())
+        metadata = await asyncio.to_thread(extract_metadata, cleaned_url)
+        metadata_cache.set(cleaned_url, metadata)
         return metadata
     except DownloadException:
         raise
@@ -603,47 +626,66 @@ async def analyze_viral_clips(req: ClipAnalyzeRequest, request: Request):
         )
 
     url = sanitize_url(req.url.strip())
-    try:
-        meta = await asyncio.to_thread(extract_metadata, url)
-    except DownloadException:
-        raise
-    except Exception as e:
-        logger.error("Failed to extract metadata in analyze_viral_clips for %s: %s", url, e)
-        raise DownloadException(f"Could not retrieve video information: {e}", "unknown", 400)
 
-    # Attempt to extract subtitle cues for hook and sentiment analysis with strict timeout
-    cues = None
-    try:
-        import yt_dlp
-        ydl_opts = get_base_ydl_opts("youtube")
-        ydl_opts.update({
-            "skip_download": True,
-            "writesubtitles": True,
-            "writeautomaticsub": True,
-            "subtitleslangs": ["en", "en-US", "en.*"],
-        })
+    async def _get_meta_async():
+        cached_meta = metadata_cache.get(url)
+        if cached_meta is not None:
+            return cached_meta
+        m = await asyncio.to_thread(extract_metadata, url)
+        metadata_cache.set(url, m)
+        return m
 
-        async def _fetch_subs():
-            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-                info = await asyncio.to_thread(ydl.extract_info, url, download=False)
-                if info:
-                    sub_dict = info.get("subtitles") or info.get("automatic_captions") or {}
-                    en_subs = sub_dict.get("en") or sub_dict.get("en-US") or []
-                    vtt_url = None
-                    for fmt in en_subs:
-                        if fmt.get("ext") in ("vtt", "srt"):
-                            vtt_url = fmt.get("url")
-                            break
-                    if vtt_url:
-                        async with httpx.AsyncClient(timeout=4.0) as client:
-                            sub_resp = await client.get(vtt_url)
-                            if sub_resp.status_code == 200:
-                                return parse_vtt_or_srt(sub_resp.text)
+    async def _get_subs_async():
+        cached_subs = subtitle_cache.get(url)
+        if cached_subs is not None:
+            return cached_subs
+        try:
+            import yt_dlp
+            ydl_opts = get_base_ydl_opts("youtube")
+            ydl_opts.update({
+                "skip_download": True,
+                "writesubtitles": True,
+                "writeautomaticsub": True,
+                "subtitleslangs": ["en", "en-US", "en.*"],
+            })
+
+            async def _fetch():
+                with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                    info = await asyncio.to_thread(ydl.extract_info, url, download=False)
+                    if info:
+                        sub_dict = info.get("subtitles") or info.get("automatic_captions") or {}
+                        en_subs = sub_dict.get("en") or sub_dict.get("en-US") or []
+                        vtt_url = None
+                        for fmt in en_subs:
+                            if fmt.get("ext") in ("vtt", "srt"):
+                                vtt_url = fmt.get("url")
+                                break
+                        if vtt_url:
+                            async with httpx.AsyncClient(timeout=4.0) as client:
+                                sub_resp = await client.get(vtt_url)
+                                if sub_resp.status_code == 200:
+                                    return parse_vtt_or_srt(sub_resp.text)
+                return None
+
+            cues_res = await asyncio.wait_for(_fetch(), timeout=5.0)
+            if cues_res:
+                subtitle_cache.set(url, cues_res)
+            return cues_res
+        except Exception as e:
+            logger.debug("Subtitle extraction skipped or timed out for %s: %s", url, e)
             return None
 
-        cues = await asyncio.wait_for(_fetch_subs(), timeout=5.0)
-    except Exception as e:
-        logger.debug("Subtitle extraction skipped or timed out for %s: %s", url, e)
+    # Parallelize metadata and subtitle retrieval with asyncio.gather
+    meta_task, subs_task = await asyncio.gather(_get_meta_async(), _get_subs_async(), return_exceptions=True)
+
+    if isinstance(meta_task, Exception):
+        if isinstance(meta_task, DownloadException):
+            raise meta_task
+        logger.error("Failed to extract metadata in analyze_viral_clips for %s: %s", url, meta_task)
+        raise DownloadException(f"Could not retrieve video information: {meta_task}", "unknown", 400)
+
+    meta = meta_task
+    cues = subs_task if not isinstance(subs_task, Exception) else None
 
     clips = analyze_and_score_clips(
         cues=cues,
@@ -886,30 +928,33 @@ async def render_viral_clip_endpoint(
             import uuid as _uuid
             sub_job_id = _uuid.uuid4().hex[:8]
             sub_path = str(DOWNLOAD_DIR / f"sub_{sub_job_id}.ass")
-            cues_to_burn = []
-            is_yt = "youtube" in source_input.lower() or "youtu.be" in source_input.lower()
-            if is_yt:
-                import yt_dlp
-                ydl_sub_opts = get_base_ydl_opts("youtube")
-                ydl_sub_opts.update({
-                    "skip_download": True,
-                    "writesubtitles": True,
-                    "writeautomaticsub": True,
-                    "subtitleslangs": ["en", "en-US", "en.*"],
-                })
-                with yt_dlp.YoutubeDL(ydl_sub_opts) as ydl:
-                    info_sub = await asyncio.to_thread(ydl.extract_info, source_input, download=False)
-                    if info_sub:
-                        sub_dict = info_sub.get("subtitles") or info_sub.get("automatic_captions") or {}
-                        en_subs = sub_dict.get("en") or sub_dict.get("en-US") or []
-                        for fmt in en_subs:
-                            if fmt.get("ext") in ("vtt", "srt") and fmt.get("url"):
-                                import httpx
-                                with httpx.Client(timeout=8.0) as client:
-                                    sub_resp = client.get(fmt["url"])
-                                    if sub_resp.status_code == 200:
-                                        cues_to_burn = parse_vtt_or_srt(sub_resp.text)
-                                        break
+            # First check subtitle cache to avoid redundant network download
+            cues_to_burn = subtitle_cache.get(source_input) or []
+            if not cues_to_burn:
+                is_yt = "youtube" in source_input.lower() or "youtu.be" in source_input.lower()
+                if is_yt:
+                    import yt_dlp
+                    ydl_sub_opts = get_base_ydl_opts("youtube")
+                    ydl_sub_opts.update({
+                        "skip_download": True,
+                        "writesubtitles": True,
+                        "writeautomaticsub": True,
+                        "subtitleslangs": ["en", "en-US", "en.*"],
+                    })
+                    with yt_dlp.YoutubeDL(ydl_sub_opts) as ydl:
+                        info_sub = await asyncio.to_thread(ydl.extract_info, source_input, download=False)
+                        if info_sub:
+                            sub_dict = info_sub.get("subtitles") or info_sub.get("automatic_captions") or {}
+                            en_subs = sub_dict.get("en") or sub_dict.get("en-US") or []
+                            for fmt in en_subs:
+                                if fmt.get("ext") in ("vtt", "srt") and fmt.get("url"):
+                                    import httpx
+                                    with httpx.Client(timeout=8.0) as client:
+                                        sub_resp = client.get(fmt["url"])
+                                        if sub_resp.status_code == 200:
+                                            cues_to_burn = parse_vtt_or_srt(sub_resp.text)
+                                            subtitle_cache.set(source_input, cues_to_burn)
+                                            break
             if cues_to_burn:
                 ok = generate_ass_subtitles(
                     cues=cues_to_burn,

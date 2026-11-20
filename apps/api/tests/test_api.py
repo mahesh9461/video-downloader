@@ -8,8 +8,18 @@ from fastapi.testclient import TestClient
 from app.main import app, rate_limits
 from app.config import DOWNLOAD_DIR
 from app.schemas import VideoMetadata, VideoFormat
+from app.cache import clear_all_caches
 
 client = TestClient(app)
+
+
+@pytest.fixture(autouse=True)
+def clean_cache_and_limits():
+    rate_limits.clear()
+    clear_all_caches()
+    yield
+    rate_limits.clear()
+    clear_all_caches()
 
 
 def test_root_get_and_head():
