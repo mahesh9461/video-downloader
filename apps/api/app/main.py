@@ -603,9 +603,15 @@ async def analyze_viral_clips(req: ClipAnalyzeRequest, request: Request):
         )
 
     url = sanitize_url(req.url.strip())
-    meta = await asyncio.to_thread(extract_metadata, url)
+    try:
+        meta = await asyncio.to_thread(extract_metadata, url)
+    except DownloadException:
+        raise
+    except Exception as e:
+        logger.error("Failed to extract metadata in analyze_viral_clips for %s: %s", url, e)
+        raise DownloadException(f"Could not retrieve video information: {e}", "unknown", 400)
 
-    # Attempt to extract subtitle cues for hook and sentiment analysis
+    # Attempt to extract subtitle cues for hook and sentiment analysis with strict timeout
     cues = None
     try:
         import yt_dlp
@@ -616,24 +622,28 @@ async def analyze_viral_clips(req: ClipAnalyzeRequest, request: Request):
             "writeautomaticsub": True,
             "subtitleslangs": ["en", "en-US", "en.*"],
         })
-        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            info = await asyncio.to_thread(ydl.extract_info, url, download=False)
-            if info:
-                sub_dict = info.get("subtitles") or info.get("automatic_captions") or {}
-                en_subs = sub_dict.get("en") or sub_dict.get("en-US") or []
-                vtt_url = None
-                for fmt in en_subs:
-                    if fmt.get("ext") in ("vtt", "srt"):
-                        vtt_url = fmt.get("url")
-                        break
-                if vtt_url:
-                    import httpx
-                    with httpx.Client(timeout=10.0) as client:
-                        sub_resp = client.get(vtt_url)
-                        if sub_resp.status_code == 200:
-                            cues = parse_vtt_or_srt(sub_resp.text)
+
+        async def _fetch_subs():
+            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                info = await asyncio.to_thread(ydl.extract_info, url, download=False)
+                if info:
+                    sub_dict = info.get("subtitles") or info.get("automatic_captions") or {}
+                    en_subs = sub_dict.get("en") or sub_dict.get("en-US") or []
+                    vtt_url = None
+                    for fmt in en_subs:
+                        if fmt.get("ext") in ("vtt", "srt"):
+                            vtt_url = fmt.get("url")
+                            break
+                    if vtt_url:
+                        async with httpx.AsyncClient(timeout=4.0) as client:
+                            sub_resp = await client.get(vtt_url)
+                            if sub_resp.status_code == 200:
+                                return parse_vtt_or_srt(sub_resp.text)
+            return None
+
+        cues = await asyncio.wait_for(_fetch_subs(), timeout=5.0)
     except Exception as e:
-        logger.debug("Subtitle extraction skipped or failed for %s: %s", url, e)
+        logger.debug("Subtitle extraction skipped or timed out for %s: %s", url, e)
 
     clips = analyze_and_score_clips(
         cues=cues,

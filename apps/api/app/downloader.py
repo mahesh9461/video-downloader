@@ -643,8 +643,8 @@ def get_base_ydl_opts(platform: str, client_override: Optional[List[str]] = None
             "Accept-Language": "en-US,en;q=0.9",
             "Sec-Fetch-Mode": "navigate",
         },
-        # Throttle requests to mimic human browsing patterns
-        "sleep_interval_requests": 1,
+        # Throttle requests to mimic human browsing patterns if explicitly configured
+        "sleep_interval_requests": int(os.getenv("YTDLP_SLEEP_INTERVAL", "0")),
     }
     if FFMPEG_PATH:
         opts["ffmpeg_location"] = FFMPEG_PATH

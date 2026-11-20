@@ -21,6 +21,11 @@ const getApiBase = () => {
     return process.env.NEXT_PUBLIC_API_URL;
   }
   if (typeof window !== "undefined") {
+    // Direct connection to local FastAPI backend when running locally to avoid
+    // Next.js dev server proxy rewrite socket hang ups on long video/clip requests
+    if (window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1") {
+      return "http://localhost:8000";
+    }
     return "/api/proxy";
   }
   return "http://localhost:8000";
@@ -179,11 +184,15 @@ class ApiClient {
     });
 
     if (!response.ok) {
-      let detail = "Failed to analyze video clips";
+      let detail = `Failed to analyze video clips (${response.status})`;
       let errorType = "unknown";
       try {
         const err = await response.json();
-        detail = err.detail || detail;
+        if (typeof err.detail === "string") {
+          detail = err.detail;
+        } else if (Array.isArray(err.detail)) {
+          detail = err.detail.map((e: any) => e.msg || JSON.stringify(e)).join(", ");
+        }
         errorType = err.error_type || errorType;
       } catch {
         // fallback
@@ -202,11 +211,15 @@ class ApiClient {
     });
 
     if (!response.ok) {
-      let detail = "Failed to render clip";
+      let detail = `Failed to render clip (${response.status})`;
       let errorType = "unknown";
       try {
         const err = await response.json();
-        detail = err.detail || detail;
+        if (typeof err.detail === "string") {
+          detail = err.detail;
+        } else if (Array.isArray(err.detail)) {
+          detail = err.detail.map((e: any) => e.msg || JSON.stringify(e)).join(", ");
+        }
         errorType = err.error_type || errorType;
       } catch {
         // fallback
@@ -229,11 +242,15 @@ class ApiClient {
     });
 
     if (!response.ok) {
-      let detail = "Failed to generate AI hook headline";
+      let detail = `Failed to generate AI hook headline (${response.status})`;
       let errorType = "unknown";
       try {
         const err = await response.json();
-        detail = err.detail || detail;
+        if (typeof err.detail === "string") {
+          detail = err.detail;
+        } else if (Array.isArray(err.detail)) {
+          detail = err.detail.map((e: any) => e.msg || JSON.stringify(e)).join(", ");
+        }
         errorType = err.error_type || errorType;
       } catch {}
       throw new DownloadError(detail, errorType);

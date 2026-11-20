@@ -380,7 +380,7 @@ export function ViralClips() {
               type="text"
               value={url}
               onChange={(e) => setUrl(e.target.value)}
-              placeholder="Paste a YouTube video URL (e.g. youtube.com/watch?v=...)"
+              placeholder="Paste long YouTube video or podcast URL (e.g. youtube.com/watch?v=...)"
               disabled={isAnalyzing}
               className="w-full bg-transparent text-white placeholder-zinc-500 text-sm focus:outline-none py-2"
             />
