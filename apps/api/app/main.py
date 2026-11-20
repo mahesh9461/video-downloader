@@ -1,6 +1,8 @@
 import asyncio
 import os
 import time
+import uuid
+from datetime import datetime, timezone
 import ipaddress
 import logging
 import email
@@ -156,19 +158,21 @@ async def cleanup_old_files():
         await asyncio.sleep(60)
 
 
-async def autopilot_background_worker():
-    while True:
-        try:
-            await autopilot_manager.tick()
-        except Exception as e:
-            logger.debug("Error in autopilot background task: %s", e)
-        await asyncio.sleep(20)
+# NOTE: Automated background hourly timer disabled as requested.
+# async def autopilot_background_worker():
+#     while True:
+#         try:
+#             await autopilot_manager.tick()
+#         except Exception as e:
+#             logger.debug("Error in autopilot background task: %s", e)
+#         await asyncio.sleep(20)
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     cleanup_task = asyncio.create_task(cleanup_old_files())
-    autopilot_task = asyncio.create_task(autopilot_background_worker())
+    # Automated background hourly timer disabled as requested. Uploads happen only when user adds a link.
+    # autopilot_task = asyncio.create_task(autopilot_background_worker())
     logger.info("Started video downloader service. FFmpeg: %s", FFMPEG_PATH or "Not Found")
     # Pre-warm FFmpeg binary into OS memory
     if FFMPEG_PATH:
@@ -184,15 +188,15 @@ async def lifespan(app: FastAPI):
             logger.debug("FFmpeg pre-warm skipped: %s", e)
     yield
     cleanup_task.cancel()
-    autopilot_task.cancel()
+    # autopilot_task.cancel()
     try:
         await cleanup_task
     except asyncio.CancelledError:
         pass
-    try:
-        await autopilot_task
-    except asyncio.CancelledError:
-        pass
+    # try:
+    #     await autopilot_task
+    # except asyncio.CancelledError:
+    #     pass
 
 
 app = FastAPI(
@@ -1238,9 +1242,12 @@ async def autopilot_trigger_endpoint(
     """Immediately triggers viral discovery or custom video URL ingestion and 6-clip batch creation."""
     url = request.url.strip() if request and request.url else None
 
-    # Reset any stale error state
-    if autopilot_manager.state == "error":
-        autopilot_manager.state = "idle"
+    # Reset any stale error or cooldown state so manual run starts immediately
+    autopilot_manager.state = "idle"
+    autopilot_manager.cooldown_until = None
+    if url:
+        # Reset count for custom single-run so all 6 clips can upload
+        autopilot_manager.daily_uploads_count = 0
 
     async def _run_batch():
         if url:
@@ -1250,15 +1257,27 @@ async def autopilot_trigger_endpoint(
                 autopilot_manager.current_step_label = f"Extracting metadata for URL: {url}"
                 autopilot_manager._save_state()
                 meta = await asyncio.to_thread(extract_metadata, url)
-                vid_id = meta.get("id") or str(uuid.uuid4().hex[:8])
+                # Extract YouTube video id from url or fallback to uuid
+                vid_id = str(uuid.uuid4().hex[:8])
+                if "v=" in url:
+                    vid_id = url.split("v=")[1].split("&")[0]
+                elif "youtu.be/" in url:
+                    vid_id = url.split("youtu.be/")[1].split("?")[0]
+                elif hasattr(meta, "id") and getattr(meta, "id"):
+                    vid_id = getattr(meta, "id")
+
+                vid_title = getattr(meta, "title", "Custom Viral Moment") or "Custom Viral Moment"
+                vid_duration = getattr(meta, "duration", 300) or 300
+                vid_thumbnail = getattr(meta, "thumbnail", None)
+
                 vid_info = {
                     "id": vid_id,
-                    "title": meta.get("title", "Custom Viral Moment"),
+                    "title": vid_title,
                     "url": url,
-                    "duration": meta.get("duration", 300),
-                    "thumbnail": meta.get("thumbnail"),
+                    "duration": vid_duration,
+                    "thumbnail": vid_thumbnail,
                 }
-                await autopilot_manager.create_and_render_batch(vid_info)
+                await autopilot_manager.create_and_render_batch(vid_info, sequential_upload=True)
             except Exception as e:
                 autopilot_manager._log(f"❌ Failed to process URL '{url}': {e}")
                 autopilot_manager.state = "error"
@@ -1274,7 +1293,7 @@ async def autopilot_trigger_endpoint(
         else:
             video = await autopilot_manager.search_viral_gta_video()
             if video:
-                await autopilot_manager.create_and_render_batch(video)
+                await autopilot_manager.create_and_render_batch(video, sequential_upload=True)
 
     background_tasks.add_task(_run_batch)
     return autopilot_manager.get_status()

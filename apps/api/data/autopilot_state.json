@@ -1,22 +1,21 @@
 {
-  "is_running": true,
-  "state": "cooldown",
+  "is_running": false,
+  "state": "rendering",
   "current_batch": null,
   "active_clip_id": "batch1_1",
-  "current_step": "published",
-  "current_step_label": "Published Short #1! URL: https://youtube.com/shorts/yt_short_123",
+  "current_step": "downloading",
+  "current_step_label": "Extracting metadata for URL: https://www.youtube.com/watch?v=8-DRGbQ1IXc",
   "processed_video_ids": [
-    "YDNs_sPEcJc"
+    "YDNs_sPEcJc",
+    "8-DRGbQ1IXc"
   ],
-  "daily_uploads_count": 6,
+  "daily_uploads_count": 0,
   "daily_upload_limit": 6,
   "upload_interval_seconds": 3600,
-  "cooldown_until": 1795238861.128094,
+  "cooldown_until": null,
   "disk_space_cleaned_mb": 0.0,
-  "last_cleaned_at": "2026-11-20T16:57:41.109455",
-  "recent_logs": [
-    "[16:57:41] \ud83d\udee1\ufe0f Daily upload limit reached (6/6). Entering 18-hour cooldown to protect Google API quota."
-  ],
+  "last_cleaned_at": "2026-11-20T17:20:27.195446",
+  "recent_logs": [],
   "all_published_videos": [
     {
       "id": "batch1_1",
@@ -24,80 +23,70 @@
       "title": "GTA 6 Insane Detail",
       "youtube_url": "https://youtube.com/shorts/yt_short_123",
       "youtube_video_id": "yt_short_123",
-      "published_at": "2026-11-20T11:27:41.109368+00:00",
+      "published_at": "2026-11-20T11:50:27.195375+00:00",
       "preview_url": "/api/file/gta6_short_test_1.mp4",
       "duration": 30.0
+    },
+    {
+      "id": "8efcf3a2_6",
+      "clip_index": 6,
+      "title": "WAIT FOR WHAT HAPPENS NEXT...",
+      "youtube_url": "https://www.youtube.com/shorts/G41Yb9k4yAc",
+      "youtube_video_id": "G41Yb9k4yAc",
+      "published_at": "2026-11-20T11:46:33.799170+00:00",
+      "preview_url": "/api/file/gta6_short_8efcf3a2_6.mp4",
+      "duration": 25.0
+    },
+    {
+      "id": "8efcf3a2_5",
+      "clip_index": 5,
+      "title": "THE MOMENT EVERYTHING CHANGED",
+      "youtube_url": "https://www.youtube.com/shorts/EmBQUOB3a5o",
+      "youtube_video_id": "EmBQUOB3a5o",
+      "published_at": "2026-11-20T11:46:16.045476+00:00",
+      "preview_url": "/api/file/gta6_short_8efcf3a2_5.mp4",
+      "duration": 25.0
+    },
+    {
+      "id": "8efcf3a2_4",
+      "clip_index": 4,
+      "title": "WATCH TILL THE VERY END",
+      "youtube_url": "https://www.youtube.com/shorts/mXCbknzK06s",
+      "youtube_video_id": "mXCbknzK06s",
+      "published_at": "2026-11-20T11:46:05.563102+00:00",
+      "preview_url": "/api/file/gta6_short_8efcf3a2_4.mp4",
+      "duration": 25.0
+    },
+    {
+      "id": "8efcf3a2_3",
+      "clip_index": 3,
+      "title": "THE MOST INTENSE 30 SECONDS",
+      "youtube_url": "https://www.youtube.com/shorts/kd2p4uUoBX0",
+      "youtube_video_id": "kd2p4uUoBX0",
+      "published_at": "2026-11-20T11:45:40.135706+00:00",
+      "preview_url": "/api/file/gta6_short_8efcf3a2_3.mp4",
+      "duration": 25.0
+    },
+    {
+      "id": "8efcf3a2_2",
+      "clip_index": 2,
+      "title": "NOBODY EXPECTED THIS PART",
+      "youtube_url": "https://www.youtube.com/shorts/P_nl3PuKMtI",
+      "youtube_video_id": "P_nl3PuKMtI",
+      "published_at": "2026-11-20T11:45:32.150515+00:00",
+      "preview_url": "/api/file/gta6_short_8efcf3a2_2.mp4",
+      "duration": 25.0
+    },
+    {
+      "id": "8efcf3a2_1",
+      "clip_index": 1,
+      "title": "WAIT FOR WHAT HAPPENS NEXT...",
+      "youtube_url": "https://www.youtube.com/shorts/Cr5Fqjpu88o",
+      "youtube_video_id": "Cr5Fqjpu88o",
+      "published_at": "2026-11-20T11:45:23.135706+00:00",
+      "preview_url": "/api/file/gta6_short_8efcf3a2_1.mp4",
+      "duration": 25.0
     }
   ],
-  "recent_errors": [
-    {
-      "clip_id": "9c18322a_1",
-      "title": "WAIT FOR WHAT HAPPENS NEXT...",
-      "stage": "upload",
-      "error": "No YouTube access token available. Please connect your YouTube channel or provide an access token.",
-      "timestamp": "2026-11-20T10:46:20.370488+00:00"
-    },
-    {
-      "clip_id": "9c18322a_1",
-      "title": "WAIT FOR WHAT HAPPENS NEXT...",
-      "stage": "upload",
-      "error": "No YouTube access token available. Please connect your YouTube channel or provide an access token.",
-      "timestamp": "2026-11-20T10:46:16.720387+00:00"
-    },
-    {
-      "clip_id": "9c18322a_1",
-      "title": "WAIT FOR WHAT HAPPENS NEXT...",
-      "stage": "upload",
-      "error": "No YouTube access token available. Please connect your YouTube channel or provide an access token.",
-      "timestamp": "2026-11-20T10:46:16.070703+00:00"
-    },
-    {
-      "clip_id": "9c18322a_1",
-      "title": "WAIT FOR WHAT HAPPENS NEXT...",
-      "stage": "upload",
-      "error": "No YouTube access token available. Please connect your YouTube channel or provide an access token.",
-      "timestamp": "2026-11-20T10:46:15.448820+00:00"
-    },
-    {
-      "clip_id": "9c18322a_1",
-      "title": "WAIT FOR WHAT HAPPENS NEXT...",
-      "stage": "upload",
-      "error": "No YouTube access token available. Please connect your YouTube channel or provide an access token.",
-      "timestamp": "2026-11-20T10:46:03.690322+00:00"
-    },
-    {
-      "clip_id": "9c18322a_1",
-      "title": "WAIT FOR WHAT HAPPENS NEXT...",
-      "stage": "upload",
-      "error": "No YouTube access token available. Please connect your YouTube channel or provide an access token.",
-      "timestamp": "2026-11-20T10:46:03.495762+00:00"
-    },
-    {
-      "clip_id": "9c18322a_1",
-      "title": "WAIT FOR WHAT HAPPENS NEXT...",
-      "stage": "upload",
-      "error": "No YouTube access token available. Please connect your YouTube channel or provide an access token.",
-      "timestamp": "2026-11-20T10:46:03.305000+00:00"
-    },
-    {
-      "clip_id": "9c18322a_1",
-      "title": "WAIT FOR WHAT HAPPENS NEXT...",
-      "stage": "upload",
-      "error": "No YouTube access token available. Please connect your YouTube channel or provide an access token.",
-      "timestamp": "2026-11-20T10:45:59.983923+00:00"
-    },
-    {
-      "clip_id": "9c18322a_1",
-      "title": "WAIT FOR WHAT HAPPENS NEXT...",
-      "stage": "upload",
-      "error": "No YouTube access token available. Please connect your YouTube channel or provide an access token.",
-      "timestamp": "2026-11-20T10:45:52.593579+00:00"
-    },
-    {
-      "title": "GTA 6: 10 Things The Game DOESN'T TELL YOU",
-      "stage": "download",
-      "error": "\u001b[0;31mERROR:\u001b[0m [youtube] 1yBSK22csvI: Requested format is not available. Use --list-formats for a list of available formats",
-      "timestamp": "2026-11-20T10:35:56.938662+00:00"
-    }
-  ]
+  "recent_errors": []
 }

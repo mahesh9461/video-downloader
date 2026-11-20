@@ -293,7 +293,7 @@ class AutopilotManager:
             self._log(f"❌ Error searching viral video: {e}")
         return None
 
-    async def create_and_render_batch(self, video_info: Dict[str, Any]) -> Optional[AutopilotBatch]:
+    async def create_and_render_batch(self, video_info: Dict[str, Any], sequential_upload: bool = True) -> Optional[AutopilotBatch]:
         """
         Downloads the source video once, slices exactly 6 clips with randomized styles,
         mixes custom audio, immediately cleans the source video, and sets up 1-hour schedule.
@@ -418,16 +418,23 @@ class AutopilotManager:
                 pass
 
             total_dur = video_info.get("duration") or 300
-            # Analyze exactly 6 clips
-            clip_candidates = analyze_and_score_clips(
+            # Analyze and score clips to discover the most viral highlights
+            raw_candidates = analyze_and_score_clips(
                 cues=cues,
                 total_duration=total_dur,
                 video_title=vid_title,
                 min_duration=25.0,
                 max_duration=50.0,
-                max_clips=6,
+                max_clips=12,
                 video_id=vid_id,
             )
+
+            # Pick the top 6 highest-scoring viral moments
+            clip_candidates = sorted(
+                raw_candidates,
+                key=lambda c: getattr(c, "viral_score", 0.0),
+                reverse=True,
+            )[:6]
 
             # Ensure we have exactly 6 segments
             while len(clip_candidates) < 6:
@@ -589,9 +596,27 @@ class AutopilotManager:
             except Exception as sb_err:
                 logger.debug("Supabase batch sync hook error: %s", sb_err)
 
-            # Immediately trigger upload of Short #1 for live real-time pipeline execution
-            # ("and we are uplaoding the video on youube", "and on done it will gi em ehte lin off off alal udpated video")
-            if self.current_batch and self.current_batch.clips:
+            # Sequential auto-upload of all 6 clips one by one
+            if sequential_upload and self.current_batch and self.current_batch.clips:
+                self._log("🚀 Starting sequential auto-upload: uploading all 6 clips to YouTube one by one...")
+                for clip in self.current_batch.clips:
+                    self._log(f"📤 Uploading Short #{clip.clip_index}/6: '{clip.hook_title}'")
+                    uploaded = await self.publish_clip(clip, cleanup_after=False)
+                    if not uploaded:
+                        self._log(f"⚠️ Short #{clip.clip_index} upload paused/failed. Stopping sequential upload.")
+                        break
+                    # Wait 3 seconds between uploads to give YouTube Data API breathing room
+                    await asyncio.sleep(3)
+
+                remaining = [c for c in self.current_batch.clips if c.status in ("queued", "rendering", "uploading")]
+                if not remaining:
+                    self.current_batch.status = "completed"
+                    self.state = "idle"
+                    self.current_step = "completed"
+                    self.current_step_label = "All 6 clips successfully uploaded to YouTube!"
+                    self._log("🎉 Batch complete! All 6 clips published to YouTube one by one.")
+                    self._save_state()
+            elif self.current_batch and self.current_batch.clips:
                 first_clip = self.current_batch.clips[0]
                 await self.publish_clip(first_clip, cleanup_after=False)
 
@@ -729,7 +754,7 @@ class AutopilotManager:
 
     async def tick(self):
         """Periodic background evaluation called every 20-30 seconds."""
-        if not self.is_running or self._lock.locked():
+        if not self.is_running or self.state in ("rendering", "uploading") or self._lock.locked():
             return
 
         async with self._lock:
@@ -760,39 +785,28 @@ class AutopilotManager:
                     self._save_state()
                 return
 
-            # 3. Check Pending Batch Uploads
-            if self.current_batch and self.current_batch.clips:
-                pending_clips = [
-                    c for c in self.current_batch.clips
-                    if c.status == "queued" and c.scheduled_time
-                ]
-                if pending_clips:
-                    next_clip = pending_clips[0]
-                    sched_dt = datetime.fromisoformat(next_clip.scheduled_time)
-                    sched_epoch = sched_dt.timestamp()
+            # 3. Automated hourly scheduled uploads (Disabled for now as requested - all 6 upload sequentially on demand)
+            # if self.current_batch and self.current_batch.clips:
+            #     pending_clips = [
+            #         c for c in self.current_batch.clips
+            #         if c.status == "queued" and c.scheduled_time
+            #     ]
+            #     if pending_clips:
+            #         next_clip = pending_clips[0]
+            #         sched_dt = datetime.fromisoformat(next_clip.scheduled_time)
+            #         sched_epoch = sched_dt.timestamp()
+            #         if now >= sched_epoch:
+            #             await self.publish_clip(next_clip, cleanup_after=False)
+            #             return
 
-                    if now >= sched_epoch:
-                        await self.publish_clip(next_clip, cleanup_after=False)
-                        return
-
-                # If all 6 clips in current batch are published or failed
-                remaining = [c for c in self.current_batch.clips if c.status in ("queued", "rendering", "uploading")]
-                if not remaining:
-                    self.current_batch.status = "completed"
-                    self.state = "cooldown"
-                    self.cooldown_until = now + (18 * 3600)
-                    self._log("🏁 Batch complete! All 6 clips published. Entering cooldown.")
-                    self._save_state()
-                    return
-
-            # 4. If Idle and Running: Discover and start next batch
-            if self.state == "idle" and self.daily_uploads_count < self.daily_upload_limit:
-                video = await self.search_viral_gta_video()
-                if video:
-                    await self.create_and_render_batch(video)
-                else:
-                    self._log("Sleeping for 5 minutes before retrying video discovery.")
-                    await asyncio.sleep(300)
+            # 4. Automated hourly video discovery (Disabled for now as requested - triggers only when user adds a link)
+            # if self.state == "idle" and self.daily_uploads_count < self.daily_upload_limit:
+            #     video = await self.search_viral_gta_video()
+            #     if video:
+            #         await self.create_and_render_batch(video)
+            #     else:
+            #         self._log("Sleeping for 5 minutes before retrying video discovery.")
+            #         await asyncio.sleep(300)
 
     def start(self):
         """Starts or resumes autopilot."""

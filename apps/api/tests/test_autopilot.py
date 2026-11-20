@@ -128,3 +128,22 @@ def test_audio_endpoint(client):
     data = resp.json()
     assert "custom_tracks" in data
     assert isinstance(data["custom_tracks"], list)
+
+
+def test_trigger_custom_url_with_video_metadata(client):
+    from app.schemas import VideoMetadata
+    mock_meta = VideoMetadata(
+        id="8-DRGbQ1IXc",
+        platform="youtube",
+        title="Custom Test Video",
+        creator="Test Creator",
+        duration=120,
+        thumbnail="https://example.com/thumb.jpg",
+        formats=[],
+    )
+    with patch("app.main.extract_metadata", return_value=mock_meta), \
+         patch("app.autopilot.autopilot_manager.create_and_render_batch", new_callable=AsyncMock) as mock_batch:
+        resp = client.post("/api/autopilot/trigger", json={"url": "https://www.youtube.com/watch?v=8-DRGbQ1IXc"})
+        assert resp.status_code == 200
+        # Background task runs
+        assert autopilot_manager.daily_uploads_count == 0
