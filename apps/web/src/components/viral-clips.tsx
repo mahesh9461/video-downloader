@@ -37,6 +37,9 @@ import {
 } from "@/lib/types";
 import { formatDuration, formatFileSize } from "@/lib/utils";
 
+const DEFAULT_GTA_DESCRIPTION =
+  "Welcome to GTA World: ViceVerse — your daily hub for GTA 6 Shorts, live gameplay streams, hidden Leonida secrets, Vice City map discoveries, crazy physics tests, and launch-week moments with Jason and Lucia.\n\nSubscribe and turn on notifications so you never miss a daily Short or live stream!\n\n#GTA6 #GTAVI #Shorts #GTA6Shorts #GTA6Live #GTA6LiveStream #ViceCity #Leonida #GTA6Gameplay #GTA6Launch #GamingShorts #LiveGaming";
+
 export function ViralClips() {
   const [url, setUrl] = useState("");
   const [isAnalyzing, setIsAnalyzing] = useState(false);
@@ -190,9 +193,9 @@ export function ViralClips() {
     const initialTitle = bestAiHook.toLowerCase().includes("#shorts") ? bestAiHook : `${bestAiHook} #Shorts`;
     setYtTitle(initialTitle);
 
-    // Default to using YouTube Channel Upload Defaults (no manual description required)
+    // Set ViceVerse channel default description
     setUseDefaultDescription(true);
-    setYtDescription("");
+    setYtDescription(DEFAULT_GTA_DESCRIPTION);
 
     try {
       const status = await apiClient.getYouTubeStatus();
@@ -218,7 +221,7 @@ export function ViralClips() {
       const res = await apiClient.publishToYouTube({
         filename: renderedClip.filename,
         title: ytTitle.trim(),
-        description: useDefaultDescription ? "" : ytDescription.trim(),
+        description: ytDescription.trim(),
         privacy: ytPrivacy,
         access_token: ytAccessToken.trim() || undefined,
       });
@@ -1355,7 +1358,7 @@ export function ViralClips() {
 
                   <div className="space-y-2">
                     <div className="flex items-center justify-between">
-                      <label className="text-xs font-medium text-zinc-300">Description</label>
+                      <label className="text-xs font-medium text-zinc-300">Description & Gaming Preset</label>
                       <label className="flex items-center gap-1.5 text-xs text-zinc-400 cursor-pointer select-none">
                         <input
                           type="checkbox"
@@ -1363,28 +1366,40 @@ export function ViralClips() {
                           onChange={(e) => setUseDefaultDescription(e.target.checked)}
                           className="rounded border-zinc-700 bg-zinc-800 text-red-600 focus:ring-0 w-3.5 h-3.5"
                         />
-                        <span>Use YouTube Channel Upload Defaults</span>
+                        <span>ViceVerse GTA 6 Preset</span>
                       </label>
                     </div>
 
                     {useDefaultDescription ? (
-                      <div className="rounded-lg border border-zinc-800/80 bg-zinc-950/60 p-3 text-xs text-zinc-400 flex items-center justify-between">
-                        <span>YouTube will automatically apply your channel's default description, links, and hashtags from YouTube Studio settings.</span>
-                        <button
-                          type="button"
-                          onClick={() => setUseDefaultDescription(false)}
-                          className="text-xs text-red-400 hover:text-red-300 underline font-medium shrink-0 ml-2"
-                        >
-                          Customize
-                        </button>
+                      <div className="rounded-xl border border-red-500/30 bg-zinc-950/70 p-3.5 text-xs space-y-2 text-zinc-300">
+                        <div className="flex items-center justify-between">
+                          <span className="font-semibold text-emerald-400 flex items-center gap-1.5">
+                            <CheckCircle2 className="w-3.5 h-3.5" />
+                            GTA World: ViceVerse Preset Active
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => setUseDefaultDescription(false)}
+                            className="text-xs text-red-400 hover:text-red-300 underline font-medium"
+                          >
+                            Customize
+                          </button>
+                        </div>
+                        <p className="text-[11px] text-zinc-400 line-clamp-2">
+                          {ytDescription}
+                        </p>
+                        <div className="flex flex-wrap gap-1.5 text-[10px] text-zinc-400 pt-1">
+                          <span className="px-2 py-0.5 rounded bg-zinc-900 border border-zinc-800 text-zinc-300">🎮 Category: Gaming (Grand Theft Auto VI)</span>
+                          <span className="px-2 py-0.5 rounded bg-zinc-900 border border-zinc-800 text-zinc-300">🏷️ 33 Default GTA 6 Tags Attached</span>
+                        </div>
                       </div>
                     ) : (
                       <textarea
-                        rows={2}
+                        rows={3}
                         value={ytDescription}
                         onChange={(e) => setYtDescription(e.target.value)}
-                        className="w-full bg-zinc-950 border border-zinc-800 rounded-lg px-3.5 py-2 text-xs text-white placeholder-zinc-500 focus:outline-none focus:border-red-500/50 resize-none"
-                        placeholder="Add custom description and hashtags (leave empty to use YouTube defaults)..."
+                        className="w-full bg-zinc-950 border border-zinc-800 rounded-lg px-3.5 py-2 text-xs text-white placeholder-zinc-500 focus:outline-none focus:border-red-500/50 resize-none font-mono"
+                        placeholder="Add custom description and hashtags..."
                       />
                     )}
                   </div>

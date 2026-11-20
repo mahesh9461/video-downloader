@@ -19,6 +19,27 @@ logger = logging.getLogger("video_downloader.youtube_publisher")
 TOKEN_CACHE_FILE = Path("/tmp/youtube_auth_token.json")
 CREDENTIALS_CACHE_FILE = Path("/tmp/youtube_oauth_credentials.json")
 
+# Default ViceVerse GTA 6 YouTube Gaming Presets
+DEFAULT_YOUTUBE_DESCRIPTION = (
+    "Welcome to GTA World: ViceVerse — your daily hub for GTA 6 Shorts, live gameplay streams, "
+    "hidden Leonida secrets, Vice City map discoveries, crazy physics tests, and launch-week moments with Jason and Lucia.\n\n"
+    "Subscribe and turn on notifications so you never miss a daily Short or live stream!\n\n"
+    "#GTA6 #GTAVI #Shorts #GTA6Shorts #GTA6Live #GTA6LiveStream #ViceCity #Leonida #GTA6Gameplay #GTA6Launch #GamingShorts #LiveGaming"
+)
+
+DEFAULT_YOUTUBE_TAGS = [
+    "GTA 6", "GTA VI", "Grand Theft Auto 6", "GTA 6 Shorts", "ViceVerse",
+    "GTA World ViceVerse", "ViceVerse GTA 6", "Vice City", "GTA 6 secrets",
+    "GTA 6 gameplay", "GTA 6 Easter eggs", "GTA 6 clips", "GTA 6 physics",
+    "GTA 6 map", "gaming Shorts", "gta6 gameplay", "gta6 lucia", "lucia gta6",
+    "gta6 pc", "gta6 car", "gta6 woke", "illojuan gta6", "gta6 first mission",
+    "gta6 on pc", "gya6 live", "gta6livestram", "Jason and Lucia GTA 6",
+    "Jason GTA 6", "Boobie Ike GTA 6", "Brian Heder GTA 6", "Roxy GTA 6",
+    "GTA 6 characters", "GTA 6 cast"
+]
+
+DEFAULT_YOUTUBE_CATEGORY_ID = "20"  # Gaming Category
+
 # In-memory store fallback
 _token_store: Dict[str, Any] = {}
 _creds_store: Dict[str, str] = {}
@@ -273,14 +294,10 @@ async def publish_short_video(
     init_url = "https://www.googleapis.com/upload/youtube/v3/videos?uploadType=resumable&part=snippet,status"
     snippet: Dict[str, Any] = {
         "title": title[:100],  # YouTube title limit 100 chars
+        "description": description.strip() if description and description.strip() else DEFAULT_YOUTUBE_DESCRIPTION,
+        "tags": tags if tags else DEFAULT_YOUTUBE_TAGS,
+        "categoryId": DEFAULT_YOUTUBE_CATEGORY_ID,  # 20 = Gaming
     }
-    # Only include description if explicitly provided; otherwise YouTube applies channel upload defaults
-    if description and description.strip():
-        snippet["description"] = description.strip()
-
-    # Only include tags if explicitly provided; otherwise YouTube applies channel upload defaults
-    if tags:
-        snippet["tags"] = tags[:30]
 
     metadata = {
         "snippet": snippet,
