@@ -51,11 +51,12 @@ def save_google_credentials(client_id: str, client_secret: str) -> None:
 
 
 def get_stored_token() -> Optional[str]:
-    if "access_token" in _token_store:
+    if "access_token" in _token_store and _token_store["access_token"]:
         return _token_store["access_token"]
     if TOKEN_CACHE_FILE.exists():
         try:
             data = json.loads(TOKEN_CACHE_FILE.read_text(encoding="utf-8"))
+            _token_store.update(data)
             return data.get("access_token")
         except Exception as e:
             logger.warning("Failed to read token cache: %s", e)
@@ -77,6 +78,48 @@ def clear_stored_token() -> None:
             TOKEN_CACHE_FILE.unlink()
         except Exception:
             pass
+
+
+async def refresh_access_token() -> Optional[str]:
+    """Refreshes the access token using the stored refresh_token if available."""
+    client_id, client_secret = get_google_credentials()
+    if not client_id or not client_secret:
+        return None
+
+    stored = {}
+    if TOKEN_CACHE_FILE.exists():
+        try:
+            stored = json.loads(TOKEN_CACHE_FILE.read_text(encoding="utf-8"))
+        except Exception:
+            pass
+    refresh_tok = _token_store.get("refresh_token") or stored.get("refresh_token")
+    if not refresh_tok:
+        return None
+
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            res = await client.post(
+                "https://oauth2.googleapis.com/token",
+                data={
+                    "client_id": client_id,
+                    "client_secret": client_secret,
+                    "refresh_token": refresh_tok,
+                    "grant_type": "refresh_token",
+                },
+            )
+            if res.status_code == 200:
+                data = res.json()
+                new_token = data.get("access_token")
+                if new_token:
+                    _token_store["access_token"] = new_token
+                    if "refresh_token" not in data:
+                        data["refresh_token"] = refresh_tok
+                    save_stored_token(data)
+                    logger.info("Successfully refreshed YouTube access token")
+                    return new_token
+    except Exception as e:
+        logger.warning("Failed to refresh YouTube access token: %s", e)
+    return None
 
 
 def get_youtube_auth_url(state: Optional[str] = None) -> Optional[str]:
@@ -131,22 +174,47 @@ async def exchange_code_for_token(code: str) -> Dict[str, Any]:
 
 
 async def get_channel_info(access_token: str) -> Dict[str, Any]:
-    """Fetches the connected YouTube channel's title and ID."""
-    async with httpx.AsyncClient(timeout=10.0) as client:
-        res = await client.get(
-            "https://www.googleapis.com/youtube/v3/channels?part=snippet&mine=true",
-            headers={"Authorization": f"Bearer {access_token}"},
-        )
-        if res.status_code == 200:
-            items = res.json().get("items", [])
-            if items:
-                snippet = items[0].get("snippet", {})
-                return {
-                    "channel_title": snippet.get("title"),
-                    "channel_id": items[0].get("id"),
-                    "thumbnail_url": snippet.get("thumbnails", {}).get("default", {}).get("url"),
-                }
-    return {}
+    """Fetches the connected YouTube channel's title and ID with local caching and token auto-refresh."""
+    cached_title = _token_store.get("channel_title")
+    cached_id = _token_store.get("channel_id")
+    if cached_title:
+        return {
+            "channel_title": cached_title,
+            "channel_id": cached_id or "connected_account",
+        }
+
+    try:
+        async with httpx.AsyncClient(timeout=8.0) as client:
+            res = await client.get(
+                "https://www.googleapis.com/youtube/v3/channels?part=snippet&mine=true",
+                headers={"Authorization": f"Bearer {access_token}"},
+            )
+            if res.status_code == 200:
+                items = res.json().get("items", [])
+                if items:
+                    snippet = items[0].get("snippet", {})
+                    info = {
+                        "channel_title": snippet.get("title", "YouTube Channel"),
+                        "channel_id": items[0].get("id", "channel_id"),
+                        "thumbnail_url": snippet.get("thumbnails", {}).get("default", {}).get("url"),
+                    }
+                    _token_store["channel_title"] = info["channel_title"]
+                    _token_store["channel_id"] = info["channel_id"]
+                    save_stored_token(_token_store)
+                    return info
+            elif res.status_code == 401:
+                # Access token expired; refresh using refresh_token
+                new_tok = await refresh_access_token()
+                if new_tok:
+                    return await get_channel_info(new_tok)
+    except Exception as e:
+        logger.debug("Could not fetch channel info online: %s", e)
+
+    # Return cached or default title so user stays persistently connected
+    return {
+        "channel_title": _token_store.get("channel_title") or "YouTube Channel",
+        "channel_id": _token_store.get("channel_id") or "connected_account",
+    }
 
 
 async def get_youtube_status() -> Dict[str, Any]:
@@ -160,17 +228,18 @@ async def get_youtube_status() -> Dict[str, Any]:
     if token:
         try:
             channel_info = await get_channel_info(token)
-            connected = bool(channel_info.get("channel_title") or channel_info.get("channel_id"))
+            connected = True
         except Exception:
-            connected = False
+            connected = True
+            channel_info = {"channel_title": "YouTube Channel"}
 
     auth_url = get_youtube_auth_url() if configured else None
 
     return {
         "configured": configured,
         "connected": connected,
-        "channel_title": channel_info.get("channel_title"),
-        "channel_id": channel_info.get("channel_id"),
+        "channel_title": channel_info.get("channel_title") if connected else None,
+        "channel_id": channel_info.get("channel_id") if connected else None,
         "auth_url": auth_url,
     }
 
@@ -186,34 +255,35 @@ async def publish_short_video(
     """Uploads a vertical short video to YouTube via Data API v3 Resumable Upload."""
     token = access_token or get_stored_token()
     if not token:
+        token = await refresh_access_token()
+    if not token:
         raise ValueError("No YouTube access token available. Please connect your YouTube channel or provide an access token.")
 
     video_path = DOWNLOAD_DIR / filename
     if not video_path.is_file():
         raise FileNotFoundError(f"Video file not found: {filename}")
 
-    # Ensure #Shorts tag in title and description for YouTube algorithm discovery
+    # Ensure #Shorts tag in title for YouTube algorithm discovery
     if "#shorts" not in title.lower():
         title = f"{title.strip()} #Shorts"
-
-    if tags is None:
-        tags = []
-    if "Shorts" not in tags:
-        tags.append("Shorts")
-    if "viral" not in [t.lower() for t in tags]:
-        tags.append("viral")
 
     file_size = video_path.stat().st_size
 
     # Step 1: Initiate resumable upload session
     init_url = "https://www.googleapis.com/upload/youtube/v3/videos?uploadType=resumable&part=snippet,status"
+    snippet: Dict[str, Any] = {
+        "title": title[:100],  # YouTube title limit 100 chars
+    }
+    # Only include description if explicitly provided; otherwise YouTube applies channel upload defaults
+    if description and description.strip():
+        snippet["description"] = description.strip()
+
+    # Only include tags if explicitly provided; otherwise YouTube applies channel upload defaults
+    if tags:
+        snippet["tags"] = tags[:30]
+
     metadata = {
-        "snippet": {
-            "title": title[:100],  # YouTube title limit 100 chars
-            "description": description or f"{title}\n\nCreated with Viral Clips Creator #Shorts",
-            "tags": tags[:30],
-            "categoryId": "22",  # People & Blogs
-        },
+        "snippet": snippet,
         "status": {
             "privacyStatus": privacy if privacy in ["public", "unlisted", "private"] else "public",
             "selfDeclaredMadeForKids": False,

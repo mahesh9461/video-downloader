@@ -34,8 +34,19 @@ describe("ViralClips", () => {
   beforeEach(() => {
     // Rule 10: Clear mocks in beforeEach
     jest.clearAllMocks();
+    mockGetYouTubeStatus.mockResolvedValue({
+      configured: true,
+      connected: false,
+      channel_title: null,
+      channel_id: null,
+      auth_url: "https://accounts.google.com/o/oauth2/v2/auth?client_id=test",
+    });
     // Rule 3: Always use real Redux store configured with configureStore
     store = createTestStore();
+    if (typeof window !== "undefined") {
+      localStorage.clear();
+      sessionStorage.clear();
+    }
   });
 
   describe("render", () => {
@@ -207,7 +218,7 @@ describe("ViralClips", () => {
         hook_title: "THE BIGGEST MISTAKE YOU MAKE",
       });
 
-      mockGetYouTubeStatus.mockResolvedValueOnce({
+      mockGetYouTubeStatus.mockResolvedValue({
         configured: true,
         connected: true,
         channel_title: "Viral Creator Studio",

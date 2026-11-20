@@ -87,25 +87,62 @@ export function ViralClips() {
   const [ytClientId, setYtClientId] = useState("");
   const [ytClientSecret, setYtClientSecret] = useState("");
   const [isSavingCreds, setIsSavingCreds] = useState(false);
+  const [suggestedUrl, setSuggestedUrl] = useState<string | null>(null);
+  const [useDefaultDescription, setUseDefaultDescription] = useState<boolean>(true);
 
   useEffect(() => {
-    // Check if returning from Google OAuth callback
+    // 1. Fetch YouTube connection status immediately on load/refresh so connection persists
+    apiClient
+      .getYouTubeStatus()
+      .then((status) => {
+        if (status) setYtAuthStatus(status);
+      })
+      .catch(() => {});
+
+    // 2. Restore cached URL and analyzed clips from localStorage/sessionStorage
     if (typeof window !== "undefined") {
+      try {
+        const lastViralUrl = localStorage.getItem("saveit_viral_url");
+        const lastUrl = localStorage.getItem("saveit_last_url");
+        const linkToUse = lastViralUrl || lastUrl;
+        if (linkToUse) {
+          setUrl(linkToUse);
+        } else if (lastUrl) {
+          setSuggestedUrl(lastUrl);
+        }
+
+        const cachedClips = sessionStorage.getItem("saveit_viral_clips");
+        const cachedTitle = sessionStorage.getItem("saveit_viral_title");
+        if (cachedClips) {
+          const parsed = JSON.parse(cachedClips);
+          if (Array.isArray(parsed) && parsed.length > 0) {
+            setClips(parsed);
+            if (cachedTitle) setVideoTitle(cachedTitle);
+            setSelectedClip(parsed[0]);
+          }
+        }
+      } catch {}
+
+      // 3. Check if returning from Google OAuth callback
       const params = new URLSearchParams(window.location.search);
       if (params.get("youtube_auth") === "success") {
-        apiClient
-          .getYouTubeStatus()
-          .then((status) => {
-            setYtAuthStatus(status);
-            setShowYouTubeModal(true);
-          })
-          .catch(() => {});
+        setShowYouTubeModal(true);
       } else if (params.get("youtube_auth") === "error") {
         setYtError(params.get("error_detail") || "Failed to authenticate with Google.");
         setShowYouTubeModal(true);
       }
     }
   }, []);
+
+  const handleUrlChange = (newUrl: string) => {
+    setUrl(newUrl);
+    if (typeof window !== "undefined") {
+      try {
+        localStorage.setItem("saveit_viral_url", newUrl);
+        localStorage.setItem("saveit_last_url", newUrl);
+      } catch {}
+    }
+  };
 
   const handleSaveCredentials = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -143,10 +180,19 @@ export function ViralClips() {
     setYtError(null);
     setYtPublishResult(null);
 
-    const baseTitle = renderedClip?.hook_title?.trim() || selectedClip?.hook_title?.trim() || videoTitle || "Viral Short";
-    const initialTitle = baseTitle.toLowerCase().includes("#shorts") ? baseTitle : `${baseTitle} #Shorts`;
+    // Automatically set title from the best AI hook
+    const bestAiHook =
+      renderedClip?.hook_title?.trim() ||
+      selectedClip?.hook_title?.trim() ||
+      (clips.length > 0 && clips[0]?.hook_title?.trim()) ||
+      videoTitle ||
+      "Viral Short";
+    const initialTitle = bestAiHook.toLowerCase().includes("#shorts") ? bestAiHook : `${bestAiHook} #Shorts`;
     setYtTitle(initialTitle);
-    setYtDescription(`${initialTitle}\n\nKey moment from ${videoTitle || "video"}.\n#Shorts #viral #trending`);
+
+    // Default to using YouTube Channel Upload Defaults (no manual description required)
+    setUseDefaultDescription(true);
+    setYtDescription("");
 
     try {
       const status = await apiClient.getYouTubeStatus();
@@ -172,10 +218,9 @@ export function ViralClips() {
       const res = await apiClient.publishToYouTube({
         filename: renderedClip.filename,
         title: ytTitle.trim(),
-        description: ytDescription.trim(),
+        description: useDefaultDescription ? "" : ytDescription.trim(),
         privacy: ytPrivacy,
         access_token: ytAccessToken.trim() || undefined,
-        tags: ["Shorts", "Viral", "Trending"],
       });
       setYtPublishResult(res);
     } catch (err: any) {
@@ -236,6 +281,12 @@ export function ViralClips() {
       const res = await apiClient.analyzeClips(url.trim(), 30, 60, 4);
       setVideoTitle(res.title || "Video Highlights");
       setClips(res.clips);
+      if (typeof window !== "undefined") {
+        try {
+          sessionStorage.setItem("saveit_viral_clips", JSON.stringify(res.clips));
+          sessionStorage.setItem("saveit_viral_title", res.title || "Video Highlights");
+        } catch {}
+      }
       if (res.clips.length > 0) {
         setSelectedClip(res.clips[0]);
         setHookTitle("");
@@ -371,15 +422,42 @@ export function ViralClips() {
 
   return (
     <div className="w-full max-w-3xl mx-auto space-y-8 animate-in fade-in-0 duration-300">
+      {/* Persistent YouTube Connected Status Banner */}
+      {ytAuthStatus?.connected && (
+        <div className="flex flex-wrap items-center justify-between gap-2 px-4 py-2.5 rounded-xl border border-red-500/30 bg-red-950/20 text-xs shadow-sm">
+          <div className="flex items-center gap-2 text-red-300 font-medium">
+            <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse" />
+            <span className="text-zinc-400">YouTube Channel:</span>
+            <span className="text-white font-semibold">{ytAuthStatus.channel_title || "Connected YouTube Channel"}</span>
+          </div>
+          <div className="flex items-center gap-3">
+            <button
+              type="button"
+              onClick={handleOpenYouTubeModal}
+              className="text-red-400 hover:text-red-300 underline font-medium"
+            >
+              Shorts Settings
+            </button>
+            <button
+              type="button"
+              onClick={handleDisconnectYouTube}
+              className="text-zinc-400 hover:text-zinc-200"
+            >
+              Disconnect
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Search / Ingest Bar */}
-      <form onSubmit={handleAnalyze} className="relative">
+      <form onSubmit={handleAnalyze} className="relative space-y-2">
         <div className="flex flex-col sm:flex-row items-center gap-2 p-1.5 rounded-2xl border border-zinc-800 bg-zinc-900/90 shadow-2xl backdrop-blur-xl">
           <div className="flex items-center gap-2.5 px-3 w-full sm:flex-1">
             <Scissors className="w-5 h-5 text-violet-400 shrink-0" />
             <input
               type="text"
               value={url}
-              onChange={(e) => setUrl(e.target.value)}
+              onChange={(e) => handleUrlChange(e.target.value)}
               placeholder="Paste long YouTube video or podcast URL (e.g. youtube.com/watch?v=...)"
               disabled={isAnalyzing}
               className="w-full bg-transparent text-white placeholder-zinc-500 text-sm focus:outline-none py-2"
@@ -416,6 +494,27 @@ export function ViralClips() {
             )}
           </Button>
         </div>
+
+        {/* Suggest previously used link if input is empty */}
+        {suggestedUrl && !url && (
+          <div className="flex items-center gap-2 text-xs text-zinc-400 px-2 py-1">
+            <span>💡 Recent link:</span>
+            <button
+              type="button"
+              onClick={() => handleUrlChange(suggestedUrl)}
+              className="text-violet-400 hover:text-violet-300 underline font-medium truncate max-w-xs sm:max-w-md text-left"
+            >
+              {suggestedUrl}
+            </button>
+            <button
+              type="button"
+              onClick={() => handleUrlChange(suggestedUrl)}
+              className="px-2 py-0.5 rounded-md bg-violet-500/20 text-violet-300 hover:bg-violet-500/30 font-semibold text-[11px]"
+            >
+              Use Link
+            </button>
+          </div>
+        )}
       </form>
 
       {/* Analysis Error */}
@@ -1233,9 +1332,13 @@ export function ViralClips() {
                 {/* Form fields */}
                 <form onSubmit={handlePublishToYouTube} className="space-y-4">
                   <div className="space-y-1.5">
-                    <label className="text-xs font-medium text-zinc-300">
-                      Short Title (includes #Shorts tag)
-                    </label>
+                    <div className="flex items-center justify-between">
+                      <label className="text-xs font-medium text-zinc-300 flex items-center gap-1.5">
+                        <Sparkles className="w-3.5 h-3.5 text-amber-400" />
+                        <span>Short Title (from AI Best Hook)</span>
+                      </label>
+                      <span className="text-[11px] text-zinc-500">{ytTitle.length}/100</span>
+                    </div>
                     <input
                       type="text"
                       value={ytTitle}
@@ -1246,20 +1349,44 @@ export function ViralClips() {
                       required
                     />
                     <div className="flex justify-between text-[11px] text-zinc-500">
-                      <span>YouTube automatically renders videos with #Shorts as vertical Shorts</span>
-                      <span>{ytTitle.length}/100</span>
+                      <span>Auto-filled from top viral hook with #Shorts tag</span>
                     </div>
                   </div>
 
-                  <div className="space-y-1.5">
-                    <label className="text-xs font-medium text-zinc-300">Description</label>
-                    <textarea
-                      rows={2}
-                      value={ytDescription}
-                      onChange={(e) => setYtDescription(e.target.value)}
-                      className="w-full bg-zinc-950 border border-zinc-800 rounded-lg px-3.5 py-2 text-xs text-white placeholder-zinc-500 focus:outline-none focus:border-red-500/50 resize-none"
-                      placeholder="Add description and hashtags..."
-                    />
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between">
+                      <label className="text-xs font-medium text-zinc-300">Description</label>
+                      <label className="flex items-center gap-1.5 text-xs text-zinc-400 cursor-pointer select-none">
+                        <input
+                          type="checkbox"
+                          checked={useDefaultDescription}
+                          onChange={(e) => setUseDefaultDescription(e.target.checked)}
+                          className="rounded border-zinc-700 bg-zinc-800 text-red-600 focus:ring-0 w-3.5 h-3.5"
+                        />
+                        <span>Use YouTube Channel Upload Defaults</span>
+                      </label>
+                    </div>
+
+                    {useDefaultDescription ? (
+                      <div className="rounded-lg border border-zinc-800/80 bg-zinc-950/60 p-3 text-xs text-zinc-400 flex items-center justify-between">
+                        <span>YouTube will automatically apply your channel's default description, links, and hashtags from YouTube Studio settings.</span>
+                        <button
+                          type="button"
+                          onClick={() => setUseDefaultDescription(false)}
+                          className="text-xs text-red-400 hover:text-red-300 underline font-medium shrink-0 ml-2"
+                        >
+                          Customize
+                        </button>
+                      </div>
+                    ) : (
+                      <textarea
+                        rows={2}
+                        value={ytDescription}
+                        onChange={(e) => setYtDescription(e.target.value)}
+                        className="w-full bg-zinc-950 border border-zinc-800 rounded-lg px-3.5 py-2 text-xs text-white placeholder-zinc-500 focus:outline-none focus:border-red-500/50 resize-none"
+                        placeholder="Add custom description and hashtags (leave empty to use YouTube defaults)..."
+                      />
+                    )}
                   </div>
 
                   <div className="space-y-1.5">

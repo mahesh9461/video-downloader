@@ -30,6 +30,11 @@ export function UrlInput({ onSubmit, isLoading, disabled }: UrlInputProps) {
     (e?: React.FormEvent) => {
       e?.preventDefault();
       if (isValidUrl(url) && !isLoading && !disabled) {
+        if (typeof window !== "undefined") {
+          try {
+            localStorage.setItem("saveit_last_url", url.trim());
+          } catch {}
+        }
         onSubmit(url.trim());
       }
     },
@@ -41,6 +46,11 @@ export function UrlInput({ onSubmit, isLoading, disabled }: UrlInputProps) {
       const text = await navigator.clipboard.readText();
       setUrl(text);
       if (isValidUrl(text)) {
+        if (typeof window !== "undefined") {
+          try {
+            localStorage.setItem("saveit_last_url", text.trim());
+          } catch {}
+        }
         onSubmit(text.trim());
       }
     } catch {
