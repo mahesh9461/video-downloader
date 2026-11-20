@@ -1,0 +1,15 @@
+{
+  "is_running": true,
+  "state": "cooldown",
+  "current_batch": null,
+  "processed_video_ids": [],
+  "daily_uploads_count": 6,
+  "daily_upload_limit": 6,
+  "upload_interval_seconds": 3600,
+  "cooldown_until": 1795233437.923893,
+  "disk_space_cleaned_mb": 0.0,
+  "last_cleaned_at": "2026-11-20T15:27:17.919420",
+  "recent_logs": [
+    "[15:27:17] \ud83d\udee1\ufe0f Daily upload limit reached (6/6). Entering 18-hour cooldown to protect Google API quota."
+  ]
+}

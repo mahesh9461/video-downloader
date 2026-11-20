@@ -41,7 +41,9 @@ from app.schemas import (
     YouTubePublishRequest,
     YouTubePublishResponse,
     YouTubeAuthStatus,
+    AutopilotStatus,
 )
+from app.autopilot import autopilot_manager
 from app.ai_hook import generate_ai_hook
 from app.youtube_publisher import (
     get_youtube_status,
@@ -152,9 +154,19 @@ async def cleanup_old_files():
         await asyncio.sleep(60)
 
 
+async def autopilot_background_worker():
+    while True:
+        try:
+            await autopilot_manager.tick()
+        except Exception as e:
+            logger.debug("Error in autopilot background task: %s", e)
+        await asyncio.sleep(20)
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     cleanup_task = asyncio.create_task(cleanup_old_files())
+    autopilot_task = asyncio.create_task(autopilot_background_worker())
     logger.info("Started video downloader service. FFmpeg: %s", FFMPEG_PATH or "Not Found")
     # Pre-warm FFmpeg binary into OS memory
     if FFMPEG_PATH:
@@ -170,8 +182,13 @@ async def lifespan(app: FastAPI):
             logger.debug("FFmpeg pre-warm skipped: %s", e)
     yield
     cleanup_task.cancel()
+    autopilot_task.cancel()
     try:
         await cleanup_task
+    except asyncio.CancelledError:
+        pass
+    try:
+        await autopilot_task
     except asyncio.CancelledError:
         pass
 
@@ -1171,4 +1188,56 @@ async def youtube_publish_endpoint(req: YouTubePublishRequest):
     except Exception as e:
         logger.error("Failed to publish video to YouTube: %s", e)
         raise HTTPException(status_code=500, detail=f"Failed to publish to YouTube: {str(e)}")
+
+
+# ---------------------------------------------------------------------------
+# GTA 6 Autopilot & Scheduled Publishing Endpoints
+# ---------------------------------------------------------------------------
+
+
+@app.get("/api/autopilot/status", response_model=AutopilotStatus)
+async def autopilot_status_endpoint():
+    """Retrieve runtime status, queue, cooldown, and disk space cleaned."""
+    return autopilot_manager.get_status()
+
+
+@app.post("/api/autopilot/start", response_model=AutopilotStatus)
+async def autopilot_start_endpoint():
+    """Starts or resumes the GTA 6 viral autopilot worker."""
+    autopilot_manager.start()
+    return autopilot_manager.get_status()
+
+
+@app.post("/api/autopilot/pause", response_model=AutopilotStatus)
+async def autopilot_pause_endpoint():
+    """Pauses the autopilot scheduler."""
+    autopilot_manager.pause()
+    return autopilot_manager.get_status()
+
+
+@app.post("/api/autopilot/trigger", response_model=AutopilotStatus)
+async def autopilot_trigger_endpoint(background_tasks: BackgroundTasks):
+    """Immediately triggers viral discovery and 6-clip batch creation."""
+    async def _run_batch():
+        video = await autopilot_manager.search_viral_gta_video()
+        if video:
+            await autopilot_manager.create_and_render_batch(video)
+
+    background_tasks.add_task(_run_batch)
+    return autopilot_manager.get_status()
+
+
+@app.post("/api/autopilot/cleanup")
+async def autopilot_cleanup_endpoint():
+    """Manually purges orphan temporary downloads from disk."""
+    freed = autopilot_manager.purge_orphan_downloads()
+    return {"freed_mb": round(freed, 2), "total_cleaned_mb": round(autopilot_manager.disk_space_cleaned_mb, 2)}
+
+
+@app.get("/api/autopilot/audio")
+async def autopilot_audio_endpoint():
+    """List available custom audio tracks in assets/audio/."""
+    files = autopilot_manager.get_custom_audio_files()
+    return {"custom_tracks": files, "count": len(files)}
+
 

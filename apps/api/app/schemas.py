@@ -209,3 +209,55 @@ class YouTubeAuthStatus(BaseModel):
     auth_url: Optional[str] = None
 
 
+# ---------------------------------------------------------------------------
+# GTA 6 Autopilot & Scheduled Publishing schemas
+# ---------------------------------------------------------------------------
+
+
+class AutopilotClipItem(BaseModel):
+    id: str
+    source_video_id: str
+    source_title: str
+    clip_index: int = Field(..., ge=1, le=6, description="Index of clip within the 6-clip daily batch")
+    start_time: float
+    end_time: float
+    duration: float
+    hook_title: str
+    hook_style: str = "hormozi_bold"
+    progress_bar_color: str = "yellow"
+    layout: str = "center_crop"
+    background_music: str = "none"
+    filename: Optional[str] = None
+    scheduled_time: Optional[str] = None
+    status: str = Field("queued", description="'queued', 'rendering', 'uploading', 'published', 'cleaned', 'failed'")
+    youtube_video_id: Optional[str] = None
+    youtube_url: Optional[str] = None
+    error: Optional[str] = None
+
+
+class AutopilotBatch(BaseModel):
+    batch_id: str
+    source_video_id: str
+    source_title: str
+    source_url: str
+    created_at: str
+    clips: List[AutopilotClipItem] = Field(default_factory=list)
+    status: str = Field("processing", description="'processing', 'queued', 'completed', 'cooldown'")
+
+
+class AutopilotStatus(BaseModel):
+    is_running: bool
+    state: str = Field("idle", description="'idle', 'searching', 'rendering', 'queued', 'uploading', 'cooldown', 'paused'")
+    current_batch: Optional[AutopilotBatch] = None
+    next_upload_time: Optional[str] = None
+    seconds_until_next_upload: Optional[int] = None
+    daily_uploads_count: int = 0
+    daily_upload_limit: int = 6
+    cooldown_until: Optional[str] = None
+    disk_space_cleaned_mb: float = 0.0
+    last_cleaned_at: Optional[str] = None
+    cpu_mode: str = "low_load_threads_2"
+    recent_logs: List[str] = Field(default_factory=list)
+
+
+

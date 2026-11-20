@@ -27,6 +27,7 @@ import { HistoryDrawer } from "@/components/history-drawer";
 import { ErrorBanner } from "@/components/error-banner";
 import { WatermarkRemover } from "@/components/watermark-remover";
 import { ViralClips } from "@/components/viral-clips";
+import { AutopilotDashboard } from "@/components/autopilot-dashboard";
 import { useDownload } from "@/hooks/use-download";
 import { useHistory } from "@/hooks/use-history";
 import { cleanVideoUrl, detectPlatform } from "@/lib/validators";
@@ -38,7 +39,7 @@ import {
 } from "@/lib/analytics";
 
 export default function Home() {
-  const [activeTab, setActiveTab] = useState<"downloader" | "watermark" | "clips">("downloader");
+  const [activeTab, setActiveTab] = useState<"downloader" | "watermark" | "clips" | "autopilot">("downloader");
   const [historyOpen, setHistoryOpen] = useState(false);
   const [currentUrl, setCurrentUrl] = useState("");
   const [activeFormatId, setActiveFormatId] = useState<string | null>(null);
@@ -125,7 +126,7 @@ export default function Home() {
         <div className="absolute top-12 left-1/2 -translate-x-1/2 w-96 h-96 bg-violet-600/10 rounded-full blur-3xl pointer-events-none -z-10" />
 
         {/* Top Feature Switcher Tabs */}
-        <nav aria-label="Feature navigation" className="w-full max-w-xl mx-auto mb-10 flex items-center p-1.5 rounded-2xl bg-zinc-900/90 border border-zinc-800 shadow-xl backdrop-blur-xl">
+        <nav aria-label="Feature navigation" className="w-full max-w-2xl mx-auto mb-10 flex items-center p-1.5 rounded-2xl bg-zinc-900/90 border border-zinc-800 shadow-xl backdrop-blur-xl">
           <button
             type="button"
             role="tab"
@@ -138,7 +139,7 @@ export default function Home() {
             }`}
           >
             <Download className="w-4 h-4" />
-            <span>Download Video</span>
+            <span>Download</span>
           </button>
 
           <button
@@ -153,7 +154,7 @@ export default function Home() {
             }`}
           >
             <Eraser className="w-4 h-4" />
-            <span>Watermark Remover</span>
+            <span>Watermark</span>
           </button>
 
           <button
@@ -168,7 +169,22 @@ export default function Home() {
             }`}
           >
             <Scissors className="w-4 h-4" />
-            <span>Viral Shorts (AI)</span>
+            <span>Viral Shorts</span>
+          </button>
+
+          <button
+            type="button"
+            role="tab"
+            aria-selected={activeTab === "autopilot"}
+            onClick={() => setActiveTab("autopilot")}
+            className={`flex-1 flex items-center justify-center gap-2 py-2.5 px-3 rounded-xl text-xs sm:text-sm font-semibold transition-all ${
+              activeTab === "autopilot"
+                ? "bg-red-600 text-white shadow-lg shadow-red-600/30"
+                : "text-zinc-400 hover:text-white"
+            }`}
+          >
+            <Sparkles className="w-4 h-4 text-amber-300" />
+            <span className="font-bold">GTA 6 Autopilot</span>
           </button>
         </nav>
 
@@ -298,6 +314,13 @@ export default function Home() {
               </p>
             </section>
             <ViralClips />
+          </div>
+        )}
+
+        {/* TAB 4: GTA 6 VIRAL AUTOPILOT */}
+        {activeTab === "autopilot" && (
+          <div className="w-full flex flex-col items-center">
+            <AutopilotDashboard />
           </div>
         )}
 

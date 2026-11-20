@@ -370,6 +370,7 @@ def render_viral_clip(
     progress_bar: bool = True,
     progress_bar_color: str = "yellow",
     subtitles_path: Optional[str] = None,
+    threads: int = 0,
 ) -> Dict[str, Any]:
     """
     Renders a vertical 9:16 viral short using FFmpeg.
@@ -393,8 +394,21 @@ def render_viral_clip(
         subtitles_path=subtitles_path,
     )
 
-    has_music = (
-        background_music
+    # Check for custom audio file or procedural preset
+    custom_audio_path: Optional[str] = None
+    if background_music and background_music != "none":
+        p = Path(background_music)
+        if p.is_file():
+            custom_audio_path = str(p.resolve())
+        else:
+            asset_candidate = Path(__file__).resolve().parent.parent / "assets" / "audio" / background_music
+            if asset_candidate.is_file():
+                custom_audio_path = str(asset_candidate.resolve())
+
+    has_custom_audio = custom_audio_path is not None
+    has_synth_music = (
+        not has_custom_audio
+        and background_music
         and background_music != "none"
         and background_music in SYNTH_EXPRESSIONS
     )
@@ -406,7 +420,20 @@ def render_viral_clip(
         "-i", input_path,
     ]
 
-    if has_music:
+    if has_custom_audio:
+        # Loop custom background audio track and duck volume
+        cmd.extend([
+            "-stream_loop", "-1",
+            "-i", custom_audio_path,
+            "-filter_complex",
+            f"{video_filter};"
+            f"[0:a]volume=1.0[voice];"
+            f"[1:a]volume={music_volume}[music];"
+            f"[voice][music]amix=inputs=2:duration=first:dropout_transition=2[a]",
+            "-map", "[v]",
+            "-map", "[a]",
+        ])
+    elif has_synth_music:
         # Generate procedural harmonic background music bed
         synth_expr = SYNTH_EXPRESSIONS[background_music]
         cmd.extend([
@@ -427,10 +454,11 @@ def render_viral_clip(
             "-map", "0:a?",  # Map audio if present
         ])
 
+    thread_str = str(threads) if threads > 0 else "0"
     cmd.extend([
         "-c:v", "libx264",
         "-preset", "ultrafast",
-        "-threads", "0",
+        "-threads", thread_str,
         "-tune", "fastdecode",
         "-crf", "23",
         "-c:a", "aac",

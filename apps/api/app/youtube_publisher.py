@@ -90,6 +90,18 @@ def save_stored_token(token_data: Dict[str, Any]) -> None:
         TOKEN_CACHE_FILE.write_text(json.dumps(_token_store), encoding="utf-8")
     except Exception as e:
         logger.warning("Failed to write token cache: %s", e)
+    # Sync to Supabase in background if configured
+    try:
+        from app.supabase_client import save_youtube_tokens_supabase, is_supabase_configured
+        if is_supabase_configured():
+            import asyncio
+            try:
+                loop = asyncio.get_running_loop()
+                loop.create_task(save_youtube_tokens_supabase(dict(_token_store)))
+            except RuntimeError:
+                pass
+    except Exception:
+        pass
 
 
 def clear_stored_token() -> None:
@@ -243,6 +255,19 @@ async def get_youtube_status() -> Dict[str, Any]:
     client_id, client_secret = get_google_credentials()
     configured = bool(client_id and client_secret)
     token = get_stored_token()
+
+    # If not in local cache, attempt to restore from Supabase cloud database
+    if not token:
+        try:
+            from app.supabase_client import get_youtube_tokens_supabase, is_supabase_configured
+            if is_supabase_configured():
+                cloud_tokens = await get_youtube_tokens_supabase()
+                if cloud_tokens and cloud_tokens.get("access_token"):
+                    save_stored_token(cloud_tokens)
+                    token = cloud_tokens["access_token"]
+        except Exception as e:
+            logger.debug("Failed to restore token from Supabase: %s", e)
+
     connected = False
     channel_info = {}
 

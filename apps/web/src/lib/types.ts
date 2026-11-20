@@ -166,4 +166,51 @@ export interface YouTubeAuthStatus {
   auth_url?: string;
 }
 
+export interface AutopilotClipItem {
+  id: string;
+  source_video_id: string;
+  source_title: string;
+  clip_index: number;
+  start_time: number;
+  end_time: number;
+  duration: number;
+  hook_title: string;
+  hook_style: string;
+  progress_bar_color: string;
+  layout: string;
+  background_music: string;
+  filename?: string | null;
+  scheduled_time?: string | null;
+  status: "queued" | "rendering" | "uploading" | "published" | "cleaned" | "failed";
+  youtube_video_id?: string | null;
+  youtube_url?: string | null;
+  error?: string | null;
+}
+
+export interface AutopilotBatch {
+  batch_id: string;
+  source_video_id: string;
+  source_title: string;
+  source_url: string;
+  created_at: string;
+  clips: AutopilotClipItem[];
+  status: "processing" | "queued" | "completed" | "cooldown";
+}
+
+export interface AutopilotStatus {
+  is_running: boolean;
+  state: "idle" | "searching" | "rendering" | "queued" | "uploading" | "cooldown" | "paused";
+  current_batch?: AutopilotBatch | null;
+  next_upload_time?: string | null;
+  seconds_until_next_upload?: number | null;
+  daily_uploads_count: number;
+  daily_upload_limit: number;
+  cooldown_until?: string | null;
+  disk_space_cleaned_mb: number;
+  last_cleaned_at?: string | null;
+  cpu_mode: string;
+  recent_logs: string[];
+}
+
+
 

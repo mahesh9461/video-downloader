@@ -14,6 +14,7 @@ import {
   YouTubePublishRequest,
   YouTubePublishResponse,
   YouTubeAuthStatus,
+  AutopilotStatus,
 } from "./types";
 
 const getApiBase = () => {
@@ -349,6 +350,62 @@ class ApiClient {
       throw new DownloadError(detail, errorType);
     }
 
+    return response.json();
+  }
+
+  async getAutopilotStatus(): Promise<AutopilotStatus> {
+    const response = await fetch(this.resolveUrl("/api/autopilot/status"));
+    if (!response.ok) {
+      throw new DownloadError("Failed to fetch autopilot status", "unknown");
+    }
+    return response.json();
+  }
+
+  async startAutopilot(): Promise<AutopilotStatus> {
+    const response = await fetch(this.resolveUrl("/api/autopilot/start"), {
+      method: "POST",
+    });
+    if (!response.ok) {
+      throw new DownloadError("Failed to start autopilot", "unknown");
+    }
+    return response.json();
+  }
+
+  async pauseAutopilot(): Promise<AutopilotStatus> {
+    const response = await fetch(this.resolveUrl("/api/autopilot/pause"), {
+      method: "POST",
+    });
+    if (!response.ok) {
+      throw new DownloadError("Failed to pause autopilot", "unknown");
+    }
+    return response.json();
+  }
+
+  async triggerAutopilot(): Promise<AutopilotStatus> {
+    const response = await fetch(this.resolveUrl("/api/autopilot/trigger"), {
+      method: "POST",
+    });
+    if (!response.ok) {
+      throw new DownloadError("Failed to trigger autopilot", "unknown");
+    }
+    return response.json();
+  }
+
+  async cleanupAutopilotDisk(): Promise<{ freed_mb: number; total_cleaned_mb: number }> {
+    const response = await fetch(this.resolveUrl("/api/autopilot/cleanup"), {
+      method: "POST",
+    });
+    if (!response.ok) {
+      throw new DownloadError("Failed to cleanup disk", "unknown");
+    }
+    return response.json();
+  }
+
+  async getAutopilotAudio(): Promise<{ custom_tracks: string[]; count: number }> {
+    const response = await fetch(this.resolveUrl("/api/autopilot/audio"));
+    if (!response.ok) {
+      throw new DownloadError("Failed to fetch audio tracks", "unknown");
+    }
     return response.json();
   }
 }

@@ -228,6 +228,60 @@ def generate_hook_from_free_open_llm(
     return None
 
 
+def generate_hook_from_gemini(transcript: str, video_title: str = "") -> Optional[str]:
+    """
+    Generates an ultra-engaging viral hook headline using Google Gemini Flash (100% Free Tier).
+    Uses the working gemini-flash-lite-latest endpoint.
+    """
+    gemini_key = os.getenv("GEMINI_API_KEY")
+    if not gemini_key:
+        return None
+
+    context = transcript[:1500] if transcript else video_title
+    prompt = (
+        "You are an elite viral YouTube Shorts growth expert with 100M+ views.\n"
+        f"Video title: {video_title}\n"
+        f"Context / dialogue: {context}\n\n"
+        "Generate a high-converting, curiosity-driven 3 to 5 word viral hook headline for this vertical Short.\n"
+        "Examples of viral hooks:\n"
+        "- WAIT FOR THE DROP\n"
+        "- THIS PART HITS DIFFERENT\n"
+        "- NOBODY EXPECTED THIS\n"
+        "- THE HARDEST TRUTH\n"
+        "- GTA 6 SECRET MILITARY BASE\n\n"
+        "Rules:\n"
+        "1. Exactly 3 to 5 words.\n"
+        "2. Output ONLY the plain text headline in UPPERCASE.\n"
+        "3. Never mention 'segment', 'clip', 'highlight', 'key', or 'video'.\n"
+        "4. NO emojis, NO quotes, NO hashtags, NO periods."
+    )
+
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-lite-latest:generateContent?key={gemini_key}"
+    payload = {"contents": [{"parts": [{"text": prompt}]}]}
+
+    try:
+        with httpx.Client(timeout=8.0) as client:
+            resp = client.post(url, json=payload)
+            if resp.status_code == 200:
+                data = resp.json()
+                candidates = data.get("candidates", [])
+                if candidates and "content" in candidates[0]:
+                    parts = candidates[0]["content"].get("parts", [])
+                    if parts and "text" in parts[0]:
+                        raw = parts[0]["text"].strip()
+                        clean = re.sub(r'["\']', "", raw).strip()
+                        clean = re.sub(r"[^\x20-\x7E]", "", clean).strip()
+                        if "\n" in clean:
+                            clean = clean.split("\n")[0].strip()
+                        if clean and 2 <= len(clean.split()) <= 7:
+                            logger.info("Google Gemini Flash viral hook generated: %s", clean)
+                            return clean
+    except Exception as e:
+        logger.debug("Gemini hook generation skipped: %s", e)
+
+    return None
+
+
 def generate_ai_hook(
     video_path: str,
     start_time: float,
@@ -241,24 +295,32 @@ def generate_ai_hook(
     """
     100% Free AI Hook pipeline:
     1. Obtains clip transcript for FREE via YouTube subtitles or dialogue cues.
-    2. Uses Free DeepSeek / Open LLM with ZERO API keys required.
-    3. Seamlessly falls back to local dialogue NLP heuristics if offline.
+    2. Uses Google Gemini Flash (100% Free Tier) if key is configured.
+    3. Falls back to Free DeepSeek / Open LLM with ZERO API keys required.
+    4. Seamlessly falls back to local dialogue NLP heuristics if offline.
     """
     # Step 1: Obtain Dialogue Transcript (Free YouTube Subtitles first)
     transcript: Optional[str] = clip_dialogue
     if not transcript and source_url:
         transcript = fetch_free_youtube_transcript(source_url, start_time, end_time)
 
-    # Step 2: Generate Viral Hook Headline using DeepSeek / Free Open LLM or Local NLP
+    # Step 2: Generate Viral Hook Headline
     hook: Optional[str] = None
     source = provider or "deepseek"
 
-    # Option A: DeepSeek / Free Open LLM
-    hook = generate_hook_from_free_open_llm(transcript or video_title, video_title, provider=provider)
-    if hook:
-        source = "deepseek" if provider == "deepseek" else ("ollama" if provider == "ollama" else "free_open_llm")
+    # Option A: Google Gemini Flash (if GEMINI_API_KEY is configured)
+    if os.getenv("GEMINI_API_KEY"):
+        hook = generate_hook_from_gemini(transcript or video_title, video_title)
+        if hook:
+            source = "gemini_flash"
 
-    # Option B: Instant Local NLP Hook Analyzer (100% Offline, Pure Python, Instant)
+    # Option B: DeepSeek / Free Open LLM
+    if not hook:
+        hook = generate_hook_from_free_open_llm(transcript or video_title, video_title, provider=provider)
+        if hook:
+            source = "deepseek" if provider == "deepseek" else ("ollama" if provider == "ollama" else "free_open_llm")
+
+    # Option C: Instant Local NLP Hook Analyzer (100% Offline, Pure Python, Instant)
     if not hook:
         hook = generate_hook_title(transcript or video_title, fallback_topic=video_title)
         hook = re.sub(r"[^\x20-\x7E]", "", hook).strip()
