@@ -17,6 +17,10 @@
     "test:web": "npm test -w web",
     "test:api": "./scripts/test-api.sh",
     "lint": "npm run lint -w web"
+  },
+  "devDependencies": {
+    "@types/react": "^19",
+    "@types/react-dom": "^19"
   }
 }
 
