@@ -575,7 +575,7 @@ class AutopilotManager:
                 cover_filename = f"gta6_cover_{batch_id}_{clip_index}.jpg"
                 cover_output_path = str(DOWNLOAD_DIR / cover_filename)
                 try:
-                    from app.cover_generator import generate_viral_cover_image
+                    from app.cover_generator import generate_viral_cover_image, attach_cover_intro_to_video
                     await asyncio.to_thread(
                         generate_viral_cover_image,
                         video_path=output_path,
@@ -590,29 +590,20 @@ class AutopilotManager:
                         clip.cover_filename = cover_filename
                         clip.cover_url = f"/api/file/{cover_filename}"
                         self._log(f"🖼️ Generated Full HD viral cover for Short #{clip_index}: {cover_filename}")
-                except Exception as cover_err:
-                    logger.debug("Cover image generation skipped: %s", cover_err)
 
-
-                # Generate Full HD 1080x1920 viral cover image
-                cover_filename = f"gta6_cover_{batch_id}_{clip_index}.jpg"
-                cover_output_path = str(DOWNLOAD_DIR / cover_filename)
-                try:
-                    from app.cover_generator import generate_viral_cover_image
-                    await asyncio.to_thread(
-                        generate_viral_cover_image,
-                        video_path=output_path,
-                        output_path=cover_output_path,
-                        hook_title=final_hook,
-                        hook_style=profile["hook_style"],
-                        badge_text="GTA 6 EXCLUSIVE",
-                        template_index=idx,
-                        use_gta_template=True,
-                    )
-                    if os.path.exists(cover_output_path):
-                        clip.cover_filename = cover_filename
-                        clip.cover_url = f"/api/file/{cover_filename}"
-                        self._log(f"🖼️ Generated Full HD viral cover for Short #{clip_index}: {cover_filename}")
+                        # Concat / slap the cover image onto the video as the opening frame (0.35s)
+                        # so YouTube Shorts automatically uses this cover image on mobile feeds & Shorts player
+                        merged_temp_path = str(DOWNLOAD_DIR / f"merged_{output_filename}")
+                        merged_ok = await asyncio.to_thread(
+                            attach_cover_intro_to_video,
+                            video_path=output_path,
+                            cover_path=cover_output_path,
+                            output_path=merged_temp_path,
+                            duration=0.35,
+                        )
+                        if merged_ok and os.path.exists(merged_temp_path) and os.path.getsize(merged_temp_path) > 0:
+                            os.replace(merged_temp_path, output_path)
+                            self._log(f"🎯 Concat slapped cover as opening frame on Short #{clip_index}")
                 except Exception as cover_err:
                     logger.debug("Cover image generation skipped: %s", cover_err)
 

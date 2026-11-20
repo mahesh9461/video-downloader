@@ -185,3 +185,95 @@ def generate_viral_cover_image(
             pass
 
     return False
+
+
+def attach_cover_intro_to_video(
+    video_path: str,
+    cover_path: str,
+    output_path: str,
+    duration: float = 0.35,
+) -> bool:
+    """
+    Slices / concats the Full HD cover image as the opening frame (default 0.35s) of the video.
+    This guarantees that YouTube Shorts automatically selects this high-energy GTA 6 cover
+    as the Short's thumbnail on mobile feeds, Shorts player, and video previews.
+    """
+    ffmpeg = FFMPEG_PATH or shutil.which("ffmpeg")
+    if not ffmpeg:
+        try:
+            import static_ffmpeg
+            static_ffmpeg.add_paths()
+            ffmpeg = shutil.which("ffmpeg")
+        except Exception:
+            pass
+
+    if not ffmpeg or not os.path.exists(video_path) or not os.path.exists(cover_path):
+        return False
+
+    ffprobe = shutil.which("ffprobe")
+    has_audio = False
+    if ffprobe:
+        try:
+            probe_cmd = [
+                ffprobe, "-v", "error",
+                "-select_streams", "a",
+                "-show_entries", "stream=codec_name",
+                "-of", "default=noprint_wrappers=1:nokey=1",
+                video_path,
+            ]
+            res = subprocess.run(probe_cmd, capture_output=True, text=True, timeout=5)
+            has_audio = bool(res.stdout.strip())
+        except Exception:
+            pass
+
+    fps = 30
+    loops = max(1, int(duration * fps))
+
+    if has_audio:
+        filtergraph = (
+            f"[0:v]loop=loop={loops}:size=1:start=0,scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,setsar=1,fps={fps}[vc];"
+            f"[1:v]scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,setsar=1,fps={fps}[vm];"
+            f"[vc][vm]concat=n=2:v=1:a=0[outv];"
+            f"aevalsrc=0:d={duration}:s=44100[silence];"
+            f"[silence][1:a]concat=n=2:v=0:a=1[outa]"
+        )
+        cmd = [
+            ffmpeg, "-y",
+            "-i", str(cover_path),
+            "-i", str(video_path),
+            "-filter_complex", filtergraph,
+            "-map", "[outv]",
+            "-map", "[outa]",
+            "-c:v", "libx264", "-preset", "ultrafast",
+            "-c:a", "aac",
+            "-movflags", "+faststart",
+            str(output_path),
+        ]
+    else:
+        filtergraph = (
+            f"[0:v]loop=loop={loops}:size=1:start=0,scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,setsar=1,fps={fps}[vc];"
+            f"[1:v]scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,setsar=1,fps={fps}[vm];"
+            f"[vc][vm]concat=n=2:v=1:a=0[outv]"
+        )
+        cmd = [
+            ffmpeg, "-y",
+            "-i", str(cover_path),
+            "-i", str(video_path),
+            "-filter_complex", filtergraph,
+            "-map", "[outv]",
+            "-c:v", "libx264", "-preset", "ultrafast",
+            "-movflags", "+faststart",
+            str(output_path),
+        ]
+
+    try:
+        proc = subprocess.run(cmd, capture_output=True, text=True, timeout=60)
+        if proc.returncode == 0 and os.path.exists(output_path) and os.path.getsize(output_path) > 0:
+            logger.info("Successfully attached cover intro to video: %s", output_path)
+            return True
+        logger.warning("Failed to attach cover intro (%d): %s", proc.returncode, proc.stderr[-200:] if proc.stderr else "")
+    except Exception as e:
+        logger.warning("Error attaching cover intro to video: %s", e)
+
+    return False
+

@@ -1,10 +1,10 @@
 {
   "is_running": false,
-  "state": "rendering",
+  "state": "error",
   "current_batch": null,
   "active_clip_id": "batch1_1",
-  "current_step": "downloading",
-  "current_step_label": "Extracting metadata for URL: https://www.youtube.com/watch?v=8-DRGbQ1IXc",
+  "current_step": "failed",
+  "current_step_label": "Failed to download source: [Errno 5] Input/output error",
   "processed_video_ids": [
     "YDNs_sPEcJc",
     "8-DRGbQ1IXc",
@@ -16,7 +16,10 @@
   "cooldown_until": null,
   "disk_space_cleaned_mb": 0.0,
   "last_cleaned_at": "2026-11-20T19:06:55.014570",
-  "recent_logs": [],
+  "recent_logs": [
+    "[19:16:37] \ud83d\udce5 Downloading source video for clipping: '\ud83d\udd34PLAYING GTA 6 EARLY ACCESS GAMEPLAY GET IN HERE!'",
+    "[19:20:49] \u274c Failed to download source video: [Errno 5] Input/output error"
+  ],
   "all_published_videos": [
     {
       "id": "batch1_1",
@@ -102,6 +105,12 @@
     }
   ],
   "recent_errors": [
+    {
+      "title": "\ud83d\udd34PLAYING GTA 6 EARLY ACCESS GAMEPLAY GET IN HERE!",
+      "stage": "download",
+      "error": "[Errno 5] Input/output error",
+      "timestamp": "2026-11-20T13:50:49.916580+00:00"
+    },
     {
       "clip_id": "8fa1db91_1",
       "title": "WAIT FOR WHAT HAPPENS NEXT...",
