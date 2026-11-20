@@ -11,6 +11,9 @@ import {
   ClipAiHookRequest,
   ClipAiHookResponse,
   ClipPresetInfo,
+  YouTubePublishRequest,
+  YouTubePublishResponse,
+  YouTubeAuthStatus,
 } from "./types";
 
 const getApiBase = () => {
@@ -256,6 +259,71 @@ class ApiClient {
     if (!response.ok) {
       let detail = "Failed to upload video";
       let errorType = "unknown";
+      try {
+        const err = await response.json();
+        detail = err.detail || detail;
+        errorType = err.error_type || errorType;
+      } catch {}
+      throw new DownloadError(detail, errorType);
+    }
+
+    return response.json();
+  }
+
+  async getYouTubeStatus(): Promise<YouTubeAuthStatus> {
+    const response = await fetch(this.resolveUrl("/api/youtube/status"));
+    if (!response.ok) {
+      throw new DownloadError("Failed to fetch YouTube auth status", "unknown");
+    }
+    return response.json();
+  }
+
+  async getYouTubeAuthUrl(): Promise<string> {
+    const response = await fetch(this.resolveUrl("/api/youtube/auth-url"));
+    if (!response.ok) {
+      let detail = "Failed to get YouTube authorization URL";
+      try {
+        const err = await response.json();
+        detail = err.detail || detail;
+      } catch {}
+      throw new DownloadError(detail, "oauth_error");
+    }
+    const data = await response.json();
+    return data.auth_url;
+  }
+
+  async configureYouTubeOAuth(clientId: string, clientSecret: string): Promise<any> {
+    const response = await fetch(this.resolveUrl("/api/youtube/configure"), {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ client_id: clientId, client_secret: clientSecret }),
+    });
+    if (!response.ok) {
+      throw new DownloadError("Failed to save YouTube OAuth credentials", "oauth_error");
+    }
+    return response.json();
+  }
+
+  async disconnectYouTube(): Promise<any> {
+    const response = await fetch(this.resolveUrl("/api/youtube/disconnect"), {
+      method: "POST",
+    });
+    if (!response.ok) {
+      throw new DownloadError("Failed to disconnect YouTube channel", "unknown");
+    }
+    return response.json();
+  }
+
+  async publishToYouTube(req: YouTubePublishRequest): Promise<YouTubePublishResponse> {
+    const response = await fetch(this.resolveUrl("/api/youtube/publish"), {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(req),
+    });
+
+    if (!response.ok) {
+      let detail = "Failed to publish video to YouTube";
+      let errorType = "youtube_error";
       try {
         const err = await response.json();
         detail = err.detail || detail;

@@ -9,12 +9,16 @@ import { createTestStore, setCurrentUrl } from "@/lib/store";
 const mockAnalyzeClips = jest.fn();
 const mockRenderClip = jest.fn();
 const mockGenerateClipAiHook = jest.fn();
+const mockGetYouTubeStatus = jest.fn();
+const mockPublishToYouTube = jest.fn();
 
 jest.mock("@/lib/api", () => ({
   apiClient: {
     analyzeClips: (...args: any[]) => mockAnalyzeClips(...args),
     renderClip: (...args: any[]) => mockRenderClip(...args),
     generateClipAiHook: (...args: any[]) => mockGenerateClipAiHook(...args),
+    getYouTubeStatus: (...args: any[]) => mockGetYouTubeStatus(...args),
+    publishToYouTube: (...args: any[]) => mockPublishToYouTube(...args),
   },
 }));
 
@@ -168,6 +172,88 @@ describe("ViralClips", () => {
         })
       );
       expect(await screen.findByText("Viral Short Ready!")).toBeInTheDocument();
+    });
+
+    it("should allow posting rendered short directly to YouTube Shorts", async () => {
+      // Arrange
+      const user = userEvent.setup();
+      mockAnalyzeClips.mockResolvedValueOnce({
+        video_id: "test12345",
+        title: "Test Podcast Episode 42",
+        total_duration: 300,
+        clips: [
+          {
+            clip_id: "clip_10_50",
+            start_time: 10,
+            end_time: 50,
+            duration: 40,
+            viral_score: 95,
+            hook_title: "THE BIGGEST MISTAKE YOU MAKE",
+            summary: "Speaker explains why startups fail.",
+            reason: "High curiosity question and speech cadence",
+            thumbnail_url: "https://i.ytimg.com/vi/test12345/hqdefault.jpg",
+            retention_rate: "96% Retention",
+            hook_rating: "Top 1% Virality",
+          },
+        ],
+      });
+
+      mockRenderClip.mockResolvedValueOnce({
+        filename: "test_viral_short.mp4",
+        filesize: 5800000,
+        duration: 40,
+        download_url: "/api/file/test_viral_short.mp4",
+        layout: "center_crop",
+        hook_title: "THE BIGGEST MISTAKE YOU MAKE",
+      });
+
+      mockGetYouTubeStatus.mockResolvedValueOnce({
+        configured: true,
+        connected: true,
+        channel_title: "Viral Creator Studio",
+        channel_id: "UC123456789",
+      });
+
+      mockPublishToYouTube.mockResolvedValueOnce({
+        video_id: "yt_published_abc123",
+        youtube_url: "https://www.youtube.com/shorts/yt_published_abc123",
+        title: "THE BIGGEST MISTAKE YOU MAKE #Shorts",
+        privacy: "public",
+        status: "uploaded",
+      });
+
+      renderWithProvider(<ViralClips />, store);
+
+      // Act 1: Analyze & Render
+      const input = screen.getByPlaceholderText(/paste long youtube video/i);
+      await user.type(input, "https://www.youtube.com/watch?v=dQw4w9WgXcQ");
+      await user.click(screen.getByRole("button", { name: /find viral moments/i }));
+
+      const oneClickBtn = await screen.findByRole("button", { name: /download most viral clip/i });
+      await user.click(oneClickBtn);
+
+      expect(await screen.findByText("Viral Short Ready!")).toBeInTheDocument();
+
+      // Act 2: Click Post to YouTube Shorts button
+      const postBtn = screen.getByRole("button", { name: /post to youtube shorts/i });
+      await user.click(postBtn);
+
+      // Assert 2: Channel connected status visible
+      expect(await screen.findByText(/connected: viral creator studio/i)).toBeInTheDocument();
+
+      // Act 3: Click Publish to YouTube Shorts Now
+      const publishNowBtn = screen.getByRole("button", { name: /publish to youtube shorts now/i });
+      await user.click(publishNowBtn);
+
+      // Assert 3: publishToYouTube API called and success banner displayed
+      expect(mockPublishToYouTube).toHaveBeenCalledWith(
+        expect.objectContaining({
+          filename: "test_viral_short.mp4",
+          privacy: "public",
+        })
+      );
+      expect(await screen.findByText(/🎉 published to youtube shorts!/i)).toBeInTheDocument();
+      expect(screen.getByRole("link", { name: /https:\/\/www\.youtube\.com\/shorts\/yt_published_abc123/i })).toBeInTheDocument();
     });
   });
 

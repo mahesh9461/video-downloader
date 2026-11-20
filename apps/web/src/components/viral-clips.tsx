@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import {
   Scissors,
   Sparkles,
@@ -20,12 +20,21 @@ import {
   TrendingUp,
   Zap,
   Upload,
+  Share2,
+  ExternalLink,
+  Loader2,
+  Settings,
 } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { apiClient } from "@/lib/api";
-import { ClipCandidate, ClipRenderResponse } from "@/lib/types";
+import {
+  ClipCandidate,
+  ClipRenderResponse,
+  YouTubeAuthStatus,
+  YouTubePublishResponse,
+} from "@/lib/types";
 import { formatDuration, formatFileSize } from "@/lib/utils";
 
 export function ViralClips() {
@@ -62,6 +71,119 @@ export function ViralClips() {
   const [aiTranscript, setAiTranscript] = useState<string | null>(null);
   const [aiHookSource, setAiHookSource] = useState<string | null>(null);
   const [aiProvider, setAiProvider] = useState<"deepseek" | "free_open_llm" | "ollama">("deepseek");
+
+  // YouTube Shorts Publishing state
+  const [showYouTubeModal, setShowYouTubeModal] = useState(false);
+  const [ytAuthStatus, setYtAuthStatus] = useState<YouTubeAuthStatus | null>(null);
+  const [ytTitle, setYtTitle] = useState("");
+  const [ytDescription, setYtDescription] = useState("");
+  const [ytPrivacy, setYtPrivacy] = useState<"public" | "unlisted" | "private">("public");
+  const [ytAccessToken, setYtAccessToken] = useState("");
+  const [isPublishingYt, setIsPublishingYt] = useState(false);
+  const [ytPublishResult, setYtPublishResult] = useState<YouTubePublishResponse | null>(null);
+  const [ytError, setYtError] = useState<string | null>(null);
+
+  const [showCredsConfig, setShowCredsConfig] = useState(false);
+  const [ytClientId, setYtClientId] = useState("");
+  const [ytClientSecret, setYtClientSecret] = useState("");
+  const [isSavingCreds, setIsSavingCreds] = useState(false);
+
+  useEffect(() => {
+    // Check if returning from Google OAuth callback
+    if (typeof window !== "undefined") {
+      const params = new URLSearchParams(window.location.search);
+      if (params.get("youtube_auth") === "success") {
+        apiClient
+          .getYouTubeStatus()
+          .then((status) => {
+            setYtAuthStatus(status);
+            setShowYouTubeModal(true);
+          })
+          .catch(() => {});
+      } else if (params.get("youtube_auth") === "error") {
+        setYtError(params.get("error_detail") || "Failed to authenticate with Google.");
+        setShowYouTubeModal(true);
+      }
+    }
+  }, []);
+
+  const handleSaveCredentials = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!ytClientId.trim() || !ytClientSecret.trim()) {
+      setYtError("Both Client ID and Client Secret are required.");
+      return;
+    }
+    setIsSavingCreds(true);
+    setYtError(null);
+    try {
+      const res = await apiClient.configureYouTubeOAuth(ytClientId.trim(), ytClientSecret.trim());
+      if (res?.youtube_status) {
+        setYtAuthStatus(res.youtube_status);
+      }
+      setShowCredsConfig(false);
+    } catch (err: any) {
+      setYtError(err?.message || "Failed to save OAuth credentials.");
+    } finally {
+      setIsSavingCreds(false);
+    }
+  };
+
+  const handleDisconnectYouTube = async () => {
+    try {
+      await apiClient.disconnectYouTube();
+      const status = await apiClient.getYouTubeStatus();
+      setYtAuthStatus(status);
+    } catch (err: any) {
+      setYtError(err?.message || "Failed to disconnect channel.");
+    }
+  };
+
+  const handleOpenYouTubeModal = async () => {
+    setShowYouTubeModal(true);
+    setYtError(null);
+    setYtPublishResult(null);
+
+    const baseTitle = renderedClip?.hook_title?.trim() || selectedClip?.hook_title?.trim() || videoTitle || "Viral Short";
+    const initialTitle = baseTitle.toLowerCase().includes("#shorts") ? baseTitle : `${baseTitle} #Shorts`;
+    setYtTitle(initialTitle);
+    setYtDescription(`${initialTitle}\n\nKey moment from ${videoTitle || "video"}.\n#Shorts #viral #trending`);
+
+    try {
+      const status = await apiClient.getYouTubeStatus();
+      setYtAuthStatus(status);
+    } catch {
+      // Ignored if offline
+    }
+  };
+
+  const handlePublishToYouTube = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!renderedClip) return;
+    if (!ytTitle.trim()) {
+      setYtError("Video title is required.");
+      return;
+    }
+
+    setIsPublishingYt(true);
+    setYtError(null);
+    setYtPublishResult(null);
+
+    try {
+      const res = await apiClient.publishToYouTube({
+        filename: renderedClip.filename,
+        title: ytTitle.trim(),
+        description: ytDescription.trim(),
+        privacy: ytPrivacy,
+        access_token: ytAccessToken.trim() || undefined,
+        tags: ["Shorts", "Viral", "Trending"],
+      });
+      setYtPublishResult(res);
+    } catch (err: any) {
+      setYtError(err?.message || "Failed to publish video to YouTube Shorts.");
+    } finally {
+      setIsPublishingYt(false);
+    }
+  };
 
   const handleAnalyze = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -915,6 +1037,14 @@ export function ViralClips() {
               </Button>
               <Button
                 variant="outline"
+                onClick={handleOpenYouTubeModal}
+                className="w-full sm:w-auto border-red-500/50 text-red-400 hover:bg-red-500/10 hover:text-red-300 font-medium"
+              >
+                <Share2 className="w-4 h-4 mr-2" />
+                Post to YouTube Shorts
+              </Button>
+              <Button
+                variant="outline"
                 onClick={() => setRenderedClip(null)}
                 className="w-full sm:w-auto"
               >
@@ -922,6 +1052,255 @@ export function ViralClips() {
                 Customize Another
               </Button>
             </div>
+
+            {/* YouTube Shorts Direct Publisher Panel */}
+            {showYouTubeModal && (
+              <div className="border border-red-500/30 bg-red-950/20 rounded-2xl p-5 sm:p-6 space-y-5 animate-in fade-in-0 slide-in-from-top-2 duration-300">
+                <div className="flex items-center justify-between pb-3 border-b border-red-500/20">
+                  <div className="flex items-center gap-2.5">
+                    <div className="w-8 h-8 rounded-lg bg-red-600 flex items-center justify-center text-white shadow-lg shadow-red-600/30">
+                      <Play className="w-4 h-4 fill-white" />
+                    </div>
+                    <div>
+                      <h4 className="font-semibold text-white text-sm">Post to YouTube Shorts</h4>
+                      <p className="text-xs text-zinc-400">Directly publish your 9:16 viral clip to your YouTube channel</p>
+                    </div>
+                  </div>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setShowYouTubeModal(false)}
+                    className="text-zinc-400 hover:text-white"
+                  >
+                    Close
+                  </Button>
+                </div>
+
+                {/* Channel Auth Status */}
+                <div className="rounded-xl bg-zinc-900/90 border border-zinc-800 p-4 space-y-3 text-xs">
+                  <div className="flex items-center justify-between">
+                    <span className="text-zinc-400 font-medium">Channel Status:</span>
+                    {ytAuthStatus?.connected ? (
+                      <div className="flex items-center gap-2">
+                        <Badge className="bg-emerald-500/20 text-emerald-300 border-emerald-500/30 flex items-center gap-1">
+                          <CheckCircle2 className="w-3 h-3" />
+                          Connected: {ytAuthStatus.channel_title || "My Channel"}
+                        </Badge>
+                        <button
+                          type="button"
+                          onClick={handleDisconnectYouTube}
+                          className="text-[11px] text-zinc-500 hover:text-red-400 underline"
+                        >
+                          Disconnect
+                        </button>
+                      </div>
+                    ) : (
+                      <Badge className="bg-amber-500/20 text-amber-300 border-amber-500/30">
+                        {ytAuthStatus?.configured ? "Not Connected" : "Credentials Required"}
+                      </Badge>
+                    )}
+                  </div>
+
+                  {!ytAuthStatus?.connected && (
+                    <div className="space-y-3 pt-1">
+                      {ytAuthStatus?.configured && ytAuthStatus?.auth_url ? (
+                        <Button
+                          size="sm"
+                          className="w-full bg-white hover:bg-zinc-100 text-zinc-900 font-semibold text-xs h-9 shadow-md flex items-center justify-center gap-2"
+                          asChild
+                        >
+                          <a href={ytAuthStatus.auth_url}>
+                            <svg className="w-4 h-4" viewBox="0 0 24 24">
+                              <path
+                                fill="#4285F4"
+                                d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
+                              />
+                              <path
+                                fill="#34A853"
+                                d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"
+                              />
+                              <path
+                                fill="#FBBC05"
+                                d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z"
+                              />
+                              <path
+                                fill="#EA4335"
+                                d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"
+                              />
+                            </svg>
+                            Sign In with Google & Authorize YouTube
+                          </a>
+                        </Button>
+                      ) : null}
+
+                      {/* Google Credentials Setup Section */}
+                      <div className="pt-1">
+                        <button
+                          type="button"
+                          onClick={() => setShowCredsConfig(!showCredsConfig)}
+                          className="flex items-center gap-1.5 text-[11px] text-zinc-400 hover:text-white transition-colors"
+                        >
+                          <Settings className="w-3 h-3" />
+                          <span>{showCredsConfig ? "Hide" : "Setup"} Google OAuth Credentials (Client ID & Secret)</span>
+                        </button>
+
+                        {showCredsConfig && (
+                          <div className="mt-2 p-3 rounded-lg bg-zinc-950 border border-zinc-800 space-y-2.5">
+                            <p className="text-[11px] text-zinc-400">
+                              Create free credentials in Google Cloud Console &rarr; OAuth 2.0 Client ID (Web Application) with redirect URI: <code className="text-zinc-300">http://localhost:3000/api/youtube/callback</code>
+                            </p>
+                            <input
+                              type="text"
+                              placeholder="Google Client ID (.apps.googleusercontent.com)"
+                              value={ytClientId}
+                              onChange={(e) => setYtClientId(e.target.value)}
+                              className="w-full bg-zinc-900 border border-zinc-800 rounded px-2.5 py-1.5 text-xs text-white placeholder-zinc-600 focus:outline-none focus:border-red-500/50"
+                            />
+                            <input
+                              type="password"
+                              placeholder="Google Client Secret"
+                              value={ytClientSecret}
+                              onChange={(e) => setYtClientSecret(e.target.value)}
+                              className="w-full bg-zinc-900 border border-zinc-800 rounded px-2.5 py-1.5 text-xs text-white placeholder-zinc-600 focus:outline-none focus:border-red-500/50"
+                            />
+                            <Button
+                              type="button"
+                              size="sm"
+                              disabled={isSavingCreds}
+                              onClick={handleSaveCredentials}
+                              className="w-full bg-zinc-800 hover:bg-zinc-700 text-white text-xs h-7"
+                            >
+                              {isSavingCreds ? "Saving..." : "Save & Generate Google Auth Link"}
+                            </Button>
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Manual token fallback */}
+                      <div className="pt-1 space-y-1">
+                        <label className="text-[11px] text-zinc-400">
+                          Or paste Access Token manually (optional):
+                        </label>
+                        <input
+                          type="password"
+                          placeholder="ya29.a0AfH..."
+                          value={ytAccessToken}
+                          onChange={(e) => setYtAccessToken(e.target.value)}
+                          className="w-full bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-1.5 text-xs text-white placeholder-zinc-600 focus:outline-none focus:border-red-500/50"
+                        />
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* Form fields */}
+                <form onSubmit={handlePublishToYouTube} className="space-y-4">
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-medium text-zinc-300">
+                      Short Title (includes #Shorts tag)
+                    </label>
+                    <input
+                      type="text"
+                      value={ytTitle}
+                      onChange={(e) => setYtTitle(e.target.value)}
+                      maxLength={100}
+                      className="w-full bg-zinc-950 border border-zinc-800 rounded-lg px-3.5 py-2 text-sm text-white placeholder-zinc-500 focus:outline-none focus:border-red-500/50"
+                      placeholder="My Viral Short #Shorts"
+                      required
+                    />
+                    <div className="flex justify-between text-[11px] text-zinc-500">
+                      <span>YouTube automatically renders videos with #Shorts as vertical Shorts</span>
+                      <span>{ytTitle.length}/100</span>
+                    </div>
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-medium text-zinc-300">Description</label>
+                    <textarea
+                      rows={2}
+                      value={ytDescription}
+                      onChange={(e) => setYtDescription(e.target.value)}
+                      className="w-full bg-zinc-950 border border-zinc-800 rounded-lg px-3.5 py-2 text-xs text-white placeholder-zinc-500 focus:outline-none focus:border-red-500/50 resize-none"
+                      placeholder="Add description and hashtags..."
+                    />
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-medium text-zinc-300">Privacy Status</label>
+                    <div className="grid grid-cols-3 gap-2">
+                      {(["public", "unlisted", "private"] as const).map((p) => (
+                        <button
+                          key={p}
+                          type="button"
+                          onClick={() => setYtPrivacy(p)}
+                          className={`px-3 py-2 rounded-lg text-xs font-medium capitalize border transition-all ${
+                            ytPrivacy === p
+                              ? "bg-red-600/20 border-red-500/60 text-red-300"
+                              : "bg-zinc-900 border-zinc-800 text-zinc-400 hover:border-zinc-700"
+                          }`}
+                        >
+                          {p === "public" ? "Public (Shorts)" : p}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Error Notification */}
+                  {ytError && (
+                    <div className="p-3 rounded-lg bg-red-500/10 border border-red-500/20 flex items-start gap-2.5 text-xs text-red-300">
+                      <AlertCircle className="w-4 h-4 shrink-0 text-red-400 mt-0.5" />
+                      <div>
+                        <p className="font-medium">Publishing Error</p>
+                        <p className="text-red-400/90">{ytError}</p>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Success Result */}
+                  {ytPublishResult && (
+                    <div className="p-4 rounded-xl bg-emerald-500/10 border border-emerald-500/30 space-y-2.5 animate-in fade-in-0 duration-200">
+                      <div className="flex items-center gap-2 text-emerald-300 font-medium text-sm">
+                        <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+                        <span>🎉 Published to YouTube Shorts!</span>
+                      </div>
+                      <p className="text-xs text-zinc-300">
+                        Your short is live at:{" "}
+                        <a
+                          href={ytPublishResult.youtube_url}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="text-red-400 hover:underline font-medium inline-flex items-center gap-1"
+                        >
+                          {ytPublishResult.youtube_url}
+                          <ExternalLink className="w-3 h-3" />
+                        </a>
+                      </p>
+                    </div>
+                  )}
+
+                  {/* Submit Button */}
+                  <div className="pt-2">
+                    <Button
+                      type="submit"
+                      disabled={isPublishingYt}
+                      className="w-full bg-red-600 hover:bg-red-500 text-white font-medium shadow-lg shadow-red-600/25"
+                    >
+                      {isPublishingYt ? (
+                        <>
+                          <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                          Publishing to YouTube Shorts...
+                        </>
+                      ) : (
+                        <>
+                          <Share2 className="w-4 h-4 mr-2" />
+                          Publish to YouTube Shorts Now
+                        </>
+                      )}
+                    </Button>
+                  </div>
+                </form>
+              </div>
+            )}
           </CardContent>
         </Card>
       )}

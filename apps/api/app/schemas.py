@@ -178,3 +178,34 @@ class ClipPresetInfo(BaseModel):
     music_presets: List[PresetOption]
     hook_styles: List[PresetOption]
 
+
+# ---------------------------------------------------------------------------
+# YouTube Shorts Publishing schemas
+# ---------------------------------------------------------------------------
+
+
+class YouTubePublishRequest(BaseModel):
+    filename: str = Field(..., description="Rendered video filename in DOWNLOAD_DIR")
+    title: str = Field(..., description="YouTube video title (will auto-append #Shorts if missing)")
+    description: Optional[str] = Field("", description="YouTube video description")
+    tags: Optional[List[str]] = Field(default_factory=list, description="List of video tags")
+    privacy: str = Field("public", description="Privacy status: 'public', 'unlisted', or 'private'")
+    access_token: Optional[str] = Field(None, description="Optional Google OAuth access token if not using session/stored credentials")
+
+
+class YouTubePublishResponse(BaseModel):
+    video_id: str
+    youtube_url: str
+    title: str
+    privacy: str
+    status: str = "uploaded"
+
+
+class YouTubeAuthStatus(BaseModel):
+    configured: bool
+    connected: bool
+    channel_title: Optional[str] = None
+    channel_id: Optional[str] = None
+    auth_url: Optional[str] = None
+
+

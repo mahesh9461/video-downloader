@@ -6,6 +6,13 @@ from pathlib import Path
 from typing import Optional
 from urllib.parse import urlsplit, urlunsplit
 
+try:
+    from dotenv import load_dotenv
+    load_dotenv(Path(__file__).resolve().parent.parent / ".env")
+    load_dotenv(Path(__file__).resolve().parent.parent.parent.parent / ".env")
+except Exception:
+    pass
+
 logger = logging.getLogger("video_downloader.config")
 
 # Add static_ffmpeg paths if available
@@ -109,5 +116,11 @@ else:
 # Optional Cobalt configuration
 COBALT_API_URL: Optional[str] = os.getenv("COBALT_API_URL")
 COBALT_API_KEY: Optional[str] = os.getenv("COBALT_API_KEY")
+
+# Google OAuth & YouTube Publishing configuration (Free YouTube Data API v3)
+GOOGLE_CLIENT_ID: Optional[str] = os.getenv("GOOGLE_CLIENT_ID")
+GOOGLE_CLIENT_SECRET: Optional[str] = os.getenv("GOOGLE_CLIENT_SECRET")
+YOUTUBE_REDIRECT_URI: str = os.getenv("YOUTUBE_REDIRECT_URI", "http://localhost:3000/api/youtube/callback")
+
 
 

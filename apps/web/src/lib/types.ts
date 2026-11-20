@@ -141,3 +141,29 @@ export interface ClipPresetInfo {
   hook_styles: PresetOption[];
 }
 
+export interface YouTubePublishRequest {
+  filename: string;
+  title: string;
+  description?: string;
+  tags?: string[];
+  privacy: "public" | "unlisted" | "private";
+  access_token?: string;
+}
+
+export interface YouTubePublishResponse {
+  video_id: string;
+  youtube_url: string;
+  title: string;
+  privacy: string;
+  status: string;
+}
+
+export interface YouTubeAuthStatus {
+  configured: boolean;
+  connected: boolean;
+  channel_title?: string;
+  channel_id?: string;
+  auth_url?: string;
+}
+
+

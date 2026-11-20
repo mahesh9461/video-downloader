@@ -38,8 +38,19 @@ from app.schemas import (
     ClipAiHookRequest,
     ClipAiHookResponse,
     ClipPresetInfo,
+    YouTubePublishRequest,
+    YouTubePublishResponse,
+    YouTubeAuthStatus,
 )
 from app.ai_hook import generate_ai_hook
+from app.youtube_publisher import (
+    get_youtube_status,
+    get_youtube_auth_url,
+    exchange_code_for_token,
+    publish_short_video,
+    save_google_credentials,
+    clear_stored_token,
+)
 from app.downloader import (
     extract_metadata,
     download_video_stream,
@@ -973,3 +984,82 @@ async def generate_ai_hook_endpoint(req: ClipAiHookRequest, request: Request):
                 os.remove(temp_source_path)
             except Exception:
                 pass
+
+
+# ---------------------------------------------------------------------------
+# YouTube Shorts Publishing Endpoints
+# ---------------------------------------------------------------------------
+
+
+@app.get("/api/youtube/status", response_model=YouTubeAuthStatus)
+async def youtube_status_endpoint():
+    """Check YouTube OAuth configuration and channel connection status."""
+    status_data = await get_youtube_status()
+    return YouTubeAuthStatus(**status_data)
+
+
+@app.post("/api/youtube/configure")
+async def youtube_configure_endpoint(payload: dict):
+    """Dynamically set Google OAuth Client ID and Secret."""
+    client_id = payload.get("client_id")
+    client_secret = payload.get("client_secret")
+    if not client_id or not client_secret:
+        raise HTTPException(status_code=400, detail="Both client_id and client_secret are required.")
+    save_google_credentials(client_id, client_secret)
+    status_data = await get_youtube_status()
+    return {"status": "configured", "youtube_status": status_data}
+
+
+@app.post("/api/youtube/disconnect")
+async def youtube_disconnect_endpoint():
+    """Disconnect currently linked YouTube account."""
+    clear_stored_token()
+    return {"status": "disconnected"}
+
+
+@app.get("/api/youtube/auth-url")
+async def youtube_auth_url_endpoint():
+    """Retrieve Google OAuth authorization URL for YouTube upload."""
+    url = get_youtube_auth_url()
+    if not url:
+        raise HTTPException(
+            status_code=400,
+            detail="Google OAuth is not configured. Please set GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET in environment variables.",
+        )
+    return {"auth_url": url}
+
+
+@app.post("/api/youtube/token")
+async def youtube_exchange_token_endpoint(payload: dict):
+    """Exchange authorization code for YouTube access/refresh token."""
+    code = payload.get("code")
+    if not code:
+        raise HTTPException(status_code=400, detail="Authorization code is required.")
+    try:
+        token_data = await exchange_code_for_token(code)
+        return {"status": "ok", "token": token_data}
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.post("/api/youtube/publish", response_model=YouTubePublishResponse)
+async def youtube_publish_endpoint(req: YouTubePublishRequest):
+    """Publish a rendered vertical short directly to YouTube Shorts."""
+    try:
+        result = await publish_short_video(
+            filename=req.filename,
+            title=req.title,
+            description=req.description or "",
+            tags=req.tags,
+            privacy=req.privacy,
+            access_token=req.access_token,
+        )
+        return YouTubePublishResponse(**result)
+    except FileNotFoundError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        logger.error("Failed to publish video to YouTube: %s", e)
+        raise HTTPException(status_code=500, detail=f"Failed to publish to YouTube: {str(e)}")
+
