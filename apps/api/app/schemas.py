@@ -230,6 +230,8 @@ class AutopilotClipItem(BaseModel):
     filename: Optional[str] = None
     preview_url: Optional[str] = None
     download_url: Optional[str] = None
+    cover_filename: Optional[str] = None
+    cover_url: Optional[str] = None
     scheduled_time: Optional[str] = None
     status: str = Field("queued", description="'queued', 'rendering', 'preview_ready', 'uploading', 'published', 'cleaned', 'failed'")
     current_step: Optional[str] = Field("queued", description="'discovering', 'hook_created', 'styling', 'rendering', 'preview_ready', 'uploading', 'published', 'failed'")

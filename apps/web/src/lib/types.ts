@@ -174,6 +174,7 @@ export interface AutopilotPublishedVideo {
   youtube_video_id: string;
   published_at: string;
   preview_url?: string | null;
+  cover_url?: string | null;
   duration?: number;
 }
 
@@ -201,6 +202,8 @@ export interface AutopilotClipItem {
   filename?: string | null;
   preview_url?: string | null;
   download_url?: string | null;
+  cover_filename?: string | null;
+  cover_url?: string | null;
   scheduled_time?: string | null;
   status: "queued" | "rendering" | "preview_ready" | "uploading" | "published" | "cleaned" | "failed";
   current_step?: "queued" | "discovering" | "hook_created" | "styling" | "rendering" | "preview_ready" | "uploading" | "published" | "failed";

@@ -385,3 +385,45 @@ async def publish_short_video(
             "privacy": privacy,
             "status": "uploaded",
         }
+
+
+async def set_video_thumbnail(
+    video_id: str,
+    thumbnail_path: str,
+    access_token: Optional[str] = None,
+) -> bool:
+    """Sets/uploads a custom thumbnail for a YouTube video via Data API v3."""
+    token = access_token or get_stored_token()
+    if not token:
+        token = await refresh_access_token()
+    if not token:
+        logger.info("Cannot set thumbnail: No YouTube access token available.")
+        return False
+
+    thumb_p = Path(thumbnail_path)
+    if not thumb_p.is_file():
+        logger.info("Cannot set thumbnail: file does not exist: %s", thumbnail_path)
+        return False
+
+    upload_url = f"https://www.googleapis.com/upload/youtube/v3/thumbnails/set?videoId={video_id}"
+    try:
+        content = thumb_p.read_bytes()
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            resp = await client.post(
+                upload_url,
+                headers={
+                    "Authorization": f"Bearer {token}",
+                    "Content-Type": "image/jpeg",
+                    "Content-Length": str(len(content)),
+                },
+                content=content,
+            )
+            if resp.status_code in (200, 201):
+                logger.info("Successfully uploaded custom thumbnail for YouTube video %s", video_id)
+                return True
+            else:
+                logger.info("YouTube thumbnail upload note (%d): %s", resp.status_code, resp.text)
+                return False
+    except Exception as err:
+        logger.info("YouTube custom thumbnail upload skipped: %s", err)
+        return False

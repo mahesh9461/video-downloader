@@ -338,8 +338,8 @@ async def serve_downloaded_file(filename: str, background_tasks: BackgroundTasks
     if not file_path.exists() or not file_path.is_file():
         raise HTTPException(status_code=404, detail="Requested file not found or expired.")
 
-    # Do not delete autopilot clips so in-browser video previews never break
-    if not (safe_filename.startswith("gta6_short_") or safe_filename.startswith("autopilot_")):
+    # Do not delete autopilot clips and cover images so in-browser video & cover previews never break
+    if not (safe_filename.startswith("gta6_short_") or safe_filename.startswith("gta6_cover_") or safe_filename.startswith("autopilot_")):
         background_tasks.add_task(remove_file_delayed, str(file_path))
 
     display_name = safe_filename

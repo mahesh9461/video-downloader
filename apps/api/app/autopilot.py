@@ -570,6 +570,52 @@ class AutopilotManager:
                 clip.filename = output_filename
                 clip.preview_url = f"/api/file/{output_filename}"
                 clip.download_url = f"/api/file/{output_filename}"
+
+                # Generate Full HD 1080x1920 viral cover image
+                cover_filename = f"gta6_cover_{batch_id}_{clip_index}.jpg"
+                cover_output_path = str(DOWNLOAD_DIR / cover_filename)
+                try:
+                    from app.cover_generator import generate_viral_cover_image
+                    await asyncio.to_thread(
+                        generate_viral_cover_image,
+                        video_path=output_path,
+                        output_path=cover_output_path,
+                        hook_title=final_hook,
+                        hook_style=profile["hook_style"],
+                        badge_text="GTA 6 EXCLUSIVE",
+                        template_index=idx,
+                        use_gta_template=True,
+                    )
+                    if os.path.exists(cover_output_path):
+                        clip.cover_filename = cover_filename
+                        clip.cover_url = f"/api/file/{cover_filename}"
+                        self._log(f"🖼️ Generated Full HD viral cover for Short #{clip_index}: {cover_filename}")
+                except Exception as cover_err:
+                    logger.debug("Cover image generation skipped: %s", cover_err)
+
+
+                # Generate Full HD 1080x1920 viral cover image
+                cover_filename = f"gta6_cover_{batch_id}_{clip_index}.jpg"
+                cover_output_path = str(DOWNLOAD_DIR / cover_filename)
+                try:
+                    from app.cover_generator import generate_viral_cover_image
+                    await asyncio.to_thread(
+                        generate_viral_cover_image,
+                        video_path=output_path,
+                        output_path=cover_output_path,
+                        hook_title=final_hook,
+                        hook_style=profile["hook_style"],
+                        badge_text="GTA 6 EXCLUSIVE",
+                        template_index=idx,
+                        use_gta_template=True,
+                    )
+                    if os.path.exists(cover_output_path):
+                        clip.cover_filename = cover_filename
+                        clip.cover_url = f"/api/file/{cover_filename}"
+                        self._log(f"🖼️ Generated Full HD viral cover for Short #{clip_index}: {cover_filename}")
+                except Exception as cover_err:
+                    logger.debug("Cover image generation skipped: %s", cover_err)
+
                 clip.status = "preview_ready"
                 clip.current_step = "preview_ready"
                 clip.step_description = "Video rendered! Video preview is ready."
@@ -689,6 +735,16 @@ class AutopilotManager:
             vid_id = pub_res.get("video_id")
             yt_url = pub_res.get("youtube_url") or f"https://youtube.com/shorts/{vid_id}"
 
+            # Auto-upload Full HD cover image as YouTube custom thumbnail
+            if clip.cover_filename:
+                cover_full_path = str(DOWNLOAD_DIR / clip.cover_filename)
+                if os.path.exists(cover_full_path):
+                    try:
+                        from app.youtube_publisher import set_video_thumbnail
+                        await set_video_thumbnail(vid_id, cover_full_path)
+                    except Exception as thumb_err:
+                        logger.debug("YouTube thumbnail upload skipped: %s", thumb_err)
+
             clip.status = "published"
             clip.current_step = "published"
             clip.step_description = f"Published on YouTube: {yt_url}"
@@ -706,6 +762,7 @@ class AutopilotManager:
                 "youtube_video_id": vid_id,
                 "published_at": datetime.now(timezone.utc).isoformat(),
                 "preview_url": clip.preview_url or f"/api/file/{clip.filename}",
+                "cover_url": clip.cover_url,
                 "duration": clip.duration,
             }
             self.all_published_videos = [p for p in self.all_published_videos if p.get("id") != clip.id]

@@ -7,14 +7,15 @@
   "current_step_label": "Extracting metadata for URL: https://www.youtube.com/watch?v=8-DRGbQ1IXc",
   "processed_video_ids": [
     "YDNs_sPEcJc",
-    "8-DRGbQ1IXc"
+    "8-DRGbQ1IXc",
+    "4ggwTEKq9MA"
   ],
   "daily_uploads_count": 0,
   "daily_upload_limit": 6,
   "upload_interval_seconds": 3600,
   "cooldown_until": null,
   "disk_space_cleaned_mb": 0.0,
-  "last_cleaned_at": "2026-11-20T17:20:27.195446",
+  "last_cleaned_at": "2026-11-20T19:06:55.014570",
   "recent_logs": [],
   "all_published_videos": [
     {
@@ -23,9 +24,21 @@
       "title": "GTA 6 Insane Detail",
       "youtube_url": "https://youtube.com/shorts/yt_short_123",
       "youtube_video_id": "yt_short_123",
-      "published_at": "2026-11-20T11:50:27.195375+00:00",
+      "published_at": "2026-11-20T13:36:55.014507+00:00",
       "preview_url": "/api/file/gta6_short_test_1.mp4",
+      "cover_url": null,
       "duration": 30.0
+    },
+    {
+      "id": "8fa1db91_1",
+      "clip_index": 1,
+      "title": "WAIT FOR WHAT HAPPENS NEXT...",
+      "youtube_url": "https://www.youtube.com/shorts/Jl7ZpmLP5XY",
+      "youtube_video_id": "Jl7ZpmLP5XY",
+      "published_at": "2026-11-20T13:36:31.117323+00:00",
+      "preview_url": "/api/file/gta6_short_8fa1db91_1.mp4",
+      "cover_url": "/api/file/gta6_cover_8fa1db91_1.jpg",
+      "duration": 25.0
     },
     {
       "id": "8efcf3a2_6",
@@ -88,5 +101,13 @@
       "duration": 25.0
     }
   ],
-  "recent_errors": []
+  "recent_errors": [
+    {
+      "clip_id": "8fa1db91_1",
+      "title": "WAIT FOR WHAT HAPPENS NEXT...",
+      "stage": "upload",
+      "error": "YouTube upload initiation failed (401): Request had invalid authentication credentials. Expected OAuth 2 access token, login cookie or other valid authentication credential. See https://developers.google.com/identity/sign-in/web/devconsole-project.",
+      "timestamp": "2026-11-20T13:35:30.388330+00:00"
+    }
+  ]
 }

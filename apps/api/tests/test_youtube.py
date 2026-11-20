@@ -173,3 +173,28 @@ async def test_youtube_publish_success(tmp_path):
     finally:
         if test_video.exists():
             test_video.unlink()
+
+
+@pytest.mark.anyio
+async def test_set_video_thumbnail_success(tmp_path):
+    from app.youtube_publisher import set_video_thumbnail
+    test_thumb = tmp_path / "thumb.jpg"
+    test_thumb.write_bytes(b"dummy image bytes")
+
+    mock_resp = MagicMock()
+    mock_resp.status_code = 200
+    mock_resp.json.return_value = {"items": []}
+
+    with patch("httpx.AsyncClient.post", new_callable=AsyncMock) as mock_post:
+        mock_post.return_value = mock_resp
+        success = await set_video_thumbnail("yt_short_123", str(test_thumb), access_token="mock_token")
+        assert success is True
+
+
+@pytest.mark.anyio
+async def test_set_video_thumbnail_no_token():
+    from app.youtube_publisher import set_video_thumbnail
+    with patch("app.youtube_publisher.get_stored_token", return_value=None), \
+         patch("app.youtube_publisher.refresh_access_token", new_callable=AsyncMock, return_value=None):
+        success = await set_video_thumbnail("yt_short_123", "/nonexistent/thumb.jpg")
+        assert success is False
