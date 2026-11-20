@@ -16,19 +16,30 @@ import httpx
 
 logger = logging.getLogger("video_downloader.supabase")
 
-SUPABASE_URL = os.getenv("SUPABASE_URL", "").rstrip("/")
-SUPABASE_KEY = os.getenv("SUPABASE_SERVICE_ROLE_KEY") or os.getenv("SUPABASE_ANON_KEY") or os.getenv("SUPABASE_KEY", "")
+def get_supabase_url() -> str:
+    return os.getenv("SUPABASE_URL", "").rstrip("/")
+
+
+def get_supabase_key() -> str:
+    return (
+        os.getenv("SUPABASE_SERVICE_ROLE_KEY")
+        or os.getenv("SUPABASE_ANON_KEY")
+        or os.getenv("SUPABASE_KEY", "")
+    )
 
 
 def is_supabase_configured() -> bool:
     """Returns True if valid Supabase URL and key are provided."""
-    return bool(SUPABASE_URL and SUPABASE_KEY and SUPABASE_URL.startswith("http"))
+    url = get_supabase_url()
+    key = get_supabase_key()
+    return bool(url and key and url.startswith("http"))
 
 
 def _get_headers() -> Dict[str, str]:
+    key = get_supabase_key()
     return {
-        "apikey": SUPABASE_KEY,
-        "Authorization": f"Bearer {SUPABASE_KEY}",
+        "apikey": key,
+        "Authorization": f"Bearer {key}",
         "Content-Type": "application/json",
         "Prefer": "return=representation",
     }
@@ -44,7 +55,7 @@ async def save_youtube_tokens_supabase(tokens: Dict[str, Any]) -> bool:
     if not is_supabase_configured():
         return False
 
-    endpoint = f"{SUPABASE_URL}/rest/v1/user_youtube_tokens"
+    endpoint = f"{get_supabase_url()}/rest/v1/user_youtube_tokens"
     headers = _get_headers()
     headers["Prefer"] = "resolution=merge-duplicates"
 
@@ -73,7 +84,7 @@ async def get_youtube_tokens_supabase() -> Optional[Dict[str, Any]]:
     if not is_supabase_configured():
         return None
 
-    endpoint = f"{SUPABASE_URL}/rest/v1/user_youtube_tokens?id=eq.primary&select=*"
+    endpoint = f"{get_supabase_url()}/rest/v1/user_youtube_tokens?id=eq.primary&select=*"
     try:
         async with httpx.AsyncClient(timeout=8.0) as client:
             resp = await client.get(endpoint, headers=_get_headers())
@@ -103,7 +114,7 @@ async def record_processed_source_supabase(video_info: Dict[str, Any]) -> bool:
     if not is_supabase_configured():
         return False
 
-    endpoint = f"{SUPABASE_URL}/rest/v1/autopilot_sources"
+    endpoint = f"{get_supabase_url()}/rest/v1/autopilot_sources"
     headers = _get_headers()
     headers["Prefer"] = "resolution=merge-duplicates"
 
@@ -129,7 +140,7 @@ async def get_processed_source_ids_supabase() -> List[str]:
     if not is_supabase_configured():
         return []
 
-    endpoint = f"{SUPABASE_URL}/rest/v1/autopilot_sources?select=video_id"
+    endpoint = f"{get_supabase_url()}/rest/v1/autopilot_sources?select=video_id"
     try:
         async with httpx.AsyncClient(timeout=8.0) as client:
             resp = await client.get(endpoint, headers=_get_headers())
@@ -150,8 +161,8 @@ async def sync_autopilot_batch_supabase(batch_dict: Dict[str, Any]) -> bool:
     if not is_supabase_configured():
         return False
 
-    batch_endpoint = f"{SUPABASE_URL}/rest/v1/autopilot_batches"
-    clips_endpoint = f"{SUPABASE_URL}/rest/v1/autopilot_clips"
+    batch_endpoint = f"{get_supabase_url()}/rest/v1/autopilot_batches"
+    clips_endpoint = f"{get_supabase_url()}/rest/v1/autopilot_clips"
     headers = _get_headers()
     headers["Prefer"] = "resolution=merge-duplicates"
 
@@ -203,7 +214,7 @@ async def update_clip_status_supabase(clip_id: str, updates: Dict[str, Any]) -> 
     if not is_supabase_configured():
         return False
 
-    endpoint = f"{SUPABASE_URL}/rest/v1/autopilot_clips?id=eq.{clip_id}"
+    endpoint = f"{get_supabase_url()}/rest/v1/autopilot_clips?id=eq.{clip_id}"
     try:
         async with httpx.AsyncClient(timeout=8.0) as client:
             resp = await client.patch(endpoint, headers=_get_headers(), json=updates)

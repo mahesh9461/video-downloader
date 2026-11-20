@@ -2,14 +2,102 @@
   "is_running": true,
   "state": "cooldown",
   "current_batch": null,
-  "processed_video_ids": [],
+  "active_clip_id": "batch1_1",
+  "current_step": "published",
+  "current_step_label": "Published Short #1! URL: https://youtube.com/shorts/yt_short_123",
+  "processed_video_ids": [
+    "YDNs_sPEcJc"
+  ],
   "daily_uploads_count": 6,
   "daily_upload_limit": 6,
   "upload_interval_seconds": 3600,
-  "cooldown_until": 1795233437.923893,
+  "cooldown_until": 1795238861.128094,
   "disk_space_cleaned_mb": 0.0,
-  "last_cleaned_at": "2026-11-20T15:27:17.919420",
+  "last_cleaned_at": "2026-11-20T16:57:41.109455",
   "recent_logs": [
-    "[15:27:17] \ud83d\udee1\ufe0f Daily upload limit reached (6/6). Entering 18-hour cooldown to protect Google API quota."
+    "[16:57:41] \ud83d\udee1\ufe0f Daily upload limit reached (6/6). Entering 18-hour cooldown to protect Google API quota."
+  ],
+  "all_published_videos": [
+    {
+      "id": "batch1_1",
+      "clip_index": 1,
+      "title": "GTA 6 Insane Detail",
+      "youtube_url": "https://youtube.com/shorts/yt_short_123",
+      "youtube_video_id": "yt_short_123",
+      "published_at": "2026-11-20T11:27:41.109368+00:00",
+      "preview_url": "/api/file/gta6_short_test_1.mp4",
+      "duration": 30.0
+    }
+  ],
+  "recent_errors": [
+    {
+      "clip_id": "9c18322a_1",
+      "title": "WAIT FOR WHAT HAPPENS NEXT...",
+      "stage": "upload",
+      "error": "No YouTube access token available. Please connect your YouTube channel or provide an access token.",
+      "timestamp": "2026-11-20T10:46:20.370488+00:00"
+    },
+    {
+      "clip_id": "9c18322a_1",
+      "title": "WAIT FOR WHAT HAPPENS NEXT...",
+      "stage": "upload",
+      "error": "No YouTube access token available. Please connect your YouTube channel or provide an access token.",
+      "timestamp": "2026-11-20T10:46:16.720387+00:00"
+    },
+    {
+      "clip_id": "9c18322a_1",
+      "title": "WAIT FOR WHAT HAPPENS NEXT...",
+      "stage": "upload",
+      "error": "No YouTube access token available. Please connect your YouTube channel or provide an access token.",
+      "timestamp": "2026-11-20T10:46:16.070703+00:00"
+    },
+    {
+      "clip_id": "9c18322a_1",
+      "title": "WAIT FOR WHAT HAPPENS NEXT...",
+      "stage": "upload",
+      "error": "No YouTube access token available. Please connect your YouTube channel or provide an access token.",
+      "timestamp": "2026-11-20T10:46:15.448820+00:00"
+    },
+    {
+      "clip_id": "9c18322a_1",
+      "title": "WAIT FOR WHAT HAPPENS NEXT...",
+      "stage": "upload",
+      "error": "No YouTube access token available. Please connect your YouTube channel or provide an access token.",
+      "timestamp": "2026-11-20T10:46:03.690322+00:00"
+    },
+    {
+      "clip_id": "9c18322a_1",
+      "title": "WAIT FOR WHAT HAPPENS NEXT...",
+      "stage": "upload",
+      "error": "No YouTube access token available. Please connect your YouTube channel or provide an access token.",
+      "timestamp": "2026-11-20T10:46:03.495762+00:00"
+    },
+    {
+      "clip_id": "9c18322a_1",
+      "title": "WAIT FOR WHAT HAPPENS NEXT...",
+      "stage": "upload",
+      "error": "No YouTube access token available. Please connect your YouTube channel or provide an access token.",
+      "timestamp": "2026-11-20T10:46:03.305000+00:00"
+    },
+    {
+      "clip_id": "9c18322a_1",
+      "title": "WAIT FOR WHAT HAPPENS NEXT...",
+      "stage": "upload",
+      "error": "No YouTube access token available. Please connect your YouTube channel or provide an access token.",
+      "timestamp": "2026-11-20T10:45:59.983923+00:00"
+    },
+    {
+      "clip_id": "9c18322a_1",
+      "title": "WAIT FOR WHAT HAPPENS NEXT...",
+      "stage": "upload",
+      "error": "No YouTube access token available. Please connect your YouTube channel or provide an access token.",
+      "timestamp": "2026-11-20T10:45:52.593579+00:00"
+    },
+    {
+      "title": "GTA 6: 10 Things The Game DOESN'T TELL YOU",
+      "stage": "download",
+      "error": "\u001b[0;31mERROR:\u001b[0m [youtube] 1yBSK22csvI: Requested format is not available. Use --list-formats for a list of available formats",
+      "timestamp": "2026-11-20T10:35:56.938662+00:00"
+    }
   ]
 }

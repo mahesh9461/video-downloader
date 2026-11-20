@@ -12,6 +12,12 @@ const mockPauseAutopilot = jest.fn();
 const mockTriggerAutopilot = jest.fn();
 const mockCleanupAutopilotDisk = jest.fn();
 const mockGetAutopilotAudio = jest.fn();
+const mockResetAutopilot = jest.fn();
+const mockRetryAutopilotClip = jest.fn();
+const mockGetYouTubeStatus = jest.fn();
+const mockConfigureYouTubeOAuth = jest.fn();
+const mockDisconnectYouTube = jest.fn();
+const mockSetYouTubeToken = jest.fn();
 
 jest.mock("@/lib/api", () => ({
   apiClient: {
@@ -21,6 +27,13 @@ jest.mock("@/lib/api", () => ({
     triggerAutopilot: (...args: any[]) => mockTriggerAutopilot(...args),
     cleanupAutopilotDisk: (...args: any[]) => mockCleanupAutopilotDisk(...args),
     getAutopilotAudio: (...args: any[]) => mockGetAutopilotAudio(...args),
+    resetAutopilot: (...args: any[]) => mockResetAutopilot(...args),
+    retryAutopilotClip: (...args: any[]) => mockRetryAutopilotClip(...args),
+    getYouTubeStatus: (...args: any[]) => mockGetYouTubeStatus(...args),
+    configureYouTubeOAuth: (...args: any[]) => mockConfigureYouTubeOAuth(...args),
+    disconnectYouTube: (...args: any[]) => mockDisconnectYouTube(...args),
+    setYouTubeToken: (...args: any[]) => mockSetYouTubeToken(...args),
+    resolveUrl: (path: string) => `http://localhost:8000${path}`,
   },
 }));
 
@@ -46,6 +59,8 @@ describe("AutopilotDashboard", () => {
     last_cleaned_at: "2026-11-20T12:00:00Z",
     cpu_mode: "low_load_threads_2",
     recent_logs: ["[12:00:00] Autopilot initialized."],
+    all_published_videos: [],
+    recent_errors: [],
   };
 
   beforeEach(() => {
@@ -56,6 +71,22 @@ describe("AutopilotDashboard", () => {
       custom_tracks: ["night_pulse.mp3", "synthwave_loop.mp3"],
       count: 2,
     });
+    mockResetAutopilot.mockResolvedValue(defaultStatus);
+    mockRetryAutopilotClip.mockResolvedValue(defaultStatus);
+    mockGetYouTubeStatus.mockResolvedValue({
+      configured: true,
+      connected: false,
+      auth_url: "https://accounts.google.com/o/oauth2/auth",
+    });
+    mockSetYouTubeToken.mockResolvedValue({
+      status: "connected",
+      youtube_status: { configured: true, connected: true, channel_title: "My Channel" },
+    });
+    mockConfigureYouTubeOAuth.mockResolvedValue({
+      status: "configured",
+      youtube_status: { configured: true, connected: false, auth_url: "https://accounts.google.com/o/oauth2/auth" },
+    });
+    mockDisconnectYouTube.mockResolvedValue({ status: "disconnected" });
     // Rule 3: Always use real Redux store configured with configureStore
     store = createTestStore();
   });
@@ -99,6 +130,7 @@ describe("AutopilotDashboard", () => {
               layout: "center_crop",
               background_music: "night_pulse.mp3",
               filename: "gta6_short_batch_gta_01_1.mp4",
+              preview_url: "/api/file/gta6_short_batch_gta_01_1.mp4",
               scheduled_time: "2026-11-20T12:01:00Z",
               status: "published",
               youtube_video_id: "yt_001",
@@ -118,6 +150,7 @@ describe("AutopilotDashboard", () => {
               layout: "blurred_background",
               background_music: "synthwave_loop.mp3",
               filename: "gta6_short_batch_gta_01_2.mp4",
+              preview_url: "/api/file/gta6_short_batch_gta_01_2.mp4",
               scheduled_time: "2026-11-20T13:00:00Z",
               status: "queued",
             },
@@ -130,14 +163,62 @@ describe("AutopilotDashboard", () => {
       renderWithProvider(<AutopilotDashboard />, store);
 
       // Assert
-      expect(await screen.findByText(/SECRET UNDERWATER LAB DISCOVERED/i)).toBeInTheDocument();
+      const matchingTitles = await screen.findAllByText(/SECRET UNDERWATER LAB DISCOVERED/i);
+      expect(matchingTitles.length).toBeGreaterThan(0);
       expect(screen.getByText(/NEW VICE CITY POLICE CAR CHASE/i)).toBeInTheDocument();
       expect(screen.getByText(/Short #1 of 6/i)).toBeInTheDocument();
       expect(screen.getByText(/Short #2 of 6/i)).toBeInTheDocument();
-      expect(screen.getByRole("link", { name: /View on YouTube/i })).toHaveAttribute(
-        "href",
-        "https://youtube.com/shorts/yt_001"
-      );
+
+      const ytLinks = screen.getAllByRole("link", { name: /View on YouTube|Watch on YouTube/i });
+      expect(ytLinks.length).toBeGreaterThan(0);
+      expect(ytLinks[0]).toHaveAttribute("href", "https://youtube.com/shorts/yt_001");
+    });
+
+    test("should render pipeline stages, video preview player, and error issues when present", async () => {
+      // Arrange
+      const statusWithErrors = {
+        ...defaultStatus,
+        is_running: true,
+        state: "error",
+        current_batch: {
+          batch_id: "batch_err_01",
+          source_video_id: "vid_999",
+          source_title: "Vice City Vice Secrets",
+          source_url: "https://youtube.com/watch?v=vid_999",
+          created_at: "2026-11-20T12:00:00Z",
+          clips: [
+            {
+              id: "clip_err_1",
+              source_video_id: "vid_999",
+              source_title: "Vice City Vice Secrets",
+              clip_index: 1,
+              start_time: 10.0,
+              end_time: 40.0,
+              duration: 30.0,
+              hook_title: "CRAZIEST POLICE ENCOUNTER",
+              hook_style: "hormozi_bold",
+              progress_bar_color: "yellow",
+              layout: "center_crop",
+              background_music: "night_pulse.mp3",
+              filename: "gta6_short_err.mp4",
+              preview_url: "/api/file/gta6_short_err.mp4",
+              status: "failed",
+              error: "YouTube account is not connected",
+            },
+          ],
+        },
+      };
+      mockGetAutopilotStatus.mockResolvedValue(statusWithErrors);
+
+      // Act
+      renderWithProvider(<AutopilotDashboard />, store);
+
+      // Assert
+      expect(await screen.findByText(/Pipeline Issues & Diagnostics/i)).toBeInTheDocument();
+      expect(screen.getAllByText(/YouTube account is not connected/i).length).toBeGreaterThan(0);
+      expect(screen.getByText(/Hook Created/i)).toBeInTheDocument();
+      expect(screen.getByText(/Text & Song/i)).toBeInTheDocument();
+      expect(screen.getByText(/Video Preview/i)).toBeInTheDocument();
     });
   });
 
@@ -204,6 +285,151 @@ describe("AutopilotDashboard", () => {
 
       // Assert
       expect(mockTriggerAutopilot).toHaveBeenCalledTimes(1);
+    });
+
+    test("should allow typing custom video URL and submitting to pipeline", async () => {
+      // Arrange
+      const user = userEvent.setup();
+      mockTriggerAutopilot.mockResolvedValue({
+        ...defaultStatus,
+        is_running: true,
+        state: "rendering",
+      });
+
+      renderWithProvider(<AutopilotDashboard />, store);
+      const input = await screen.findByPlaceholderText(/Paste YouTube video or podcast URL/i);
+      const queueBtn = screen.getByRole("button", { name: /Queue Next Video Now/i });
+
+      // Act
+      await user.type(input, "https://www.youtube.com/watch?v=custom_video_123");
+      await user.click(queueBtn);
+
+      // Assert
+      expect(mockTriggerAutopilot).toHaveBeenCalledWith("https://www.youtube.com/watch?v=custom_video_123");
+    });
+
+    test("should reset quota and cooldown when Reset button is clicked", async () => {
+      // Arrange
+      const user = userEvent.setup();
+      mockResetAutopilot.mockResolvedValue({
+        ...defaultStatus,
+        daily_uploads_count: 0,
+        cooldown_until: null,
+      });
+
+      renderWithProvider(<AutopilotDashboard />, store);
+      const resetBtn = await screen.findByRole("button", { name: /Reset Cooldown/i });
+
+      // Act
+      await user.click(resetBtn);
+
+      // Assert
+      expect(mockResetAutopilot).toHaveBeenCalledTimes(1);
+    });
+
+    test("should allow applying manual token to connect YouTube channel", async () => {
+      // Arrange
+      const user = userEvent.setup();
+      renderWithProvider(<AutopilotDashboard />, store);
+
+      const setupBtn = await screen.findByRole("button", { name: /Setup Credentials \/ Token/i });
+
+      // Act
+      await user.click(setupBtn);
+
+      const tokenInput = screen.getByPlaceholderText(/Paste Access Token/i);
+      const applyBtn = screen.getByRole("button", { name: /Apply Token & Connect Channel/i });
+
+      await user.type(tokenInput, "ya29.test_token_string_123");
+      await user.click(applyBtn);
+
+      // Assert
+      expect(mockSetYouTubeToken).toHaveBeenCalledWith("ya29.test_token_string_123");
+    });
+
+    test("should allow inline YouTube connect and retry directly from failed clip card", async () => {
+      // Arrange
+      const user = userEvent.setup();
+      const failedBatchStatus = {
+        ...defaultStatus,
+        is_running: true,
+        state: "error",
+        current_batch: {
+          batch_id: "batch_gta_failed",
+          source_video_id: "vid_failed",
+          source_title: "GTA 6 Gameplay Walkthrough",
+          source_url: "https://youtube.com/watch?v=vid_failed",
+          created_at: "2026-11-20T12:00:00Z",
+          clips: [
+            {
+              id: "clip_token_error_1",
+              clip_index: 1,
+              start_time: 10,
+              end_time: 40,
+              hook_title: "WAIT FOR WHAT HAPPENS NEXT...",
+              hook_style: "hormozi_bold",
+              progress_bar_color: "yellow",
+              layout: "center_crop",
+              status: "failed",
+              error: "No YouTube access token available. Please connect your YouTube channel or provide an access token.",
+            },
+          ],
+        },
+      };
+      mockGetAutopilotStatus.mockResolvedValue(failedBatchStatus);
+      renderWithProvider(<AutopilotDashboard />, store);
+
+      // Act
+      const cardTokenInput = await screen.findByPlaceholderText(/Paste Access Token \(ya29\.\.\.\)/i);
+      const connectRetryBtn = screen.getByRole("button", { name: /Connect & Retry/i });
+
+      await user.type(cardTokenInput, "ya29.inline_token_clip_1");
+      await user.click(connectRetryBtn);
+
+      // Assert
+      expect(mockSetYouTubeToken).toHaveBeenCalledWith("ya29.inline_token_clip_1");
+      expect(mockRetryAutopilotClip).toHaveBeenCalledWith("clip_token_error_1");
+    });
+
+    test("should open modal when Connect YouTube Channel is clicked on failed clip card", async () => {
+      // Arrange
+      const user = userEvent.setup();
+      const failedBatchStatus = {
+        ...defaultStatus,
+        is_running: true,
+        state: "error",
+        current_batch: {
+          batch_id: "batch_gta_failed",
+          source_video_id: "vid_failed",
+          source_title: "GTA 6 Gameplay Walkthrough",
+          source_url: "https://youtube.com/watch?v=vid_failed",
+          created_at: "2026-11-20T12:00:00Z",
+          clips: [
+            {
+              id: "clip_token_error_2",
+              clip_index: 1,
+              start_time: 10,
+              end_time: 40,
+              hook_title: "WAIT FOR WHAT HAPPENS NEXT...",
+              hook_style: "hormozi_bold",
+              progress_bar_color: "yellow",
+              layout: "center_crop",
+              status: "failed",
+              error: "No YouTube access token available. Please connect your YouTube channel or provide an access token.",
+            },
+          ],
+        },
+      };
+      mockGetAutopilotStatus.mockResolvedValue(failedBatchStatus);
+      renderWithProvider(<AutopilotDashboard />, store);
+
+      // Act: Click Connect YouTube Channel on the card
+      const connectButtons = await screen.findAllByRole("button", { name: /Connect YouTube Channel/i });
+      await user.click(connectButtons[0]);
+
+      // Assert: Modal dialog opens
+      expect(screen.getByRole("dialog")).toBeInTheDocument();
+      expect(screen.getByText(/Authorizing to upload Short #1/i)).toBeInTheDocument();
     });
   });
 

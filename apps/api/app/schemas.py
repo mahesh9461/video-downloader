@@ -228,8 +228,12 @@ class AutopilotClipItem(BaseModel):
     layout: str = "center_crop"
     background_music: str = "none"
     filename: Optional[str] = None
+    preview_url: Optional[str] = None
+    download_url: Optional[str] = None
     scheduled_time: Optional[str] = None
-    status: str = Field("queued", description="'queued', 'rendering', 'uploading', 'published', 'cleaned', 'failed'")
+    status: str = Field("queued", description="'queued', 'rendering', 'preview_ready', 'uploading', 'published', 'cleaned', 'failed'")
+    current_step: Optional[str] = Field("queued", description="'discovering', 'hook_created', 'styling', 'rendering', 'preview_ready', 'uploading', 'published', 'failed'")
+    step_description: Optional[str] = None
     youtube_video_id: Optional[str] = None
     youtube_url: Optional[str] = None
     error: Optional[str] = None
@@ -245,10 +249,36 @@ class AutopilotBatch(BaseModel):
     status: str = Field("processing", description="'processing', 'queued', 'completed', 'cooldown'")
 
 
+class AutopilotPublishedVideo(BaseModel):
+    id: str
+    clip_index: Optional[int] = 1
+    title: str
+    youtube_url: str
+    youtube_video_id: str
+    published_at: str
+    preview_url: Optional[str] = None
+    duration: Optional[float] = 0.0
+
+
+class AutopilotIssue(BaseModel):
+    clip_id: Optional[str] = None
+    title: Optional[str] = None
+    stage: Optional[str] = "upload"
+    error: str
+    timestamp: str
+
+
+class AutopilotTriggerRequest(BaseModel):
+    url: Optional[str] = None
+
+
 class AutopilotStatus(BaseModel):
     is_running: bool
-    state: str = Field("idle", description="'idle', 'searching', 'rendering', 'queued', 'uploading', 'cooldown', 'paused'")
+    state: str = Field("idle", description="'idle', 'searching', 'rendering', 'queued', 'uploading', 'cooldown', 'paused', 'error'")
     current_batch: Optional[AutopilotBatch] = None
+    active_clip_id: Optional[str] = None
+    current_step: Optional[str] = None
+    current_step_label: Optional[str] = None
     next_upload_time: Optional[str] = None
     seconds_until_next_upload: Optional[int] = None
     daily_uploads_count: int = 0
@@ -258,6 +288,8 @@ class AutopilotStatus(BaseModel):
     last_cleaned_at: Optional[str] = None
     cpu_mode: str = "low_load_threads_2"
     recent_logs: List[str] = Field(default_factory=list)
+    all_published_videos: List[AutopilotPublishedVideo] = Field(default_factory=list)
+    recent_errors: List[AutopilotIssue] = Field(default_factory=list)
 
 
 

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import {
   Play,
   Pause,
@@ -17,18 +17,46 @@ import {
   Music,
   RefreshCw,
   Film,
+  Copy,
+  Check,
+  Upload,
+  RotateCcw,
+  AlertTriangle,
+  Video,
+  Eye,
+  ArrowRight,
+  Download,
+  Settings,
+  Key,
+  Link2,
+  X,
 } from "lucide-react";
 import { apiClient } from "@/lib/api";
-import { AutopilotStatus, AutopilotClipItem } from "@/lib/types";
+import { AutopilotStatus, AutopilotClipItem, YouTubeAuthStatus } from "@/lib/types";
 
 export function AutopilotDashboard() {
   const [status, setStatus] = useState<AutopilotStatus | null>(null);
+  const [ytStatus, setYtStatus] = useState<YouTubeAuthStatus | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [isActionLoading, setIsActionLoading] = useState(false);
   const [customAudioCount, setCustomAudioCount] = useState(0);
   const [customAudioTracks, setCustomAudioTracks] = useState<string[]>([]);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [successMsg, setSuccessMsg] = useState<string | null>(null);
   const [countdown, setCountdown] = useState<number | null>(null);
+  const [customUrl, setCustomUrl] = useState<string>("");
+  const [copiedId, setCopiedId] = useState<string | null>(null);
+  const [selectedPreviewClipId, setSelectedPreviewClipId] = useState<string | null>(null);
+
+  // YouTube OAuth & Token Management State
+  const [showOAuthModal, setShowOAuthModal] = useState(false);
+  const [modalTab, setModalTab] = useState<"token" | "oauth">("token");
+  const [ytClientId, setYtClientId] = useState("");
+  const [ytClientSecret, setYtClientSecret] = useState("");
+  const [manualToken, setManualToken] = useState("");
+  const [isConnectingYt, setIsConnectingYt] = useState(false);
+  const [cardTokenInput, setCardTokenInput] = useState<Record<string, string>>({});
+  const [connectingTargetClip, setConnectingTargetClip] = useState<AutopilotClipItem | null>(null);
 
   const fetchStatus = useCallback(async () => {
     try {
@@ -39,7 +67,7 @@ export function AutopilotDashboard() {
       } else {
         setCountdown(null);
       }
-    } catch (err: any) {
+    } catch {
       // Background polling failure
     }
   }, []);
@@ -54,16 +82,51 @@ export function AutopilotDashboard() {
     }
   }, []);
 
+  const fetchYtStatus = useCallback(async () => {
+    try {
+      const data = await apiClient.getYouTubeStatus();
+      setYtStatus(data);
+    } catch {
+      // Ignore
+    }
+  }, []);
+
   useEffect(() => {
     setIsLoading(true);
-    Promise.all([fetchStatus(), fetchAudio()]).finally(() => setIsLoading(false));
+    Promise.all([fetchStatus(), fetchAudio(), fetchYtStatus()]).finally(() => setIsLoading(false));
+  }, [fetchStatus, fetchAudio, fetchYtStatus]);
+
+  // Check OAuth callback parameters from URL
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      const params = new URLSearchParams(window.location.search);
+      if (params.get("youtube_auth") === "success") {
+        setSuccessMsg("🎉 YouTube channel connected successfully! Autopilot can now publish Shorts.");
+        fetchYtStatus();
+        window.history.replaceState({}, document.title, window.location.pathname);
+      } else if (params.get("youtube_auth") === "error") {
+        setErrorMsg("Failed to authenticate with Google YouTube. Please verify credentials and try again.");
+        window.history.replaceState({}, document.title, window.location.pathname);
+      }
+    }
+  }, [fetchYtStatus]);
+
+  // Dynamic resilient polling interval (faster when active so UI stays live; slower when idle)
+  useEffect(() => {
+    const isLive =
+      status?.state === "rendering" ||
+      status?.state === "uploading" ||
+      status?.state === "searching" ||
+      status?.is_running;
+    const intervalMs = isLive ? 2500 : 8000;
 
     const interval = setInterval(() => {
       fetchStatus();
-    }, 10000);
+      fetchYtStatus();
+    }, intervalMs);
 
     return () => clearInterval(interval);
-  }, [fetchStatus, fetchAudio]);
+  }, [status?.state, status?.is_running, fetchStatus, fetchYtStatus]);
 
   // Ticking countdown effect
   useEffect(() => {
@@ -80,6 +143,8 @@ export function AutopilotDashboard() {
     try {
       const res = await apiClient.startAutopilot();
       setStatus(res);
+      setSuccessMsg("Autopilot started. Running autonomous pipeline.");
+      setTimeout(() => setSuccessMsg(null), 4000);
     } catch (e: any) {
       setErrorMsg(e.message || "Failed to start autopilot");
     } finally {
@@ -93,6 +158,8 @@ export function AutopilotDashboard() {
     try {
       const res = await apiClient.pauseAutopilot();
       setStatus(res);
+      setSuccessMsg("Autopilot paused.");
+      setTimeout(() => setSuccessMsg(null), 4000);
     } catch (e: any) {
       setErrorMsg(e.message || "Failed to pause autopilot");
     } finally {
@@ -104,10 +171,32 @@ export function AutopilotDashboard() {
     setIsActionLoading(true);
     setErrorMsg(null);
     try {
-      const res = await apiClient.triggerAutopilot();
+      const res = await apiClient.triggerAutopilot(customUrl.trim() || undefined);
       setStatus(res);
+      setSuccessMsg(
+        customUrl.trim()
+          ? "Started clipping & auto-upload pipeline for your video URL!"
+          : "Started viral GTA 6 video discovery & clipping pipeline!"
+      );
+      setCustomUrl("");
+      setTimeout(() => setSuccessMsg(null), 5000);
     } catch (e: any) {
       setErrorMsg(e.message || "Failed to trigger autopilot cycle");
+    } finally {
+      setIsActionLoading(false);
+    }
+  };
+
+  const handleReset = async () => {
+    setIsActionLoading(true);
+    setErrorMsg(null);
+    try {
+      const res = await apiClient.resetAutopilot();
+      setStatus(res);
+      setSuccessMsg("Reset autopilot quota & cooldown successfully.");
+      setTimeout(() => setSuccessMsg(null), 4000);
+    } catch (e: any) {
+      setErrorMsg(e.message || "Failed to reset autopilot");
     } finally {
       setIsActionLoading(false);
     }
@@ -118,10 +207,125 @@ export function AutopilotDashboard() {
     try {
       await apiClient.cleanupAutopilotDisk();
       await fetchStatus();
+      setSuccessMsg("Purged orphan temporary downloads.");
+      setTimeout(() => setSuccessMsg(null), 3000);
     } catch (e: any) {
       setErrorMsg(e.message || "Failed to cleanup orphan files");
     } finally {
       setIsActionLoading(false);
+    }
+  };
+
+  const handleRetryClip = async (clipId: string) => {
+    setIsActionLoading(true);
+    setErrorMsg(null);
+    try {
+      const res = await apiClient.retryAutopilotClip(clipId);
+      setStatus(res);
+      setSuccessMsg("Retrying upload for Short clip...");
+      setTimeout(() => setSuccessMsg(null), 4000);
+    } catch (e: any) {
+      setErrorMsg(e.message || "Failed to retry clip upload");
+    } finally {
+      setIsActionLoading(false);
+    }
+  };
+
+  const handleSaveOAuthCreds = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!ytClientId.trim() || !ytClientSecret.trim()) {
+      setErrorMsg("Both Google Client ID and Client Secret are required.");
+      return;
+    }
+    setIsConnectingYt(true);
+    setErrorMsg(null);
+    try {
+      const res = await apiClient.configureYouTubeOAuth(ytClientId.trim(), ytClientSecret.trim());
+      if (res?.youtube_status) {
+        setYtStatus(res.youtube_status);
+      }
+      setSuccessMsg("Saved Google OAuth credentials! You can now sign in.");
+      setShowOAuthModal(false);
+    } catch (err: any) {
+      setErrorMsg(err?.message || "Failed to save OAuth credentials.");
+    } finally {
+      setIsConnectingYt(false);
+    }
+  };
+
+  const handleApplyManualToken = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!manualToken.trim()) {
+      setErrorMsg("Please paste a valid YouTube access token.");
+      return;
+    }
+    setIsConnectingYt(true);
+    setErrorMsg(null);
+    try {
+      const res = await apiClient.setYouTubeToken(manualToken.trim());
+      if (res?.youtube_status) {
+        setYtStatus(res.youtube_status);
+      }
+      setSuccessMsg("YouTube Access Token saved and verified successfully!");
+      setManualToken("");
+      setShowOAuthModal(false);
+      if (connectingTargetClip?.id) {
+        const targetId = connectingTargetClip.id;
+        setConnectingTargetClip(null);
+        const retryRes = await apiClient.retryAutopilotClip(targetId);
+        setStatus(retryRes);
+      }
+    } catch (err: any) {
+      setErrorMsg(err?.message || "Failed to save access token.");
+    } finally {
+      setIsConnectingYt(false);
+    }
+  };
+
+  const handleInlineConnectAndRetry = async (clipId: string) => {
+    const token = cardTokenInput[clipId]?.trim();
+    if (!token) {
+      setErrorMsg("Please paste a valid YouTube access token (starting with ya29...).");
+      return;
+    }
+    setIsConnectingYt(true);
+    setErrorMsg(null);
+    try {
+      const res = await apiClient.setYouTubeToken(token);
+      if (res?.youtube_status) {
+        setYtStatus(res.youtube_status);
+      }
+      setSuccessMsg("YouTube token saved! Retrying upload for this Short now...");
+      setCardTokenInput((prev) => ({ ...prev, [clipId]: "" }));
+      // Immediately retry uploading this specific clip
+      const retryRes = await apiClient.retryAutopilotClip(clipId);
+      setStatus(retryRes);
+      setTimeout(() => setSuccessMsg(null), 4000);
+    } catch (err: any) {
+      setErrorMsg(err?.message || "Failed to save token and retry clip.");
+    } finally {
+      setIsConnectingYt(false);
+    }
+  };
+
+  const handleDisconnectYouTube = async () => {
+    setIsActionLoading(true);
+    try {
+      await apiClient.disconnectYouTube();
+      await fetchYtStatus();
+      setSuccessMsg("YouTube channel disconnected.");
+    } catch (err: any) {
+      setErrorMsg(err?.message || "Failed to disconnect channel.");
+    } finally {
+      setIsActionLoading(false);
+    }
+  };
+
+  const handleCopyLink = (url: string, id: string) => {
+    if (navigator?.clipboard) {
+      navigator.clipboard.writeText(url);
+      setCopiedId(id);
+      setTimeout(() => setCopiedId(null), 2500);
     }
   };
 
@@ -131,12 +335,98 @@ export function AutopilotDashboard() {
     return `${mins}m ${secs < 10 ? "0" : ""}${secs}s`;
   };
 
+  // Find active or featured clip for the video preview player
+  const activeClip: AutopilotClipItem | null = useMemo(() => {
+    if (!status?.current_batch?.clips || status.current_batch.clips.length === 0) {
+      return null;
+    }
+    const clips = status.current_batch.clips;
+    if (selectedPreviewClipId) {
+      const found = clips.find((c) => c.id === selectedPreviewClipId);
+      if (found) return found;
+    }
+    // Prefer actively rendering/uploading clip
+    const current = clips.find((c) => c.status === "uploading" || c.status === "rendering");
+    if (current) return current;
+    // Or first preview ready / published clip
+    const ready = clips.find((c) => c.preview_url || c.filename);
+    if (ready) return ready;
+    return clips[0];
+  }, [status?.current_batch?.clips, selectedPreviewClipId]);
+
+  // List of all published videos (from status.all_published_videos or batch)
+  const publishedVideos = useMemo(() => {
+    const list: Array<{
+      id: string;
+      title: string;
+      youtube_url: string;
+      youtube_video_id: string;
+      published_at?: string;
+      clip_index?: number;
+    }> = [];
+    const seen = new Set<string>();
+
+    if (status?.all_published_videos && status.all_published_videos.length > 0) {
+      for (const p of status.all_published_videos) {
+        if (!seen.has(p.youtube_url)) {
+          seen.add(p.youtube_url);
+          list.push(p);
+        }
+      }
+    }
+
+    if (status?.current_batch?.clips) {
+      for (const c of status.current_batch.clips) {
+        if (c.status === "published" && c.youtube_url && !seen.has(c.youtube_url)) {
+          seen.add(c.youtube_url);
+          list.push({
+            id: c.id,
+            title: c.hook_title,
+            youtube_url: c.youtube_url,
+            youtube_video_id: c.youtube_video_id || "",
+            clip_index: c.clip_index,
+          });
+        }
+      }
+    }
+    return list;
+  }, [status?.all_published_videos, status?.current_batch?.clips]);
+
+  // List of failed clips or active issues
+  const activeIssues = useMemo(() => {
+    const issues: Array<{ id?: string; title?: string; error: string; timestamp?: string }> = [];
+    if (status?.current_batch?.clips) {
+      for (const c of status.current_batch.clips) {
+        if (c.status === "failed" && c.error) {
+          issues.push({
+            id: c.id,
+            title: c.hook_title,
+            error: c.error,
+          });
+        }
+      }
+    }
+    if (status?.recent_errors && status.recent_errors.length > 0) {
+      for (const e of status.recent_errors) {
+        if (!issues.some((i) => i.error === e.error)) {
+          issues.push({
+            id: e.clip_id,
+            title: e.title,
+            error: e.error,
+            timestamp: e.timestamp,
+          });
+        }
+      }
+    }
+    return issues;
+  }, [status?.current_batch?.clips, status?.recent_errors]);
+
   const getStateBadge = () => {
     if (!status) return null;
     if (status.state === "uploading") {
       return (
         <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 animate-pulse">
-          <Zap className="w-3.5 h-3.5" />
+          <Upload className="w-3.5 h-3.5 animate-bounce" />
           Uploading to YouTube Shorts...
         </span>
       );
@@ -145,7 +435,23 @@ export function AutopilotDashboard() {
       return (
         <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-blue-500/20 text-blue-400 border border-blue-500/30 animate-pulse">
           <RefreshCw className="w-3.5 h-3.5 animate-spin" />
-          Slicing & Rendering 6 Clips...
+          Slicing, Hooking & Rendering...
+        </span>
+      );
+    }
+    if (status.state === "searching") {
+      return (
+        <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-amber-500/20 text-amber-400 border border-amber-500/30 animate-pulse">
+          <Sparkles className="w-3.5 h-3.5" />
+          Discovering Viral Video...
+        </span>
+      );
+    }
+    if (status.state === "error") {
+      return (
+        <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-red-500/20 text-red-400 border border-red-500/30">
+          <AlertTriangle className="w-3.5 h-3.5" />
+          Pipeline Alert / Issue
         </span>
       );
     }
@@ -222,23 +528,502 @@ export function AutopilotDashboard() {
 
             <button
               type="button"
-              onClick={handleTriggerNow}
+              onClick={handleReset}
               disabled={isActionLoading}
-              className="flex items-center gap-2 px-4 py-2.5 rounded-xl font-semibold text-sm bg-zinc-900 hover:bg-zinc-800 text-zinc-300 border border-zinc-800 transition-all hover:border-zinc-700 active:scale-95"
+              title="Reset daily upload quota & clear cooldown"
+              className="flex items-center gap-1.5 px-3.5 py-2.5 rounded-xl text-xs font-semibold bg-zinc-900 hover:bg-zinc-800 text-zinc-300 border border-zinc-800 transition-all hover:border-zinc-700 active:scale-95"
             >
-              <Zap className="w-4 h-4 text-yellow-400" />
-              <span>Queue Next Video Now</span>
+              <RotateCcw className="w-3.5 h-3.5 text-zinc-400" />
+              <span>Reset Cooldown</span>
             </button>
           </div>
         </div>
 
+        {/* URL Ingestion & Quick Trigger Bar */}
+        <div className="mt-6 pt-6 border-t border-zinc-800/80 flex flex-col sm:flex-row gap-3">
+          <input
+            type="text"
+            value={customUrl}
+            onChange={(e) => setCustomUrl(e.target.value)}
+            placeholder="Paste YouTube video or podcast URL to auto-clip & upload (or leave blank to auto-discover GTA 6)..."
+            className="flex-1 px-4 py-2.5 rounded-xl bg-zinc-950/80 border border-zinc-800 text-sm text-zinc-200 placeholder:text-zinc-500 focus:outline-none focus:border-red-500/60 focus:ring-1 focus:ring-red-500/40 transition-all"
+          />
+          <button
+            type="button"
+            onClick={handleTriggerNow}
+            disabled={isActionLoading}
+            className="flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl font-semibold text-sm bg-zinc-900 hover:bg-zinc-800 text-yellow-400 border border-yellow-500/30 hover:border-yellow-500/50 transition-all shadow-md active:scale-95 shrink-0"
+          >
+            <Zap className="w-4 h-4 fill-yellow-400" />
+            <span>Queue Next Video Now</span>
+          </button>
+        </div>
+
         {errorMsg && (
-          <div className="mt-4 p-3 rounded-xl bg-red-950/50 border border-red-500/40 text-xs text-red-300 flex items-center gap-2">
-            <AlertCircle className="w-4 h-4 shrink-0" />
-            <span>{errorMsg}</span>
+          <div className="mt-4 p-3 rounded-xl bg-red-950/60 border border-red-500/50 text-xs text-red-200 flex items-center justify-between gap-2 animate-in fade-in">
+            <div className="flex items-center gap-2">
+              <AlertCircle className="w-4 h-4 text-red-400 shrink-0" />
+              <span>{errorMsg}</span>
+            </div>
+            <button
+              type="button"
+              onClick={() => setErrorMsg(null)}
+              className="text-red-400 hover:text-red-200 text-xs px-2 py-0.5 rounded border border-red-500/30"
+            >
+              Dismiss
+            </button>
+          </div>
+        )}
+
+        {successMsg && (
+          <div className="mt-4 p-3 rounded-xl bg-emerald-950/60 border border-emerald-500/50 text-xs text-emerald-200 flex items-center gap-2 animate-in fade-in">
+            <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+            <span>{successMsg}</span>
           </div>
         )}
       </div>
+
+      {/* YouTube Channel Connection Panel (Directly Connect & Authorize) */}
+      <div className="rounded-3xl border border-zinc-800 bg-zinc-950/90 p-5 sm:p-6 space-y-4 shadow-xl backdrop-blur-xl">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div className="flex items-center gap-3">
+            <div
+              className={`w-10 h-10 rounded-2xl flex items-center justify-center shrink-0 border ${
+                ytStatus?.connected
+                  ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20"
+                  : "bg-red-500/10 text-red-400 border-red-500/20"
+              }`}
+            >
+              {ytStatus?.connected ? (
+                <CheckCircle2 className="w-5 h-5" />
+              ) : (
+                <AlertTriangle className="w-5 h-5 text-amber-400" />
+              )}
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <h3 className="text-sm font-bold text-white">
+                  YouTube Channel Connection
+                </h3>
+                {ytStatus?.connected ? (
+                  <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 uppercase">
+                    Connected
+                  </span>
+                ) : (
+                  <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-500/20 text-amber-300 border border-amber-500/30 uppercase">
+                    Not Connected
+                  </span>
+                )}
+              </div>
+              <p className="text-xs text-zinc-400 mt-0.5">
+                {ytStatus?.connected ? (
+                  <span>
+                    Linked Channel: <strong className="text-zinc-200">{ytStatus.channel_title || "My YouTube Channel"}</strong> (Ready for automatic upload)
+                  </span>
+                ) : (
+                  <span>
+                    Autopilot requires a connected YouTube channel to upload your 6 daily Shorts.
+                  </span>
+                )}
+              </p>
+            </div>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2.5 shrink-0">
+            {ytStatus?.connected ? (
+              <button
+                type="button"
+                onClick={handleDisconnectYouTube}
+                disabled={isActionLoading}
+                className="text-xs text-zinc-400 hover:text-red-400 underline font-medium px-3 py-1.5 transition-colors"
+              >
+                Disconnect Channel
+              </button>
+            ) : (
+              <>
+                {ytStatus?.auth_url ? (
+                  <a
+                    href={ytStatus.auth_url}
+                    className="flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold bg-white hover:bg-zinc-100 text-zinc-950 shadow-md shadow-white/10 transition-all active:scale-95"
+                  >
+                    <svg className="w-3.5 h-3.5" viewBox="0 0 24 24">
+                      <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
+                      <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
+                      <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z"/>
+                      <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"/>
+                    </svg>
+                    <span>Sign In with Google</span>
+                  </a>
+                ) : null}
+
+                <button
+                  type="button"
+                  onClick={() => setShowOAuthModal(!showOAuthModal)}
+                  className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-semibold bg-zinc-900 hover:bg-zinc-800 text-zinc-300 border border-zinc-800 transition-all active:scale-95"
+                >
+                  <Settings className="w-3.5 h-3.5 text-zinc-400" />
+                  <span>Setup Credentials / Token</span>
+                </button>
+              </>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* Real-time Dynamic Pipeline Phase Tracker */}
+      {status?.current_batch && (
+        <div className="rounded-3xl border border-zinc-800 bg-zinc-950/90 p-6 space-y-5 shadow-xl backdrop-blur-xl animate-in fade-in duration-300">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-zinc-800/80 pb-4">
+            <div>
+              <span className="text-[11px] font-bold uppercase tracking-wider text-red-400">
+                Live Auto-Upload Pipeline Flow
+              </span>
+              <h2 className="text-lg font-bold text-white flex items-center gap-2 mt-0.5">
+                <Sparkles className="w-4 h-4 text-yellow-400" />
+                Active Batch: {status.current_batch.source_title}
+              </h2>
+            </div>
+            <span className="text-xs text-zinc-400">
+              State: <strong className="text-zinc-200 uppercase">{status.state}</strong>
+            </span>
+          </div>
+
+          {/* 5-Step Visual Phase Progression */}
+          <div className="grid grid-cols-1 sm:grid-cols-5 gap-3">
+            {/* Step 1: Hook Created */}
+            <div
+              className={`p-3.5 rounded-2xl border transition-all ${
+                activeClip?.hook_title
+                  ? "bg-zinc-900 border-yellow-500/40 text-yellow-300 shadow-md shadow-yellow-500/5"
+                  : "bg-zinc-950/50 border-zinc-800/60 text-zinc-500"
+              }`}
+            >
+              <div className="flex items-center gap-2 mb-1.5">
+                <span className="w-5 h-5 rounded-full bg-yellow-500/20 text-yellow-400 text-xs font-bold flex items-center justify-center shrink-0">
+                  1
+                </span>
+                <span className="text-xs font-bold uppercase tracking-wider text-white">Hook Created</span>
+              </div>
+              <p className="text-[11px] text-zinc-400 line-clamp-2">
+                {activeClip?.hook_title
+                  ? `"${activeClip.hook_title}"`
+                  : "Analyzing retention cues & crafting hook..."}
+              </p>
+            </div>
+
+            {/* Step 2: Text & Audio Styled */}
+            <div
+              className={`p-3.5 rounded-2xl border transition-all ${
+                activeClip?.background_music && activeClip.background_music !== "none"
+                  ? "bg-zinc-900 border-cyan-500/40 text-cyan-300 shadow-md shadow-cyan-500/5"
+                  : "bg-zinc-950/50 border-zinc-800/60 text-zinc-500"
+              }`}
+            >
+              <div className="flex items-center gap-2 mb-1.5">
+                <span className="w-5 h-5 rounded-full bg-cyan-500/20 text-cyan-400 text-xs font-bold flex items-center justify-center shrink-0">
+                  2
+                </span>
+                <span className="text-xs font-bold uppercase tracking-wider text-white">Text & Song</span>
+              </div>
+              <p className="text-[11px] text-zinc-400 line-clamp-2">
+                {activeClip
+                  ? `${activeClip.hook_style} • Song: ${activeClip.background_music}`
+                  : "Mixing procedural synthwave & kinetic bar..."}
+              </p>
+            </div>
+
+            {/* Step 3: Video Preview Ready */}
+            <div
+              className={`p-3.5 rounded-2xl border transition-all ${
+                activeClip?.preview_url || activeClip?.filename
+                  ? "bg-zinc-900 border-purple-500/40 text-purple-300 shadow-md shadow-purple-500/5"
+                  : "bg-zinc-950/50 border-zinc-800/60 text-zinc-500"
+              }`}
+            >
+              <div className="flex items-center gap-2 mb-1.5">
+                <span className="w-5 h-5 rounded-full bg-purple-500/20 text-purple-400 text-xs font-bold flex items-center justify-center shrink-0">
+                  3
+                </span>
+                <span className="text-xs font-bold uppercase tracking-wider text-white">Video Preview</span>
+              </div>
+              <p className="text-[11px] text-zinc-400 line-clamp-2">
+                {activeClip?.preview_url
+                  ? "9:16 Vertical Short rendered and ready to watch!"
+                  : "Sequentially rendering 9:16 MP4..."}
+              </p>
+            </div>
+
+            {/* Step 4: Uploading to YouTube */}
+            <div
+              className={`p-3.5 rounded-2xl border transition-all ${
+                status.state === "uploading" || activeClip?.status === "uploading"
+                  ? "bg-zinc-900 border-red-500/50 text-red-300 shadow-md shadow-red-500/10 animate-pulse"
+                  : activeClip?.status === "published"
+                  ? "bg-zinc-900 border-emerald-500/30 text-emerald-400"
+                  : "bg-zinc-950/50 border-zinc-800/60 text-zinc-500"
+              }`}
+            >
+              <div className="flex items-center gap-2 mb-1.5">
+                <span className="w-5 h-5 rounded-full bg-red-500/20 text-red-400 text-xs font-bold flex items-center justify-center shrink-0">
+                  4
+                </span>
+                <span className="text-xs font-bold uppercase tracking-wider text-white">YouTube Upload</span>
+              </div>
+              <p className="text-[11px] text-zinc-400 line-clamp-2">
+                {activeClip?.status === "uploading"
+                  ? "Uploading Short to YouTube Data API..."
+                  : activeClip?.status === "published"
+                  ? "Uploaded successfully!"
+                  : "Queued for hourly drop schedule"}
+              </p>
+            </div>
+
+            {/* Step 5: Published & Live Link */}
+            <div
+              className={`p-3.5 rounded-2xl border transition-all ${
+                publishedVideos.length > 0
+                  ? "bg-zinc-900 border-emerald-500/50 text-emerald-300 shadow-md shadow-emerald-500/10"
+                  : "bg-zinc-950/50 border-zinc-800/60 text-zinc-500"
+              }`}
+            >
+              <div className="flex items-center gap-2 mb-1.5">
+                <span className="w-5 h-5 rounded-full bg-emerald-500/20 text-emerald-400 text-xs font-bold flex items-center justify-center shrink-0">
+                  5
+                </span>
+                <span className="text-xs font-bold uppercase tracking-wider text-white">Live Link</span>
+              </div>
+              <p className="text-[11px] text-zinc-400 line-clamp-2">
+                {publishedVideos.length > 0
+                  ? `${publishedVideos.length} Short(s) live on YouTube!`
+                  : "Waiting for first drop to complete"}
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Featured Video Preview Player ("her is your video preview") */}
+      {activeClip && (
+        <div className="rounded-3xl border border-zinc-800 bg-zinc-950/90 p-6 sm:p-8 space-y-6 shadow-2xl backdrop-blur-xl">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-zinc-800/80 pb-4">
+            <div className="space-y-1">
+              <div className="flex items-center gap-2">
+                <span className="px-2.5 py-0.5 rounded text-[11px] font-bold bg-red-600/20 text-red-400 border border-red-600/30">
+                  Short #{activeClip.clip_index} Preview
+                </span>
+                <span className="text-xs text-zinc-400">
+                  Duration: {activeClip.duration !== undefined ? activeClip.duration.toFixed(0) : "30"}s • Layout: {activeClip.layout}
+                </span>
+              </div>
+              <h2 className="text-xl font-bold text-white tracking-tight">
+                {activeClip.hook_title}
+              </h2>
+            </div>
+
+            {/* Download or View Link */}
+            <div className="flex items-center gap-2.5">
+              {activeClip.preview_url && (
+                <a
+                  href={apiClient.resolveUrl(activeClip.preview_url)}
+                  download={activeClip.filename || `short_${activeClip.clip_index}.mp4`}
+                  className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-semibold bg-zinc-900 hover:bg-zinc-800 text-zinc-200 border border-zinc-800 hover:border-zinc-700 transition-all active:scale-95"
+                >
+                  <Download className="w-3.5 h-3.5 text-zinc-400" />
+                  <span>Download MP4</span>
+                </a>
+              )}
+              {activeClip.youtube_url && (
+                <a
+                  href={activeClip.youtube_url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-semibold bg-red-600 hover:bg-red-500 text-white shadow-md shadow-red-600/20 transition-all active:scale-95"
+                >
+                  <span>Watch on YouTube</span>
+                  <ExternalLink className="w-3.5 h-3.5" />
+                </a>
+              )}
+            </div>
+          </div>
+
+          {/* Centered 9:16 Vertical Video Preview Container */}
+          <div className="flex flex-col items-center justify-center py-2">
+            {activeClip.preview_url ? (
+              <div className="w-64 sm:w-72 aspect-[9/16] rounded-2xl overflow-hidden bg-black border border-zinc-800 shadow-2xl relative group">
+                <video
+                  src={apiClient.resolveUrl(activeClip.preview_url)}
+                  controls
+                  playsInline
+                  className="w-full h-full object-contain"
+                />
+              </div>
+            ) : (
+              <div className="w-64 sm:w-72 aspect-[9/16] rounded-2xl border border-dashed border-zinc-800 bg-zinc-900/40 flex flex-col items-center justify-center text-center p-6 space-y-3">
+                <RefreshCw className="w-8 h-8 text-zinc-500 animate-spin" />
+                <p className="text-xs text-zinc-400 font-medium">
+                  {activeClip.current_step === "hook_created"
+                    ? "Hook created! Applying text style & mixing audio..."
+                    : activeClip.current_step === "styling"
+                    ? "Audio mixed! Rendering 9:16 vertical video..."
+                    : "Rendering Short MP4..."}
+                </p>
+                <span className="text-[10px] text-zinc-500">Low-CPU mode (2 threads) to keep Mac quiet</span>
+              </div>
+            )}
+          </div>
+
+          {/* Clip Metadata Badges */}
+          <div className="flex flex-wrap items-center justify-center gap-2 pt-2 text-xs">
+            <span className="px-3 py-1 rounded-xl bg-zinc-900 border border-zinc-800 text-zinc-300">
+              🎨 Style: <strong className="text-white font-medium">{activeClip.hook_style}</strong>
+            </span>
+            <span className="px-3 py-1 rounded-xl bg-zinc-900 border border-zinc-800 text-zinc-300">
+              ⚡ Progress Bar: <strong className="text-white font-medium">{activeClip.progress_bar_color}</strong>
+            </span>
+            <span className="px-3 py-1 rounded-xl bg-zinc-900 border border-zinc-800 text-zinc-300">
+              🎵 Background Track: <strong className="text-white font-medium">{activeClip.background_music}</strong>
+            </span>
+          </div>
+        </div>
+      )}
+
+      {/* Published YouTube Shorts Showcase ("and on done it will gi em ehte lin off off alal udpated video") */}
+      {publishedVideos.length > 0 && (
+        <div className="rounded-3xl border border-emerald-500/30 bg-zinc-950 p-6 sm:p-8 space-y-5 shadow-2xl animate-in fade-in">
+          <div className="flex items-center justify-between border-b border-zinc-800/80 pb-4">
+            <div className="space-y-1">
+              <span className="px-2.5 py-0.5 rounded text-[11px] font-bold uppercase bg-emerald-600/20 text-emerald-400 border border-emerald-600/30">
+                Uploaded Videos
+              </span>
+              <h2 className="text-xl font-bold text-white flex items-center gap-2">
+                <CheckCircle2 className="w-5 h-5 text-emerald-400" />
+                Published YouTube Shorts ({publishedVideos.length})
+              </h2>
+            </div>
+            <span className="text-xs text-zinc-400">All links ready & live on your channel</span>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {publishedVideos.map((video, idx) => (
+              <div
+                key={video.id || idx}
+                className="rounded-2xl border border-emerald-500/20 bg-emerald-950/10 hover:border-emerald-500/40 p-4 space-y-3 transition-all"
+              >
+                <div className="flex items-start justify-between gap-3">
+                  <div className="space-y-1 flex-1">
+                    <span className="text-[10px] font-bold text-emerald-400 uppercase tracking-wider">
+                      Short #{video.clip_index ?? idx + 1} • Live on YouTube
+                    </span>
+                    <h3 className="text-sm font-semibold text-white line-clamp-2">
+                      {video.title}
+                    </h3>
+                  </div>
+                  <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
+                </div>
+
+                <div className="pt-2 border-t border-zinc-800/60 flex items-center justify-between gap-2">
+                  <a
+                    href={video.youtube_url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-xs text-red-400 hover:text-red-300 font-semibold flex items-center gap-1.5 truncate"
+                  >
+                    <ExternalLink className="w-3.5 h-3.5 shrink-0" />
+                    <span className="truncate">{video.youtube_url}</span>
+                  </a>
+
+                  <button
+                    type="button"
+                    onClick={() => handleCopyLink(video.youtube_url, video.id || String(idx))}
+                    className="flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-medium bg-zinc-900 hover:bg-zinc-800 text-zinc-300 border border-zinc-800 shrink-0 transition-all active:scale-95"
+                  >
+                    {copiedId === (video.id || String(idx)) ? (
+                      <>
+                        <Check className="w-3 h-3 text-emerald-400" />
+                        <span className="text-emerald-400 font-semibold">Copied!</span>
+                      </>
+                    ) : (
+                      <>
+                        <Copy className="w-3 h-3 text-zinc-400" />
+                        <span>Copy Link</span>
+                      </>
+                    )}
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Issues & Errors Center ("and not then tiwillshow me the all the issue fornte d") */}
+      {activeIssues.length > 0 && (
+        <div className="rounded-3xl border border-red-500/40 bg-red-950/20 p-6 space-y-4 shadow-xl animate-in fade-in">
+          <div className="flex items-center justify-between border-b border-red-500/20 pb-3">
+            <div className="flex items-center gap-2">
+              <AlertTriangle className="w-5 h-5 text-red-400" />
+              <h2 className="text-base font-bold text-white">
+                Pipeline Issues & Diagnostics ({activeIssues.length})
+              </h2>
+            </div>
+            <span className="text-xs text-red-300">Errors requiring attention</span>
+          </div>
+
+          <div className="space-y-3">
+            {activeIssues.map((issue, idx) => (
+              <div
+                key={idx}
+                className="p-4 rounded-xl bg-zinc-900/90 border border-red-500/30 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs"
+              >
+                <div className="space-y-1 flex-1">
+                  <div className="flex items-center gap-2">
+                    <span className="font-semibold text-zinc-200">
+                      {issue.title || "Pipeline Step Issue"}
+                    </span>
+                    {issue.error.toLowerCase().includes("token") && (
+                      <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-500/20 text-amber-300 border border-amber-500/30 uppercase">
+                        Auth Required
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-red-300 font-mono text-[11px] leading-relaxed">
+                    {issue.error}
+                  </p>
+                </div>
+
+                <div className="flex items-center gap-2 shrink-0">
+                  {(!ytStatus?.connected || issue.error.toLowerCase().includes("token") || issue.error.toLowerCase().includes("connect")) && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const targetClip = status?.current_batch?.clips?.find((c) => c.id === issue.id);
+                        if (targetClip) setConnectingTargetClip(targetClip);
+                        setShowOAuthModal(true);
+                      }}
+                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg font-bold bg-white text-zinc-950 hover:bg-zinc-200 transition-all shadow-sm active:scale-95"
+                    >
+                      <Link2 className="w-3.5 h-3.5" />
+                      <span>Connect YouTube Channel</span>
+                    </button>
+                  )}
+
+                  {issue.id && (
+                    <button
+                      type="button"
+                      onClick={() => handleRetryClip(issue.id!)}
+                      disabled={isActionLoading}
+                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg font-semibold bg-red-600/20 text-red-300 hover:bg-red-600/30 border border-red-500/40 transition-all"
+                    >
+                      <RotateCcw className="w-3 h-3" />
+                      <span>Retry Upload</span>
+                    </button>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Metric & Protection Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -307,7 +1092,7 @@ export function AutopilotDashboard() {
               {status?.disk_space_cleaned_mb ?? 0} MB
             </div>
             <div className="flex items-center justify-between">
-              <span className="text-xs text-zinc-400">Freed by instant cleanup</span>
+              <span className="text-xs text-zinc-400">Raw source auto-purged</span>
               <button
                 type="button"
                 onClick={handleCleanup}
@@ -363,7 +1148,11 @@ export function AutopilotDashboard() {
             {status.current_batch.clips.map((clip) => (
               <div
                 key={clip.id}
-                className="rounded-2xl border border-zinc-800/90 bg-zinc-900/50 p-4 space-y-3 flex flex-col justify-between hover:border-zinc-700 transition-all"
+                className={`rounded-2xl border p-4 space-y-3 flex flex-col justify-between transition-all ${
+                  activeClip?.id === clip.id
+                    ? "border-red-500/60 bg-zinc-900/90 shadow-lg shadow-red-500/5 ring-1 ring-red-500/30"
+                    : "border-zinc-800/90 bg-zinc-900/50 hover:border-zinc-700"
+                }`}
               >
                 <div className="space-y-2">
                   <div className="flex items-center justify-between">
@@ -374,6 +1163,14 @@ export function AutopilotDashboard() {
                       {clip.status === "published" ? (
                         <span className="text-emerald-400 font-semibold flex items-center gap-1">
                           <CheckCircle2 className="w-3.5 h-3.5" /> Published
+                        </span>
+                      ) : clip.status === "uploading" ? (
+                        <span className="text-red-400 font-semibold flex items-center gap-1 animate-pulse">
+                          <Upload className="w-3.5 h-3.5" /> Uploading...
+                        </span>
+                      ) : clip.status === "failed" ? (
+                        <span className="text-rose-400 font-semibold flex items-center gap-1">
+                          <AlertCircle className="w-3.5 h-3.5" /> Issue
                         </span>
                       ) : (
                         <span>Drop: +{clip.clip_index - 1}h</span>
@@ -387,7 +1184,7 @@ export function AutopilotDashboard() {
 
                   <div className="flex flex-wrap gap-1.5 text-[10px]">
                     <span className="px-2 py-0.5 rounded bg-zinc-950 border border-zinc-800 text-zinc-300">
-                      🎨 Style: {clip.hook_style}
+                      🎨 {clip.hook_style}
                     </span>
                     <span className="px-2 py-0.5 rounded bg-zinc-950 border border-zinc-800 text-zinc-300">
                       ⚡ Bar: {clip.progress_bar_color}
@@ -396,12 +1193,83 @@ export function AutopilotDashboard() {
                       📐 {clip.layout}
                     </span>
                   </div>
+
+                  {clip.error && (
+                    <div className="p-3 rounded-xl bg-red-950/60 border border-red-500/40 text-[11px] text-red-200 space-y-2.5">
+                      <div className="flex items-start gap-1.5">
+                        <AlertCircle className="w-3.5 h-3.5 text-red-400 shrink-0 mt-0.5" />
+                        <span className="leading-snug">{clip.error}</span>
+                      </div>
+                      {(!ytStatus?.connected || clip.error.toLowerCase().includes("token") || clip.error.toLowerCase().includes("connect")) && (
+                        <div className="pt-1.5 border-t border-red-500/20 space-y-2">
+                          <div className="flex flex-wrap items-center gap-2">
+                            {ytStatus?.auth_url ? (
+                              <a
+                                href={ytStatus.auth_url}
+                                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold bg-white hover:bg-zinc-100 text-zinc-950 shadow-sm transition-all active:scale-95"
+                              >
+                                <svg className="w-3.5 h-3.5" viewBox="0 0 24 24">
+                                  <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
+                                  <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
+                                  <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z"/>
+                                  <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"/>
+                                </svg>
+                                <span>Sign In with Google</span>
+                              </a>
+                            ) : null}
+
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setConnectingTargetClip(clip);
+                                setShowOAuthModal(true);
+                              }}
+                              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold bg-white text-zinc-950 hover:bg-zinc-200 shadow-sm transition-all active:scale-95"
+                            >
+                              <Link2 className="w-3.5 h-3.5 text-red-600" />
+                              <span>Connect YouTube Channel</span>
+                            </button>
+                          </div>
+
+                          {/* Direct In-Card Token Input */}
+                          <div className="space-y-1 pt-1">
+                            <span className="text-[10px] text-zinc-400 font-medium">Or paste access token directly to upload:</span>
+                            <div className="flex gap-1.5">
+                              <input
+                                type="password"
+                                placeholder="Paste Access Token (ya29...)"
+                                value={cardTokenInput[clip.id] || ""}
+                                onChange={(e) =>
+                                  setCardTokenInput((prev) => ({ ...prev, [clip.id]: e.target.value }))
+                                }
+                                className="flex-1 min-w-0 px-2.5 py-1 rounded-lg bg-zinc-950 border border-zinc-800 text-[11px] text-zinc-100 placeholder-zinc-500 focus:outline-none focus:border-red-500"
+                              />
+                              <button
+                                type="button"
+                                onClick={() => handleInlineConnectAndRetry(clip.id)}
+                                disabled={isActionLoading || isConnectingYt}
+                                className="px-2.5 py-1 rounded-lg text-[11px] font-bold bg-emerald-600 hover:bg-emerald-500 text-white shrink-0 active:scale-95 transition-all"
+                              >
+                                {isConnectingYt ? "Connecting..." : "Connect & Retry"}
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
 
-                <div className="pt-2 border-t border-zinc-800/60 flex items-center justify-between text-xs">
-                  <span className="text-zinc-500">
-                    Duration: {clip.duration.toFixed(0)}s
-                  </span>
+                <div className="pt-2 border-t border-zinc-800/60 flex items-center justify-between text-xs gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setSelectedPreviewClipId(clip.id)}
+                    className="text-zinc-400 hover:text-zinc-200 font-medium flex items-center gap-1"
+                  >
+                    <Eye className="w-3 h-3" />
+                    <span>Preview</span>
+                  </button>
+
                   {clip.youtube_url ? (
                     <a
                       href={clip.youtube_url}
@@ -412,8 +1280,32 @@ export function AutopilotDashboard() {
                       <span>View on YouTube</span>
                       <ExternalLink className="w-3 h-3" />
                     </a>
+                  ) : clip.status === "failed" ? (
+                    <div className="flex items-center gap-2">
+                      {(!ytStatus?.connected || clip.error?.toLowerCase().includes("token") || clip.error?.toLowerCase().includes("connect")) && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setConnectingTargetClip(clip);
+                            setShowOAuthModal(true);
+                          }}
+                          className="text-xs font-bold text-amber-400 hover:text-amber-300 underline flex items-center gap-1"
+                        >
+                          <Link2 className="w-3 h-3" />
+                          <span>Connect</span>
+                        </button>
+                      )}
+                      <button
+                        type="button"
+                        onClick={() => handleRetryClip(clip.id)}
+                        className="text-amber-400 hover:text-amber-300 font-medium flex items-center gap-1"
+                      >
+                        <RotateCcw className="w-3 h-3" />
+                        <span>Retry</span>
+                      </button>
+                    </div>
                   ) : (
-                    <span className="text-zinc-400">
+                    <span className="text-zinc-500">
                       {clip.status === "queued" ? "Queued for Drop" : clip.status}
                     </span>
                   )}
@@ -438,7 +1330,7 @@ export function AutopilotDashboard() {
           <span className="text-xs font-semibold text-zinc-400 uppercase tracking-wider">
             Live Autopilot Activity & Cleanup Logs
           </span>
-          <span className="text-[11px] text-zinc-500">Auto-refreshing</span>
+          <span className="text-[11px] text-zinc-500">Auto-refreshing • Independent of page reload</span>
         </div>
         <div className="bg-zinc-900/80 rounded-xl p-3 font-mono text-xs text-zinc-300 space-y-1 max-h-48 overflow-y-auto">
           {status?.recent_logs && status.recent_logs.length > 0 ? (
@@ -452,6 +1344,157 @@ export function AutopilotDashboard() {
           )}
         </div>
       </div>
+
+      {/* Universal YouTube OAuth / Access Token Modal Dialog */}
+      {showOAuthModal && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-in fade-in duration-200"
+        >
+          <div className="relative w-full max-w-lg rounded-3xl border border-zinc-800 bg-zinc-950 p-6 shadow-2xl space-y-5 animate-in zoom-in-95 duration-200">
+            <div className="flex items-center justify-between border-b border-zinc-800/80 pb-4">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-2xl bg-red-600/10 text-red-500 border border-red-500/20 flex items-center justify-center shrink-0">
+                  <Link2 className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-white">
+                    Connect YouTube Channel
+                  </h3>
+                  <p className="text-xs text-zinc-400">
+                    {connectingTargetClip
+                      ? `Authorizing to upload Short #${connectingTargetClip.clip_index}: "${connectingTargetClip.hook_title}"`
+                      : "Connect your channel to auto-publish daily GTA 6 Shorts."}
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                aria-label="Close modal"
+                onClick={() => {
+                  setShowOAuthModal(false);
+                  setConnectingTargetClip(null);
+                }}
+                className="w-8 h-8 rounded-full bg-zinc-900 hover:bg-zinc-800 text-zinc-400 hover:text-white flex items-center justify-center transition-colors"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Tabs: Instant Token vs Google Cloud OAuth */}
+            <div className="flex rounded-xl bg-zinc-900/80 p-1 border border-zinc-800">
+              <button
+                type="button"
+                onClick={() => setModalTab("token")}
+                className={`flex-1 py-1.5 rounded-lg text-xs font-semibold transition-all ${
+                  modalTab === "token"
+                    ? "bg-zinc-800 text-white shadow"
+                    : "text-zinc-400 hover:text-zinc-200"
+                }`}
+              >
+                Instant Access Token
+              </button>
+              <button
+                type="button"
+                onClick={() => setModalTab("oauth")}
+                className={`flex-1 py-1.5 rounded-lg text-xs font-semibold transition-all ${
+                  modalTab === "oauth"
+                    ? "bg-zinc-800 text-white shadow"
+                    : "text-zinc-400 hover:text-zinc-200"
+                }`}
+              >
+                Google Cloud OAuth App
+              </button>
+            </div>
+
+            {modalTab === "token" ? (
+              <form onSubmit={handleApplyManualToken} className="space-y-4">
+                <div className="space-y-1.5">
+                  <label className="text-xs font-semibold text-zinc-200 flex items-center gap-1.5">
+                    <Zap className="w-3.5 h-3.5 text-emerald-400" />
+                    Paste YouTube OAuth Access Token
+                  </label>
+                  <p className="text-[11px] text-zinc-400 leading-relaxed">
+                    Fastest method: paste an access token from Google OAuth Playground or <code className="text-zinc-300">gcloud auth print-access-token</code> below.
+                  </p>
+                  <input
+                    type="password"
+                    placeholder="Paste Access Token (ya29.a0AfH...)"
+                    value={manualToken}
+                    onChange={(e) => setManualToken(e.target.value)}
+                    className="w-full px-3.5 py-2.5 rounded-xl bg-zinc-900 border border-zinc-800 text-xs text-white placeholder-zinc-500 focus:outline-none focus:border-emerald-500/60"
+                  />
+                </div>
+                <button
+                  type="submit"
+                  disabled={isConnectingYt}
+                  className="w-full py-2.5 rounded-xl text-xs font-bold bg-emerald-600 hover:bg-emerald-500 text-white transition-all shadow-md active:scale-95 disabled:opacity-50"
+                >
+                  {isConnectingYt
+                    ? "Verifying & Saving..."
+                    : connectingTargetClip
+                    ? `Connect & Upload Short #${connectingTargetClip.clip_index}`
+                    : "Apply Token & Connect Channel"}
+                </button>
+              </form>
+            ) : (
+              <div className="space-y-4">
+                {ytStatus?.auth_url ? (
+                  <div className="space-y-3">
+                    <p className="text-xs text-zinc-400">
+                      Google OAuth credentials are configured. Click below to authorize your YouTube channel:
+                    </p>
+                    <a
+                      href={ytStatus.auth_url}
+                      className="w-full py-2.5 rounded-xl text-xs font-bold bg-white hover:bg-zinc-100 text-zinc-950 flex items-center justify-center gap-2 shadow-md transition-all active:scale-95"
+                    >
+                      <svg className="w-4 h-4" viewBox="0 0 24 24">
+                        <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
+                        <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
+                        <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z"/>
+                        <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"/>
+                      </svg>
+                      <span>Sign In with Google</span>
+                    </a>
+                  </div>
+                ) : (
+                  <form onSubmit={handleSaveOAuthCreds} className="space-y-3">
+                    <div className="space-y-1">
+                      <p className="text-[11px] text-zinc-400">
+                        Create OAuth credentials in Google Cloud Console with Redirect URI:
+                        <br />
+                        <code className="text-zinc-300 font-mono text-[10px]">http://localhost:3000/api/youtube/callback</code>
+                      </p>
+                    </div>
+                    <input
+                      type="text"
+                      placeholder="Google Client ID (.apps.googleusercontent.com)"
+                      value={ytClientId}
+                      onChange={(e) => setYtClientId(e.target.value)}
+                      className="w-full px-3.5 py-2 rounded-xl bg-zinc-900 border border-zinc-800 text-xs text-white placeholder-zinc-500 focus:outline-none focus:border-red-500"
+                    />
+                    <input
+                      type="password"
+                      placeholder="Google Client Secret"
+                      value={ytClientSecret}
+                      onChange={(e) => setYtClientSecret(e.target.value)}
+                      className="w-full px-3.5 py-2 rounded-xl bg-zinc-900 border border-zinc-800 text-xs text-white placeholder-zinc-500 focus:outline-none focus:border-red-500"
+                    />
+                    <button
+                      type="submit"
+                      disabled={isConnectingYt}
+                      className="w-full py-2.5 rounded-xl text-xs font-bold bg-red-600 hover:bg-red-500 text-white transition-all shadow-md active:scale-95 disabled:opacity-50"
+                    >
+                      {isConnectingYt ? "Saving..." : "Save Credentials & Generate Link"}
+                    </button>
+                  </form>
+                )}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

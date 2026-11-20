@@ -24,7 +24,7 @@ from typing import Any, Dict, List, Optional
 from app.config import DOWNLOAD_DIR, BASE_DIR
 from app.clip_renderer import render_viral_clip
 from app.clip_scorer import analyze_and_score_clips, parse_vtt_or_srt
-from app.downloader import extract_metadata, get_base_ydl_opts
+from app.downloader import extract_metadata, get_base_ydl_opts, YOUTUBE_CLIENT_PROFILES
 from app.youtube_publisher import (
     publish_short_video,
     get_youtube_status,
@@ -73,8 +73,11 @@ class AutopilotManager:
 
     def __init__(self):
         self.is_running: bool = False
-        self.state: str = "idle"  # idle, searching, rendering, queued, uploading, cooldown, paused
+        self.state: str = "idle"  # idle, searching, rendering, queued, uploading, cooldown, paused, error
         self.current_batch: Optional[AutopilotBatch] = None
+        self.active_clip_id: Optional[str] = None
+        self.current_step: Optional[str] = None
+        self.current_step_label: Optional[str] = None
         self.processed_video_ids: List[str] = []
         self.daily_uploads_count: int = 0
         self.daily_upload_limit: int = 6
@@ -83,6 +86,8 @@ class AutopilotManager:
         self.disk_space_cleaned_mb: float = 0.0
         self.last_cleaned_at: Optional[str] = None
         self.recent_logs: List[str] = []
+        self.all_published_videos: List[Dict[str, Any]] = []
+        self.recent_errors: List[Dict[str, Any]] = []
         self._lock = asyncio.Lock()
         self._load_state()
 
@@ -94,12 +99,27 @@ class AutopilotManager:
             self.recent_logs.pop(0)
         logger.info("[Autopilot] %s", message)
 
+    def reset_state(self):
+        """Resets cooldown, active errors, and daily uploads counter."""
+        self.state = "idle"
+        self.daily_uploads_count = 0
+        self.cooldown_until = None
+        self.active_clip_id = None
+        self.current_step = None
+        self.current_step_label = None
+        self.recent_errors = []
+        self._log("🔄 Reset autopilot state, cooldown, and daily upload counter.")
+        self._save_state()
+
     def _save_state(self):
         try:
             state_data = {
                 "is_running": self.is_running,
                 "state": self.state,
                 "current_batch": self.current_batch.model_dump() if self.current_batch else None,
+                "active_clip_id": self.active_clip_id,
+                "current_step": self.current_step,
+                "current_step_label": self.current_step_label,
                 "processed_video_ids": self.processed_video_ids[-100:],
                 "daily_uploads_count": self.daily_uploads_count,
                 "daily_upload_limit": self.daily_upload_limit,
@@ -108,6 +128,8 @@ class AutopilotManager:
                 "disk_space_cleaned_mb": round(self.disk_space_cleaned_mb, 2),
                 "last_cleaned_at": self.last_cleaned_at,
                 "recent_logs": self.recent_logs[-30:],
+                "all_published_videos": self.all_published_videos[:20],
+                "recent_errors": self.recent_errors[:20],
             }
             STATE_FILE.write_text(json.dumps(state_data, indent=2), encoding="utf-8")
         except Exception as err:
@@ -120,6 +142,9 @@ class AutopilotManager:
             data = json.loads(STATE_FILE.read_text(encoding="utf-8"))
             self.is_running = data.get("is_running", False)
             self.state = data.get("state", "idle")
+            self.active_clip_id = data.get("active_clip_id")
+            self.current_step = data.get("current_step")
+            self.current_step_label = data.get("current_step_label")
             self.processed_video_ids = data.get("processed_video_ids", [])
             self.daily_uploads_count = data.get("daily_uploads_count", 0)
             self.daily_upload_limit = data.get("daily_upload_limit", 6)
@@ -128,6 +153,8 @@ class AutopilotManager:
             self.disk_space_cleaned_mb = data.get("disk_space_cleaned_mb", 0.0)
             self.last_cleaned_at = data.get("last_cleaned_at")
             self.recent_logs = data.get("recent_logs", [])
+            self.all_published_videos = data.get("all_published_videos", [])
+            self.recent_errors = data.get("recent_errors", [])
             batch_data = data.get("current_batch")
             if batch_data:
                 self.current_batch = AutopilotBatch(**batch_data)
@@ -277,45 +304,91 @@ class AutopilotManager:
         batch_id = uuid.uuid4().hex[:8]
 
         self.state = "rendering"
+        self.current_step = "downloading"
+        self.current_step_label = f"Downloading source video: '{vid_title}'"
         self._log(f"📥 Downloading source video for clipping: '{vid_title}'")
         self._save_state()
 
-        # Step 1: Download full source video
+        # Step 1: Download full source video with universal format fallback and multi-client rotation
         source_stem = f"autopilot_src_{vid_id}"
         outtmpl = str(DOWNLOAD_DIR / f"{source_stem}.%(ext)s")
         source_path: Optional[str] = None
 
+        format_selector = (
+            "bestvideo[height<=1080][ext=mp4]+bestaudio[ext=m4a]/"
+            "bestvideo[height<=1080]+bestaudio/"
+            "bestvideo+bestaudio/"
+            "best[height<=1080]/"
+            "best/"
+            "bv*+ba/b"
+        )
+
         def _download_src():
             import yt_dlp
-            ydl_opts = get_base_ydl_opts("youtube")
-            ydl_opts.update({
-                "outtmpl": outtmpl,
-                "format": "bestvideo[height<=1080][ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best",
-                "merge_output_format": "mp4",
-                "noplaylist": True,
-            })
-            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-                ydl.download([vid_url])
+            last_err = None
+            client_candidates = YOUTUBE_CLIENT_PROFILES if ("youtube" in vid_url or "youtu.be" in vid_url) else [None]
+
+            for client_profile in client_candidates:
+                ydl_opts = get_base_ydl_opts("youtube", client_override=client_profile)
+                ydl_opts.update({
+                    "outtmpl": outtmpl,
+                    "format": format_selector,
+                    "merge_output_format": "mp4",
+                    "noplaylist": True,
+                })
+                try:
+                    with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                        ydl.download([vid_url])
+                    matches = [
+                        p for p in DOWNLOAD_DIR.glob(f"{source_stem}.*")
+                        if not p.name.endswith(".part") and p.stat().st_size > 0
+                    ]
+                    if matches:
+                        return str(matches[0])
+                except Exception as e:
+                    last_err = e
+                    continue
+
+            if last_err:
+                raise last_err
+            return None
 
         try:
-            await asyncio.to_thread(_download_src)
-            matches = list(DOWNLOAD_DIR.glob(f"{source_stem}.*"))
-            if matches:
-                source_path = str(matches[0])
+            source_path = await asyncio.to_thread(_download_src)
+            if not source_path:
+                matches = [
+                    p for p in DOWNLOAD_DIR.glob(f"{source_stem}.*")
+                    if not p.name.endswith(".part") and p.stat().st_size > 0
+                ]
+                if matches:
+                    source_path = str(matches[0])
         except Exception as dl_err:
             self._log(f"❌ Failed to download source video: {dl_err}")
-            self.state = "idle"
+            self.state = "error"
+            self.current_step = "failed"
+            self.current_step_label = f"Failed to download source: {dl_err}"
+            self.recent_errors.insert(0, {
+                "title": vid_title,
+                "stage": "download",
+                "error": str(dl_err),
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+            })
             self._save_state()
             return None
 
         if not source_path or not os.path.exists(source_path):
             self._log("❌ Downloaded source video not found on disk.")
-            self.state = "idle"
+            self.state = "error"
+            self.current_step = "failed"
+            self.current_step_label = "Downloaded source video not found on disk"
             self._save_state()
             return None
 
         src_size_mb = os.path.getsize(source_path) / (1024 * 1024)
+        self.current_step = "analyzing"
+        self.current_step_label = f"Analyzing 6 viral moments & retention cues ({src_size_mb:.1f} MB source)..."
         self._log(f"📦 Downloaded source ({src_size_mb:.1f} MB). Analyzing 6 viral segments...")
+        self._save_state()
 
         try:
             # Step 2: Extract Subtitles or Cues
@@ -373,17 +446,61 @@ class AutopilotManager:
                     reason="High energy action sequence",
                 ))
 
-            # Step 3: Sequential Low-CPU Rendering of the 6 Clips
-            rendered_clips: List[AutopilotClipItem] = []
+            # Pre-populate batch so UI immediately sees all 6 planned clips upon refresh
             custom_audio_list = self.get_custom_audio_files()
-
             now_ts = time.time()
+            preliminary_clips: List[AutopilotClipItem] = []
             for idx, cand in enumerate(clip_candidates[:6]):
                 clip_index = idx + 1
                 profile = STYLE_PROFILES[idx % len(STYLE_PROFILES)]
                 audio_choice = custom_audio_list[idx % len(custom_audio_list)] if custom_audio_list else PROCEDURAL_MUSIC_FALLBACKS[idx % len(PROCEDURAL_MUSIC_FALLBACKS)]
+                scheduled_epoch = now_ts + 60 + (idx * self.upload_interval_seconds)
+                scheduled_iso = datetime.fromtimestamp(scheduled_epoch, tz=timezone.utc).isoformat()
+                output_filename = f"gta6_short_{batch_id}_{clip_index}.mp4"
 
-                # Enhance hook title with Gemini Flash if available
+                preliminary_clips.append(AutopilotClipItem(
+                    id=f"{batch_id}_{clip_index}",
+                    source_video_id=vid_id,
+                    source_title=vid_title,
+                    clip_index=clip_index,
+                    start_time=cand.start_time,
+                    end_time=cand.end_time,
+                    duration=cand.duration,
+                    hook_title=cand.hook_title,
+                    hook_style=profile["hook_style"],
+                    progress_bar_color=profile["progress_bar_color"],
+                    layout=profile["layout"],
+                    background_music=audio_choice,
+                    filename=output_filename,
+                    preview_url=f"/api/file/{output_filename}",
+                    download_url=f"/api/file/{output_filename}",
+                    scheduled_time=scheduled_iso,
+                    status="queued",
+                    current_step="queued",
+                    step_description="Clip queued in batch",
+                ))
+
+            batch = AutopilotBatch(
+                batch_id=batch_id,
+                source_video_id=vid_id,
+                source_title=vid_title,
+                source_url=vid_url,
+                created_at=datetime.now(timezone.utc).isoformat(),
+                clips=preliminary_clips,
+                status="processing",
+            )
+            self.current_batch = batch
+            self._save_state()
+
+            # Step 3: Sequential Low-CPU Rendering of the 6 Clips
+            for idx, cand in enumerate(clip_candidates[:6]):
+                clip_index = idx + 1
+                clip = self.current_batch.clips[idx]
+                profile = STYLE_PROFILES[idx % len(STYLE_PROFILES)]
+                audio_choice = custom_audio_list[idx % len(custom_audio_list)] if custom_audio_list else PROCEDURAL_MUSIC_FALLBACKS[idx % len(PROCEDURAL_MUSIC_FALLBACKS)]
+                self.active_clip_id = clip.id
+
+                # Substep 1: Hook Creation ("that ok we have created the hook. this the hook")
                 final_hook = cand.hook_title
                 try:
                     from app.ai_hook import generate_hook_from_gemini
@@ -393,19 +510,37 @@ class AutopilotManager:
                 except Exception:
                     pass
 
+                clip.hook_title = final_hook
+                clip.current_step = "hook_created"
+                clip.step_description = f"Hook created: '{final_hook}'"
+                self.current_step = "hook_created"
+                self.current_step_label = f"Short #{clip_index}: Created viral hook '{final_hook}'"
+                self._log(f"🎣 Hook created for Short #{clip_index}: '{final_hook}'")
+                self._save_state()
+
+                # Substep 2: Text Styling & Song ("now this is the text thing song")
+                clip.current_step = "styling"
+                clip.background_music = audio_choice
+                clip.hook_style = profile["hook_style"]
+                clip.progress_bar_color = profile["progress_bar_color"]
+                clip.layout = profile["layout"]
+                clip.step_description = f"Overlay: {profile['hook_style']} ({profile['progress_bar_color']} bar) • Song: {audio_choice}"
+                self.current_step = "styling"
+                self.current_step_label = f"Short #{clip_index}: Styled text ({profile['hook_style']}) & song ({audio_choice})"
+                self._log(f"🎵 Text & Song set for Short #{clip_index}: {profile['hook_style']} | {audio_choice}")
+                self._save_state()
+
+                # Substep 3: Low-CPU Video Rendering
                 output_filename = f"gta6_short_{batch_id}_{clip_index}.mp4"
                 output_path = str(DOWNLOAD_DIR / output_filename)
+                clip.status = "rendering"
+                clip.current_step = "rendering"
+                clip.step_description = f"Rendering 9:16 vertical video with low CPU mode..."
+                self.current_step = "rendering"
+                self.current_step_label = f"Rendering Short #{clip_index}/6 (threads=2)..."
+                self._log(f"🎬 Rendering Short {clip_index}/6 (threads=2): '{final_hook}'")
+                self._save_state()
 
-                # Schedule: Clip 1 at now + 60s, subsequent clips at +1hr, +2hr, etc.
-                scheduled_epoch = now_ts + 60 + (idx * self.upload_interval_seconds)
-                scheduled_iso = datetime.fromtimestamp(scheduled_epoch, tz=timezone.utc).isoformat()
-
-                self._log(
-                    f"🎬 Rendering Short {clip_index}/6 (threads=2): '{final_hook}' "
-                    f"[{profile['hook_style']} | {profile['progress_bar_color']}]"
-                )
-
-                # Low CPU Rendering with threads=2
                 def _render(c=cand, h=final_hook, p=profile, a=audio_choice, out=output_path):
                     return render_viral_clip(
                         input_path=source_path,
@@ -419,69 +554,67 @@ class AutopilotManager:
                         music_volume=0.12,
                         progress_bar=True,
                         progress_bar_color=p["progress_bar_color"],
-                        threads=2,  # Low CPU load mode for host machine
+                        threads=2,
                     )
 
                 await asyncio.to_thread(_render)
 
-                rendered_clips.append(AutopilotClipItem(
-                    id=f"{batch_id}_{clip_index}",
-                    source_video_id=vid_id,
-                    source_title=vid_title,
-                    clip_index=clip_index,
-                    start_time=cand.start_time,
-                    end_time=cand.end_time,
-                    duration=cand.duration,
-                    hook_title=final_hook,
-                    hook_style=profile["hook_style"],
-                    progress_bar_color=profile["progress_bar_color"],
-                    layout=profile["layout"],
-                    background_music=audio_choice,
-                    filename=output_filename,
-                    scheduled_time=scheduled_iso,
-                    status="queued",
-                ))
+                # Substep 4: Video Preview Ready ("her is your video preview")
+                clip.filename = output_filename
+                clip.preview_url = f"/api/file/{output_filename}"
+                clip.download_url = f"/api/file/{output_filename}"
+                clip.status = "preview_ready"
+                clip.current_step = "preview_ready"
+                clip.step_description = "Video rendered! Video preview is ready."
+                self.current_step = "preview_ready"
+                self.current_step_label = f"Short #{clip_index} video preview is ready."
+                self._log(f"✅ Video preview ready for Short #{clip_index}: {output_filename}")
+                self._save_state()
 
             # Step 4: AGGRESSIVE DISK CLEANUP 1 — Delete the raw source video immediately!
             self.cleanup_file(source_path)
 
-            batch = AutopilotBatch(
-                batch_id=batch_id,
-                source_video_id=vid_id,
-                source_title=vid_title,
-                source_url=vid_url,
-                created_at=datetime.now(timezone.utc).isoformat(),
-                clips=rendered_clips,
-                status="queued",
-            )
-
-            self.current_batch = batch
             self.processed_video_ids.append(vid_id)
             self.state = "queued"
-            self._log(f"✅ Batch {batch_id} ready: 6 GTA 6 Shorts scheduled (1 every hour).")
+            self.current_batch.status = "queued"
+            self._log(f"✅ Batch {batch_id} ready: 6 GTA 6 Shorts prepared.")
             self._save_state()
 
             # Sync batch & source to Supabase cloud database
             try:
                 from app.supabase_client import sync_autopilot_batch_supabase, record_processed_source_supabase, is_supabase_configured
                 if is_supabase_configured():
-                    asyncio.create_task(sync_autopilot_batch_supabase(batch.model_dump()))
+                    asyncio.create_task(sync_autopilot_batch_supabase(self.current_batch.model_dump()))
                     asyncio.create_task(record_processed_source_supabase(video_info))
             except Exception as sb_err:
                 logger.debug("Supabase batch sync hook error: %s", sb_err)
 
-            return batch
+            # Immediately trigger upload of Short #1 for live real-time pipeline execution
+            # ("and we are uplaoding the video on youube", "and on done it will gi em ehte lin off off alal udpated video")
+            if self.current_batch and self.current_batch.clips:
+                first_clip = self.current_batch.clips[0]
+                await self.publish_clip(first_clip, cleanup_after=False)
+
+            return self.current_batch
 
         except Exception as e:
             self._log(f"❌ Failed to process batch: {e}")
             if source_path and os.path.exists(source_path):
                 self.cleanup_file(source_path)
-            self.state = "idle"
+            self.state = "error"
+            self.current_step = "failed"
+            self.current_step_label = f"Batch processing failed: {e}"
+            self.recent_errors.insert(0, {
+                "title": vid_title,
+                "stage": "batch",
+                "error": str(e),
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+            })
             self._save_state()
             return None
 
-    async def publish_clip(self, clip: AutopilotClipItem) -> bool:
-        """Publishes a single queued clip to YouTube and immediately deletes its file from disk."""
+    async def publish_clip(self, clip: AutopilotClipItem, cleanup_after: bool = True) -> bool:
+        """Publishes a single queued clip to YouTube and immediately tracks link or frontend issue."""
         if not clip.filename:
             return False
 
@@ -489,12 +622,25 @@ class AutopilotManager:
         if not os.path.exists(clip_path):
             self._log(f"⚠️ Clip file not found on disk: {clip.filename}")
             clip.status = "failed"
-            clip.error = "File not found"
+            clip.current_step = "failed"
+            clip.error = "Rendered video file not found on disk"
+            self.recent_errors.insert(0, {
+                "clip_id": clip.id,
+                "title": clip.hook_title,
+                "stage": "upload",
+                "error": "Rendered video file not found on disk",
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+            })
             self._save_state()
             return False
 
         self.state = "uploading"
         clip.status = "uploading"
+        clip.current_step = "uploading"
+        clip.step_description = "Uploading video to YouTube Shorts via YouTube Data API..."
+        self.active_clip_id = clip.id
+        self.current_step = "uploading"
+        self.current_step_label = f"Uploading Short #{clip.clip_index} to YouTube..."
         self._log(f"🚀 Publishing Short #{clip.clip_index}/6 to YouTube: '{clip.hook_title}'")
         self._save_state()
 
@@ -519,10 +665,26 @@ class AutopilotManager:
             yt_url = pub_res.get("youtube_url") or f"https://youtube.com/shorts/{vid_id}"
 
             clip.status = "published"
+            clip.current_step = "published"
+            clip.step_description = f"Published on YouTube: {yt_url}"
             clip.youtube_video_id = vid_id
             clip.youtube_url = yt_url
             self.daily_uploads_count += 1
             self._log(f"🎉 Successfully uploaded Short #{clip.clip_index}! URL: {yt_url}")
+
+            # Record in all_published_videos list
+            pub_item = {
+                "id": clip.id,
+                "clip_index": clip.clip_index,
+                "title": clip.hook_title,
+                "youtube_url": yt_url,
+                "youtube_video_id": vid_id,
+                "published_at": datetime.now(timezone.utc).isoformat(),
+                "preview_url": clip.preview_url or f"/api/file/{clip.filename}",
+                "duration": clip.duration,
+            }
+            self.all_published_videos = [p for p in self.all_published_videos if p.get("id") != clip.id]
+            self.all_published_videos.insert(0, pub_item)
 
             # Sync published status to Supabase
             try:
@@ -537,18 +699,31 @@ class AutopilotManager:
             except Exception as sb_err:
                 logger.debug("Supabase clip status sync hook error: %s", sb_err)
 
-            # AGGRESSIVE DISK CLEANUP 2 — Delete the rendered clip MP4 immediately after upload!
-            self.cleanup_file(clip_path)
+            if cleanup_after:
+                self.cleanup_file(clip_path)
 
             self.state = "queued"
+            self.current_step = "published"
+            self.current_step_label = f"Published Short #{clip.clip_index}! URL: {yt_url}"
             self._save_state()
             return True
 
         except Exception as err:
-            self._log(f"❌ Upload failed for Short #{clip.clip_index}: {err}")
+            err_msg = str(err)
+            self._log(f"❌ Upload failed for Short #{clip.clip_index}: {err_msg}")
             clip.status = "failed"
-            clip.error = str(err)
-            self.state = "queued"
+            clip.current_step = "failed"
+            clip.error = err_msg
+            self.recent_errors.insert(0, {
+                "clip_id": clip.id,
+                "title": clip.hook_title,
+                "stage": "upload",
+                "error": err_msg,
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+            })
+            self.state = "error"
+            self.current_step = "failed"
+            self.current_step_label = f"Short #{clip.clip_index} upload failed: {err_msg}"
             self._save_state()
             return False
 
@@ -597,7 +772,7 @@ class AutopilotManager:
                     sched_epoch = sched_dt.timestamp()
 
                     if now >= sched_epoch:
-                        await self.publish_clip(next_clip)
+                        await self.publish_clip(next_clip, cleanup_after=False)
                         return
 
                 # If all 6 clips in current batch are published or failed
@@ -622,7 +797,7 @@ class AutopilotManager:
     def start(self):
         """Starts or resumes autopilot."""
         self.is_running = True
-        if self.state == "paused":
+        if self.state in ("paused", "error"):
             self.state = "queued" if self.current_batch else "idle"
         self._log("▶️ Autopilot STARTED.")
         self._save_state()
@@ -659,6 +834,9 @@ class AutopilotManager:
             is_running=self.is_running,
             state=self.state,
             current_batch=self.current_batch,
+            active_clip_id=self.active_clip_id,
+            current_step=self.current_step,
+            current_step_label=self.current_step_label,
             next_upload_time=next_upload_time,
             seconds_until_next_upload=seconds_left,
             daily_uploads_count=self.daily_uploads_count,
@@ -668,6 +846,8 @@ class AutopilotManager:
             last_cleaned_at=self.last_cleaned_at,
             cpu_mode="low_load_threads_2",
             recent_logs=self.recent_logs[-25:],
+            all_published_videos=self.all_published_videos,
+            recent_errors=self.recent_errors[:10],
         )
 
 

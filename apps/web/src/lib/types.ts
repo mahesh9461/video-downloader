@@ -166,6 +166,25 @@ export interface YouTubeAuthStatus {
   auth_url?: string;
 }
 
+export interface AutopilotPublishedVideo {
+  id: string;
+  clip_index?: number;
+  title: string;
+  youtube_url: string;
+  youtube_video_id: string;
+  published_at: string;
+  preview_url?: string | null;
+  duration?: number;
+}
+
+export interface AutopilotIssue {
+  clip_id?: string;
+  title?: string;
+  stage?: string;
+  error: string;
+  timestamp: string;
+}
+
 export interface AutopilotClipItem {
   id: string;
   source_video_id: string;
@@ -180,8 +199,12 @@ export interface AutopilotClipItem {
   layout: string;
   background_music: string;
   filename?: string | null;
+  preview_url?: string | null;
+  download_url?: string | null;
   scheduled_time?: string | null;
-  status: "queued" | "rendering" | "uploading" | "published" | "cleaned" | "failed";
+  status: "queued" | "rendering" | "preview_ready" | "uploading" | "published" | "cleaned" | "failed";
+  current_step?: "queued" | "discovering" | "hook_created" | "styling" | "rendering" | "preview_ready" | "uploading" | "published" | "failed";
+  step_description?: string | null;
   youtube_video_id?: string | null;
   youtube_url?: string | null;
   error?: string | null;
@@ -199,8 +222,11 @@ export interface AutopilotBatch {
 
 export interface AutopilotStatus {
   is_running: boolean;
-  state: "idle" | "searching" | "rendering" | "queued" | "uploading" | "cooldown" | "paused";
+  state: "idle" | "searching" | "rendering" | "queued" | "uploading" | "cooldown" | "paused" | "error";
   current_batch?: AutopilotBatch | null;
+  active_clip_id?: string | null;
+  current_step?: string | null;
+  current_step_label?: string | null;
   next_upload_time?: string | null;
   seconds_until_next_upload?: number | null;
   daily_uploads_count: number;
@@ -210,6 +236,8 @@ export interface AutopilotStatus {
   last_cleaned_at?: string | null;
   cpu_mode: string;
   recent_logs: string[];
+  all_published_videos?: AutopilotPublishedVideo[];
+  recent_errors?: AutopilotIssue[];
 }
 
 

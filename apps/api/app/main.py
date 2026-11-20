@@ -42,6 +42,7 @@ from app.schemas import (
     YouTubePublishResponse,
     YouTubeAuthStatus,
     AutopilotStatus,
+    AutopilotTriggerRequest,
 )
 from app.autopilot import autopilot_manager
 from app.ai_hook import generate_ai_hook
@@ -51,6 +52,7 @@ from app.youtube_publisher import (
     exchange_code_for_token,
     publish_short_video,
     save_google_credentials,
+    save_stored_token,
     clear_stored_token,
 )
 from app.downloader import (
@@ -332,7 +334,9 @@ async def serve_downloaded_file(filename: str, background_tasks: BackgroundTasks
     if not file_path.exists() or not file_path.is_file():
         raise HTTPException(status_code=404, detail="Requested file not found or expired.")
 
-    background_tasks.add_task(remove_file_delayed, str(file_path))
+    # Do not delete autopilot clips so in-browser video previews never break
+    if not (safe_filename.startswith("gta6_short_") or safe_filename.startswith("autopilot_")):
+        background_tasks.add_task(remove_file_delayed, str(file_path))
 
     display_name = safe_filename
     if "_" in safe_filename:
@@ -1143,6 +1147,17 @@ async def youtube_disconnect_endpoint():
     return {"status": "disconnected"}
 
 
+@app.post("/api/youtube/set-token")
+async def youtube_set_token_endpoint(payload: dict):
+    """Directly save an access token manually."""
+    token = payload.get("token") or payload.get("access_token")
+    if not token or not str(token).strip():
+        raise HTTPException(status_code=400, detail="Token is required.")
+    save_stored_token({"access_token": str(token).strip(), "created_at": time.time()})
+    status_data = await get_youtube_status()
+    return {"status": "connected", "youtube_status": status_data}
+
+
 @app.get("/api/youtube/auth-url")
 async def youtube_auth_url_endpoint():
     """Retrieve Google OAuth authorization URL for YouTube upload."""
@@ -1216,14 +1231,72 @@ async def autopilot_pause_endpoint():
 
 
 @app.post("/api/autopilot/trigger", response_model=AutopilotStatus)
-async def autopilot_trigger_endpoint(background_tasks: BackgroundTasks):
-    """Immediately triggers viral discovery and 6-clip batch creation."""
+async def autopilot_trigger_endpoint(
+    background_tasks: BackgroundTasks,
+    request: Optional[AutopilotTriggerRequest] = None,
+):
+    """Immediately triggers viral discovery or custom video URL ingestion and 6-clip batch creation."""
+    url = request.url.strip() if request and request.url else None
+
+    # Reset any stale error state
+    if autopilot_manager.state == "error":
+        autopilot_manager.state = "idle"
+
     async def _run_batch():
-        video = await autopilot_manager.search_viral_gta_video()
-        if video:
-            await autopilot_manager.create_and_render_batch(video)
+        if url:
+            try:
+                autopilot_manager.state = "rendering"
+                autopilot_manager.current_step = "downloading"
+                autopilot_manager.current_step_label = f"Extracting metadata for URL: {url}"
+                autopilot_manager._save_state()
+                meta = await asyncio.to_thread(extract_metadata, url)
+                vid_id = meta.get("id") or str(uuid.uuid4().hex[:8])
+                vid_info = {
+                    "id": vid_id,
+                    "title": meta.get("title", "Custom Viral Moment"),
+                    "url": url,
+                    "duration": meta.get("duration", 300),
+                    "thumbnail": meta.get("thumbnail"),
+                }
+                await autopilot_manager.create_and_render_batch(vid_info)
+            except Exception as e:
+                autopilot_manager._log(f"❌ Failed to process URL '{url}': {e}")
+                autopilot_manager.state = "error"
+                autopilot_manager.current_step = "failed"
+                autopilot_manager.current_step_label = f"Failed URL: {e}"
+                autopilot_manager.recent_errors.insert(0, {
+                    "title": url,
+                    "stage": "download",
+                    "error": str(e),
+                    "timestamp": datetime.now(timezone.utc).isoformat(),
+                })
+                autopilot_manager._save_state()
+        else:
+            video = await autopilot_manager.search_viral_gta_video()
+            if video:
+                await autopilot_manager.create_and_render_batch(video)
 
     background_tasks.add_task(_run_batch)
+    return autopilot_manager.get_status()
+
+
+@app.post("/api/autopilot/reset", response_model=AutopilotStatus)
+async def autopilot_reset_endpoint():
+    """Resets daily upload limit, cooldown, and active batch state."""
+    autopilot_manager.reset_state()
+    return autopilot_manager.get_status()
+
+
+@app.post("/api/autopilot/retry-upload/{clip_id}", response_model=AutopilotStatus)
+async def autopilot_retry_upload_endpoint(clip_id: str, background_tasks: BackgroundTasks):
+    """Retries uploading a failed clip in the current batch."""
+    if autopilot_manager.current_batch:
+        for clip in autopilot_manager.current_batch.clips:
+            if clip.id == clip_id:
+                async def _do_retry(c=clip):
+                    await autopilot_manager.publish_clip(c, cleanup_after=False)
+                background_tasks.add_task(_do_retry)
+                break
     return autopilot_manager.get_status()
 
 

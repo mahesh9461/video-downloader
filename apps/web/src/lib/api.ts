@@ -41,7 +41,7 @@ class ApiClient {
     this.baseUrl = baseUrl.replace(/\/+$/, "");
   }
 
-  private resolveUrl(path: string): string {
+  public resolveUrl(path: string): string {
     const cleanPath = path.startsWith("/") ? path : `/${path}`;
     if (this.baseUrl.endsWith("/api/proxy")) {
       const endpoint = cleanPath.startsWith("/api/") ? cleanPath.slice(5) : cleanPath.slice(1);
@@ -332,6 +332,18 @@ class ApiClient {
     return response.json();
   }
 
+  async setYouTubeToken(token: string): Promise<any> {
+    const response = await fetch(this.resolveUrl("/api/youtube/set-token"), {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ token }),
+    });
+    if (!response.ok) {
+      throw new DownloadError("Failed to save YouTube access token", "unknown");
+    }
+    return response.json();
+  }
+
   async publishToYouTube(req: YouTubePublishRequest): Promise<YouTubePublishResponse> {
     const response = await fetch(this.resolveUrl("/api/youtube/publish"), {
       method: "POST",
@@ -381,12 +393,34 @@ class ApiClient {
     return response.json();
   }
 
-  async triggerAutopilot(): Promise<AutopilotStatus> {
+  async triggerAutopilot(url?: string): Promise<AutopilotStatus> {
     const response = await fetch(this.resolveUrl("/api/autopilot/trigger"), {
       method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ url: url || null }),
     });
     if (!response.ok) {
       throw new DownloadError("Failed to trigger autopilot", "unknown");
+    }
+    return response.json();
+  }
+
+  async resetAutopilot(): Promise<AutopilotStatus> {
+    const response = await fetch(this.resolveUrl("/api/autopilot/reset"), {
+      method: "POST",
+    });
+    if (!response.ok) {
+      throw new DownloadError("Failed to reset autopilot", "unknown");
+    }
+    return response.json();
+  }
+
+  async retryAutopilotClip(clipId: string): Promise<AutopilotStatus> {
+    const response = await fetch(this.resolveUrl(`/api/autopilot/retry-upload/${encodeURIComponent(clipId)}`), {
+      method: "POST",
+    });
+    if (!response.ok) {
+      throw new DownloadError("Failed to retry upload", "unknown");
     }
     return response.json();
   }
