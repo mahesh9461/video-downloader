@@ -395,7 +395,7 @@ def render_viral_clip(
     cmd = [
         ffmpeg, "-y",
         "-ss", str(start_time),
-        "-to", str(end_time),
+        "-t", str(clip_duration),
         "-i", input_path,
     ]
 

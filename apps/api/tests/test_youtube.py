@@ -12,6 +12,8 @@ from app.youtube_publisher import (
     get_youtube_auth_url,
     get_youtube_status,
     publish_short_video,
+    CREDENTIALS_CACHE_FILE,
+    _creds_store,
 )
 
 client = TestClient(app)
@@ -20,8 +22,20 @@ client = TestClient(app)
 @pytest.fixture(autouse=True)
 def cleanup_tokens():
     clear_stored_token()
+    _creds_store.clear()
+    if CREDENTIALS_CACHE_FILE.exists():
+        try:
+            CREDENTIALS_CACHE_FILE.unlink()
+        except Exception:
+            pass
     yield
     clear_stored_token()
+    _creds_store.clear()
+    if CREDENTIALS_CACHE_FILE.exists():
+        try:
+            CREDENTIALS_CACHE_FILE.unlink()
+        except Exception:
+            pass
 
 
 def test_youtube_status_unconfigured():

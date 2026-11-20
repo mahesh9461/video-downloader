@@ -738,9 +738,12 @@ async def render_viral_clip_endpoint(
     else:
         # Download the video source with multi-client resilience and universal format fallback
         import yt_dlp
+        from yt_dlp.utils import download_range_func
         import uuid as _uuid
+
         job_id = _uuid.uuid4().hex[:10]
-        temp_source_path = str(DOWNLOAD_DIR / f"source_{job_id}.mp4")
+        stem = f"source_{job_id}"
+        outtmpl_pattern = str(DOWNLOAD_DIR / f"{stem}.%(ext)s")
 
         # Universal fallback format string that accepts ANY audio/video stream combination
         format_selector = (
@@ -759,29 +762,71 @@ async def render_viral_clip_endpoint(
         last_error = None
         title_hint = "clip"
 
+        # Step A: Attempt fast range download of only the needed section (avoids downloading hundreds of megabytes)
+        safe_range_start = max(0.0, req.start_time - 2.0)
+        safe_range_end = req.end_time + 2.0
+
         for client_profile in client_candidates:
             ydl_opts = get_base_ydl_opts("youtube" if is_yt else "general", client_override=client_profile)
             ydl_opts.update({
-                "outtmpl": temp_source_path,
+                "outtmpl": outtmpl_pattern,
                 "format": format_selector,
                 "merge_output_format": "mp4",
                 "noplaylist": True,
+                "download_ranges": download_range_func(None, [(safe_range_start, safe_range_end)]),
+                "force_keyframes_at_cuts": True,
             })
             try:
                 with yt_dlp.YoutubeDL(ydl_opts) as ydl:
                     info = await asyncio.to_thread(ydl.extract_info, source_input, download=True)
                     if info:
                         title_hint = info.get("title", title_hint)
-                if os.path.exists(temp_source_path) and os.path.getsize(temp_source_path) > 0:
-                    actual_input_path = temp_source_path
+
+                # Look for downloaded file matching stem with any extension
+                candidates = [
+                    p for p in DOWNLOAD_DIR.glob(f"{stem}.*")
+                    if not p.name.endswith(".part") and p.stat().st_size > 0
+                ]
+                if candidates:
+                    actual_input_path = str(candidates[0])
+                    temp_source_path = actual_input_path
                     download_success = True
                     break
             except Exception as e:
                 last_error = e
-                logger.warning("yt-dlp profile %s failed to fetch video source: %s", client_profile, e)
+                logger.warning("yt-dlp profile %s failed to fetch range clip segment: %s", client_profile, e)
                 continue
 
-        # If yt-dlp failed (e.g. format issues or bot challenge), try our built-in InnerTube CDN streamer
+        # Step B: Fallback to full download without download_ranges if range request failed
+        if not download_success:
+            for client_profile in client_candidates:
+                ydl_opts = get_base_ydl_opts("youtube" if is_yt else "general", client_override=client_profile)
+                ydl_opts.update({
+                    "outtmpl": outtmpl_pattern,
+                    "format": format_selector,
+                    "merge_output_format": "mp4",
+                    "noplaylist": True,
+                })
+                try:
+                    with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                        info = await asyncio.to_thread(ydl.extract_info, source_input, download=True)
+                        if info:
+                            title_hint = info.get("title", title_hint)
+                    candidates = [
+                        p for p in DOWNLOAD_DIR.glob(f"{stem}.*")
+                        if not p.name.endswith(".part") and p.stat().st_size > 0
+                    ]
+                    if candidates:
+                        actual_input_path = str(candidates[0])
+                        temp_source_path = actual_input_path
+                        download_success = True
+                        break
+                except Exception as e:
+                    last_error = e
+                    logger.warning("yt-dlp profile %s full download fallback failed: %s", client_profile, e)
+                    continue
+
+        # Step C: If yt-dlp failed completely, try our built-in InnerTube CDN streamer
         if not download_success and is_yt:
             vid_id = extract_youtube_id(source_input)
             if vid_id:
@@ -812,6 +857,18 @@ async def render_viral_clip_endpoint(
                 except Exception:
                     pass
             raise ClipRenderException(f"Failed to fetch video source: {last_error}", "source_download_error", 500)
+
+    # Calculate smart render timestamps based on actual source video duration
+    probe_dur = probe_video_duration(actual_input_path)
+    requested_duration = req.end_time - req.start_time
+    if probe_dur > 0 and probe_dur <= requested_duration + 6.0:
+        # File is already a trimmed segment from range download
+        render_start = 0.0
+        render_end = min(probe_dur, requested_duration)
+    else:
+        # File is full long video
+        render_start = req.start_time
+        render_end = req.end_time
 
     # Optional Ssemble-style Subtitles Burn-in
     if req.burn_captions:
@@ -860,8 +917,8 @@ async def render_viral_clip_endpoint(
         result = await process_clip_render(
             input_path=actual_input_path,
             original_title=title_hint,
-            start_time=req.start_time,
-            end_time=req.end_time,
+            start_time=render_start,
+            end_time=render_end,
             layout=req.layout,
             hook_title=req.hook_title,
             hook_style=req.hook_style,
@@ -881,9 +938,6 @@ async def render_viral_clip_endpoint(
         if subtitles_temp_path and os.path.exists(subtitles_temp_path):
             try:
                 os.remove(subtitles_temp_path)
-            except Exception:
-                pass
-                os.remove(temp_source_path)
             except Exception:
                 pass
 
