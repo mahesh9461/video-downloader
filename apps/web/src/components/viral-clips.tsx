@@ -185,9 +185,46 @@ export function ViralClips() {
     }
   };
 
+  const validateVideoUrl = (inputUrl: string): string | null => {
+    try {
+      const parsed = new URL(inputUrl);
+      const host = parsed.hostname.replace(/^www\./, "").replace(/^m\./, "");
+
+      // YouTube search results page
+      if (host === "youtube.com" && parsed.pathname === "/results") {
+        return "That's a YouTube search results page, not a video. Please open a specific video and paste its URL (e.g. youtube.com/watch?v=...).";
+      }
+      // YouTube channel or playlist page
+      if (
+        host === "youtube.com" &&
+        (parsed.pathname.startsWith("/@") ||
+          parsed.pathname.startsWith("/channel/") ||
+          parsed.pathname.startsWith("/playlist") ||
+          parsed.pathname.startsWith("/c/") ||
+          parsed.pathname === "/")
+      ) {
+        return "Please paste a direct video URL (e.g. youtube.com/watch?v=... or youtu.be/...), not a channel or playlist page.";
+      }
+      // YouTube watch URL without video ID
+      if (host === "youtube.com" && parsed.pathname === "/watch" && !parsed.searchParams.get("v")) {
+        return "Invalid YouTube URL — the video ID (v=) is missing.";
+      }
+    } catch {
+      return "Please enter a valid URL.";
+    }
+    return null;
+  };
+
   const handleAnalyze = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!url.trim()) return;
+
+    // Client-side URL validation before hitting the API
+    const urlError = validateVideoUrl(url.trim());
+    if (urlError) {
+      setAnalysisError(urlError);
+      return;
+    }
 
     setIsAnalyzing(true);
     setAnalysisError(null);
@@ -343,7 +380,7 @@ export function ViralClips() {
               type="text"
               value={url}
               onChange={(e) => setUrl(e.target.value)}
-              placeholder="Paste long YouTube video or podcast URL..."
+              placeholder="Paste a YouTube video URL (e.g. youtube.com/watch?v=...)"
               disabled={isAnalyzing}
               className="w-full bg-transparent text-white placeholder-zinc-500 text-sm focus:outline-none py-2"
             />

@@ -100,7 +100,7 @@ def detect_platform(url: str) -> str:
     if INSTAGRAM_REGEX.search(url):
         return "instagram"
     raise DownloadException(
-        "Invalid or unsupported URL. Please paste a valid YouTube, TikTok, or Instagram link.",
+        "Invalid or unsupported URL. Please paste a direct video URL — e.g. youtube.com/watch?v=... or youtu.be/... (not a search, channel, or playlist page).",
         error_type="invalid_url",
         status_code=400,
     )
