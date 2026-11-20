@@ -20,7 +20,9 @@ client = TestClient(app)
 
 
 @pytest.fixture(autouse=True)
-def cleanup_tokens():
+def cleanup_tokens(monkeypatch):
+    monkeypatch.delenv("GOOGLE_CLIENT_ID", raising=False)
+    monkeypatch.delenv("GOOGLE_CLIENT_SECRET", raising=False)
     clear_stored_token()
     _creds_store.clear()
     if CREDENTIALS_CACHE_FILE.exists():

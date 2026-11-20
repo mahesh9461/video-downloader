@@ -94,6 +94,7 @@ def test_get_metadata_success(mock_ydl_class):
     assert any("MP3" in lbl for lbl in format_labels)
 
 
+@patch("app.main.RATE_LIMIT_PER_MINUTE", 5)
 @patch("app.main.download_video_stream")
 def test_rate_limiting_middleware(mock_stream):
     async def dummy_gen():
