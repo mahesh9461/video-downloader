@@ -28,11 +28,33 @@ import {
   Link2,
   X,
   Image as ImageIcon,
+  Lock,
+  LogIn,
+  UserCheck,
 } from "lucide-react";
+import { useSelector } from "react-redux";
+import { RootState } from "@/lib/store";
 import { apiClient } from "@/lib/api";
 import { AutopilotStatus, AutopilotClipItem, YouTubeAuthStatus, YouTubeChannelItem } from "@/lib/types";
+import { AuthModal } from "@/components/auth-modal";
 
-export function AutopilotDashboard() {
+export interface AutopilotDashboardProps {
+  onOpenAuth?: () => void;
+}
+
+export function AutopilotDashboard({ onOpenAuth }: AutopilotDashboardProps = {}) {
+  const auth = useSelector((state: RootState) => state.auth);
+  const isAuthenticated = Boolean(auth?.isAuthenticated && auth?.token);
+  const [showInternalAuth, setShowInternalAuth] = useState(false);
+
+  const handleOpenAuth = useCallback(() => {
+    if (onOpenAuth) {
+      onOpenAuth();
+    } else {
+      setShowInternalAuth(true);
+    }
+  }, [onOpenAuth]);
+
   const [status, setStatus] = useState<AutopilotStatus | null>(null);
   const [ytStatus, setYtStatus] = useState<YouTubeAuthStatus | null>(null);
   const [channels, setChannels] = useState<YouTubeChannelItem[]>([]);
@@ -582,6 +604,13 @@ export function AutopilotDashboard() {
               <span className="px-2.5 py-0.5 rounded-md text-[11px] font-bold tracking-wider uppercase bg-red-600/20 text-red-400 border border-red-600/30">
                 GTA 6 Viral Autopilot
               </span>
+              <span className="px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/30">
+                Free Slicing &amp; Downloads
+              </span>
+              <span className="px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-amber-500/10 text-amber-300 border border-amber-500/30 flex items-center gap-1">
+                <Lock className="w-3 h-3 text-amber-400" />
+                Sign In to Auto-Upload
+              </span>
               {getStateBadge()}
             </div>
             <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-white">
@@ -622,9 +651,26 @@ export function AutopilotDashboard() {
 
         {/* Primary URL Ingestion & Trigger Bar */}
         <div className="mt-6 pt-6 border-t border-zinc-800/80 space-y-2">
-          <label htmlFor="autopilot-url-input" className="block text-xs font-semibold text-zinc-300">
-            Paste YouTube Video or Podcast URL:
-          </label>
+          <div className="flex items-center justify-between">
+            <label htmlFor="autopilot-url-input" className="block text-xs font-semibold text-zinc-300">
+              Paste YouTube Video or Podcast URL:
+            </label>
+            {isAuthenticated ? (
+              <span className="text-[11px] text-emerald-400 font-medium flex items-center gap-1">
+                <UserCheck className="w-3.5 h-3.5" />
+                Signed in as: <strong className="text-white">{auth.user?.email || auth.user?.name || "Account"}</strong>
+              </span>
+            ) : (
+              <button
+                type="button"
+                onClick={handleOpenAuth}
+                className="cursor-pointer text-[11px] text-amber-400 hover:text-amber-300 font-semibold underline flex items-center gap-1"
+              >
+                <Lock className="w-3 h-3" />
+                <span>Sign in to enable YouTube Auto-Upload</span>
+              </button>
+            )}
+          </div>
           <div className="flex flex-col sm:flex-row gap-3">
             <input
               id="autopilot-url-input"
@@ -641,9 +687,20 @@ export function AutopilotDashboard() {
               className="cursor-pointer flex items-center justify-center gap-2 px-6 py-2.5 rounded-xl font-bold text-sm bg-gradient-to-r from-red-600 to-rose-600 hover:from-red-500 hover:to-rose-500 text-white shadow-lg shadow-red-600/25 transition-all active:scale-95 shrink-0 disabled:cursor-not-allowed disabled:opacity-50"
             >
               <Sparkles className="w-4 h-4 fill-white" />
-              <span>Clip & Upload 6 Shorts</span>
+              <span>{isAuthenticated ? "Clip & Upload 6 Shorts" : "Clip 6 Shorts (Free Download)"}</span>
             </button>
           </div>
+          <p className="text-[11px] text-zinc-400 pt-0.5">
+            {isAuthenticated ? (
+              <span className="text-zinc-300">
+                ⚡ Slices 6 viral clips, generates Full HD hook covers, and auto-publishes to your connected YouTube channel.
+              </span>
+            ) : (
+              <span>
+                ⚡ <strong className="text-emerald-400">100% Free</strong>: Anyone can slice 6 clips &amp; download 9:16 MP4s and Full HD covers. • <strong className="text-amber-300">Sign in</strong> required to auto-publish to YouTube.
+              </span>
+            )}
+          </p>
         </div>
 
         {errorMsg && (
@@ -672,163 +729,200 @@ export function AutopilotDashboard() {
 
       {/* YouTube Channel Connection Panel (Directly Connect & Authorize) */}
       <div className="rounded-3xl border border-zinc-800 bg-zinc-950/90 p-5 sm:p-6 space-y-4 shadow-xl backdrop-blur-xl">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-          <div className="flex items-center gap-3">
-            <div
-              className={`w-10 h-10 rounded-2xl flex items-center justify-center shrink-0 border ${
-                ytStatus?.connected || channels.length > 0
-                  ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20"
-                  : "bg-red-500/10 text-red-400 border-red-500/20"
-              }`}
-            >
-              {ytStatus?.connected || channels.length > 0 ? (
-                <CheckCircle2 className="w-5 h-5" />
-              ) : (
-                <AlertTriangle className="w-5 h-5 text-amber-400" />
-              )}
-            </div>
-            <div>
-              <div className="flex items-center gap-2">
-                <h3 className="text-sm font-bold text-white">
-                  YouTube Channel Connection
-                </h3>
-                {ytStatus?.connected || channels.length > 0 ? (
-                  <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 uppercase">
-                    Connected
-                  </span>
-                ) : (
-                  <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-500/20 text-amber-300 border border-amber-500/30 uppercase">
-                    Not Connected
-                  </span>
-                )}
+        {!isAuthenticated ? (
+          <div className="rounded-2xl border border-amber-500/30 bg-gradient-to-r from-amber-500/10 via-zinc-900 to-zinc-950 p-4 sm:p-5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+            <div className="flex items-start gap-3.5">
+              <div className="w-10 h-10 rounded-2xl bg-amber-500/15 text-amber-400 border border-amber-500/30 flex items-center justify-center shrink-0 mt-0.5 sm:mt-0">
+                <Lock className="w-5 h-5" />
               </div>
-              <p className="text-xs text-zinc-400 mt-0.5">
-                {ytStatus?.connected || channels.length > 0 ? (
-                  <span>
-                    Linked Channel: <strong className="text-zinc-200">
-                      {channels.find((c) => c.channel_id === activeChannelId)?.channel_title || ytStatus?.channel_title || "My YouTube Channel"}
-                    </strong> (Ready for automatic upload)
+              <div className="space-y-1">
+                <div className="flex items-center gap-2">
+                  <h3 className="text-sm font-bold text-white">
+                    Sign In Required for YouTube Auto-Upload
+                  </h3>
+                  <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-500/20 text-amber-300 border border-amber-500/30 uppercase">
+                    Free Download • Auth for Upload
                   </span>
-                ) : (
-                  <span>
-                    Autopilot requires a connected YouTube channel to upload your 6 daily Shorts.
-                  </span>
-                )}
-              </p>
+                </div>
+                <p className="text-xs text-zinc-400 max-w-xl leading-relaxed">
+                  Anyone can paste links, slice 6 viral 9:16 Shorts, and download Full HD covers for free. To connect your YouTube channel and automatically publish 6 daily Shorts, please sign in.
+                </p>
+              </div>
             </div>
-          </div>
-
-          <div className="flex flex-wrap items-center gap-2.5 shrink-0">
-            {ytStatus?.connected || channels.length > 0 ? (
-              <button
-                type="button"
-                onClick={handleDisconnectYouTube}
-                disabled={isActionLoading}
-                className="cursor-pointer text-xs text-zinc-400 hover:text-red-400 underline font-medium px-3 py-1.5 transition-colors disabled:cursor-not-allowed"
-              >
-                Disconnect Channel
-              </button>
-            ) : null}
-
-            {ytStatus?.auth_url && !ytStatus?.connected ? (
-              <a
-                href={ytStatus.auth_url}
-                className="cursor-pointer flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold bg-white hover:bg-zinc-100 text-zinc-950 shadow-md shadow-white/10 transition-all active:scale-95"
-              >
-                <svg className="w-3.5 h-3.5" viewBox="0 0 24 24">
-                  <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
-                  <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
-                  <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z"/>
-                  <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"/>
-                </svg>
-                <span>Sign In with Google</span>
-              </a>
-            ) : null}
-
             <button
               type="button"
-              onClick={() => setShowOAuthModal(!showOAuthModal)}
-              className="cursor-pointer flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-semibold bg-zinc-900 hover:bg-zinc-800 text-zinc-300 border border-zinc-800 transition-all active:scale-95"
+              onClick={handleOpenAuth}
+              className="cursor-pointer shrink-0 flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold bg-gradient-to-r from-red-600 to-rose-600 hover:from-red-500 hover:to-rose-500 text-white shadow-md shadow-red-600/20 transition-all active:scale-95"
             >
-              <Settings className="w-3.5 h-3.5 text-zinc-400" />
-              <span>Setup Credentials / Token</span>
+              <LogIn className="w-4 h-4" />
+              <span>Sign In / Register</span>
             </button>
           </div>
-        </div>
-
-        {/* Multi-Channel List & Target Selector */}
-        {channels.length > 0 && (
-          <div className="pt-3 border-t border-zinc-800/80 space-y-3">
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-semibold uppercase tracking-wider text-zinc-400">
-                Connected YouTube Channels ({channels.length})
-              </span>
-              <span className="text-[11px] text-zinc-500">
-                Select which channel to upload videos to
-              </span>
-            </div>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2.5">
-              {channels.map((chan) => {
-                const isActive = (chan.channel_id === activeChannelId) || (chan.is_default && !activeChannelId);
-                return (
-                  <div
-                    key={chan.channel_id}
-                    className={`flex items-center justify-between p-3 rounded-xl border transition-all ${
-                      isActive
-                        ? "bg-violet-950/30 border-violet-500/50 shadow-sm shadow-violet-500/10"
-                        : "bg-zinc-900/60 border-zinc-800 hover:border-zinc-700"
-                    }`}
-                  >
-                    <div className="flex items-center gap-2.5 min-w-0">
-                      <div className="w-8 h-8 rounded-lg bg-red-600/20 text-red-400 border border-red-500/30 flex items-center justify-center font-bold text-xs shrink-0">
-                        {chan.thumbnail_url ? (
-                          <img src={chan.thumbnail_url} alt="" className="w-8 h-8 rounded-lg object-cover" />
-                        ) : (
-                          "YT"
-                        )}
-                      </div>
-                      <div className="min-w-0">
-                        <div className="text-xs font-bold text-white truncate">
-                          {chan.channel_title}
-                        </div>
-                        <div className="text-[10px] text-zinc-400 truncate font-mono">
-                          {chan.channel_id}
-                        </div>
-                      </div>
-                    </div>
-
-                    <div className="flex items-center gap-1.5 shrink-0 ml-2">
-                      {isActive ? (
-                        <span className="px-2 py-0.5 rounded-full text-[9px] font-bold bg-violet-500/20 text-violet-300 border border-violet-500/30">
-                          Active Target
-                        </span>
-                      ) : (
-                        <button
-                          type="button"
-                          onClick={() => handleSelectChannel(chan.channel_id)}
-                          disabled={isActionLoading}
-                          className="cursor-pointer px-2 py-1 rounded-lg text-[10px] font-semibold bg-zinc-800 hover:bg-zinc-700 text-zinc-200 transition-colors disabled:cursor-not-allowed"
-                        >
-                          Select
-                        </button>
-                      )}
-                      <button
-                        type="button"
-                        onClick={() => handleDeleteChannel(chan.channel_id)}
-                        disabled={isActionLoading}
-                        title="Remove channel"
-                        aria-label={`Remove channel ${chan.channel_title}`}
-                        className="cursor-pointer p-1 text-zinc-500 hover:text-red-400 rounded transition-colors disabled:cursor-not-allowed"
-                      >
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </button>
-                    </div>
+        ) : (
+          <>
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+              <div className="flex items-center gap-3">
+                <div
+                  className={`w-10 h-10 rounded-2xl flex items-center justify-center shrink-0 border ${
+                    ytStatus?.connected || channels.length > 0
+                      ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20"
+                      : "bg-red-500/10 text-red-400 border-red-500/20"
+                  }`}
+                >
+                  {ytStatus?.connected || channels.length > 0 ? (
+                    <CheckCircle2 className="w-5 h-5" />
+                  ) : (
+                    <AlertTriangle className="w-5 h-5 text-amber-400" />
+                  )}
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <h3 className="text-sm font-bold text-white">
+                      YouTube Channel Connection
+                    </h3>
+                    {ytStatus?.connected || channels.length > 0 ? (
+                      <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 uppercase">
+                        Connected
+                      </span>
+                    ) : (
+                      <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-500/20 text-amber-300 border border-amber-500/30 uppercase">
+                        Not Connected
+                      </span>
+                    )}
+                    <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-zinc-800 text-zinc-300 border border-zinc-700 flex items-center gap-1">
+                      <UserCheck className="w-3 h-3 text-emerald-400" />
+                      {auth.user?.email || "Signed In"}
+                    </span>
                   </div>
-                );
-              })}
+                  <p className="text-xs text-zinc-400 mt-0.5">
+                    {ytStatus?.connected || channels.length > 0 ? (
+                      <span>
+                        Linked Channel: <strong className="text-zinc-200">
+                          {channels.find((c) => c.channel_id === activeChannelId)?.channel_title || ytStatus?.channel_title || "My YouTube Channel"}
+                        </strong> (Ready for automatic upload)
+                      </span>
+                    ) : (
+                      <span>
+                        Autopilot requires a connected YouTube channel to upload your 6 daily Shorts.
+                      </span>
+                    )}
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex flex-wrap items-center gap-2.5 shrink-0">
+                {ytStatus?.connected || channels.length > 0 ? (
+                  <button
+                    type="button"
+                    onClick={handleDisconnectYouTube}
+                    disabled={isActionLoading}
+                    className="cursor-pointer text-xs text-zinc-400 hover:text-red-400 underline font-medium px-3 py-1.5 transition-colors disabled:cursor-not-allowed"
+                  >
+                    Disconnect Channel
+                  </button>
+                ) : null}
+
+                {ytStatus?.auth_url && !ytStatus?.connected ? (
+                  <a
+                    href={ytStatus.auth_url}
+                    className="cursor-pointer flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold bg-white hover:bg-zinc-100 text-zinc-950 shadow-md shadow-white/10 transition-all active:scale-95"
+                  >
+                    <svg className="w-3.5 h-3.5" viewBox="0 0 24 24">
+                      <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
+                      <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
+                      <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z"/>
+                      <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"/>
+                    </svg>
+                    <span>Sign In with Google</span>
+                  </a>
+                ) : null}
+
+                <button
+                  type="button"
+                  onClick={() => setShowOAuthModal(!showOAuthModal)}
+                  className="cursor-pointer flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-semibold bg-zinc-900 hover:bg-zinc-800 text-zinc-300 border border-zinc-800 transition-all active:scale-95"
+                >
+                  <Settings className="w-3.5 h-3.5 text-zinc-400" />
+                  <span>Setup Credentials / Token</span>
+                </button>
+              </div>
             </div>
-          </div>
+
+            {/* Multi-Channel List & Target Selector */}
+            {channels.length > 0 && (
+              <div className="pt-3 border-t border-zinc-800/80 space-y-3">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-semibold uppercase tracking-wider text-zinc-400">
+                    Connected YouTube Channels ({channels.length})
+                  </span>
+                  <span className="text-[11px] text-zinc-500">
+                    Select which channel to upload videos to
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2.5">
+                  {channels.map((chan) => {
+                    const isActive = (chan.channel_id === activeChannelId) || (chan.is_default && !activeChannelId);
+                    return (
+                      <div
+                        key={chan.channel_id}
+                        className={`flex items-center justify-between p-3 rounded-xl border transition-all ${
+                          isActive
+                            ? "bg-violet-950/30 border-violet-500/50 shadow-sm shadow-violet-500/10"
+                            : "bg-zinc-900/60 border-zinc-800 hover:border-zinc-700"
+                        }`}
+                      >
+                        <div className="flex items-center gap-2.5 min-w-0">
+                          <div className="w-8 h-8 rounded-lg bg-red-600/20 text-red-400 border border-red-500/30 flex items-center justify-center font-bold text-xs shrink-0">
+                            {chan.thumbnail_url ? (
+                              <img src={chan.thumbnail_url} alt="" className="w-8 h-8 rounded-lg object-cover" />
+                            ) : (
+                              "YT"
+                            )}
+                          </div>
+                          <div className="min-w-0">
+                            <div className="text-xs font-bold text-white truncate">
+                              {chan.channel_title}
+                            </div>
+                            <div className="text-[10px] text-zinc-400 truncate font-mono">
+                              {chan.channel_id}
+                            </div>
+                          </div>
+                        </div>
+
+                        <div className="flex items-center gap-1.5 shrink-0 ml-2">
+                          {isActive ? (
+                            <span className="px-2 py-0.5 rounded-full text-[9px] font-bold bg-violet-500/20 text-violet-300 border border-violet-500/30">
+                              Active Target
+                            </span>
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={() => handleSelectChannel(chan.channel_id)}
+                              disabled={isActionLoading}
+                              className="cursor-pointer px-2 py-1 rounded-lg text-[10px] font-semibold bg-zinc-800 hover:bg-zinc-700 text-zinc-200 transition-colors disabled:cursor-not-allowed"
+                            >
+                              Select
+                            </button>
+                          )}
+                          <button
+                            type="button"
+                            onClick={() => handleDeleteChannel(chan.channel_id)}
+                            disabled={isActionLoading}
+                            title="Remove channel"
+                            aria-label={`Remove channel ${chan.channel_title}`}
+                            className="cursor-pointer p-1 text-zinc-500 hover:text-red-400 rounded transition-colors disabled:cursor-not-allowed"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+          </>
         )}
       </div>
 
@@ -1037,6 +1131,16 @@ export function AutopilotDashboard() {
                   <span>Watch on YouTube</span>
                   <ExternalLink className="w-3.5 h-3.5" />
                 </a>
+              )}
+              {!isAuthenticated && (
+                <button
+                  type="button"
+                  onClick={handleOpenAuth}
+                  className="cursor-pointer flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold bg-amber-500/10 hover:bg-amber-500/20 text-amber-300 border border-amber-500/30 transition-all active:scale-95"
+                >
+                  <Lock className="w-3.5 h-3.5 text-amber-400" />
+                  <span>Sign in to Auto-Upload</span>
+                </button>
               )}
             </div>
           </div>
@@ -1411,6 +1515,10 @@ export function AutopilotDashboard() {
                         <span className="text-rose-400 font-semibold flex items-center gap-1">
                           <AlertCircle className="w-3.5 h-3.5" /> Issue
                         </span>
+                      ) : !isAuthenticated && (clip.preview_url || clip.status === "preview_ready") ? (
+                        <span className="text-emerald-400 font-semibold flex items-center gap-1">
+                          <CheckCircle2 className="w-3.5 h-3.5" /> Free Download Ready
+                        </span>
                       ) : (
                         <span>Drop: +{clip.clip_index - 1}h</span>
                       )}
@@ -1579,6 +1687,19 @@ export function AutopilotDashboard() {
                         <span>Retry</span>
                       </button>
                     </div>
+                  ) : !isAuthenticated ? (
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleOpenAuth();
+                      }}
+                      className="cursor-pointer text-[11px] font-semibold text-amber-400 hover:text-amber-300 flex items-center gap-1 transition-colors"
+                      title="Sign in to auto-upload to YouTube"
+                    >
+                      <Lock className="w-3 h-3" />
+                      <span>Sign in to Upload</span>
+                    </button>
                   ) : (
                     <span className="text-zinc-500">
                       {clip.status === "queued" ? "Queued for Drop" : clip.status}
@@ -1788,6 +1909,8 @@ export function AutopilotDashboard() {
           </div>
         </div>
       )}
+      {/* Internal Auth Modal fallback if onOpenAuth was not passed */}
+      <AuthModal isOpen={showInternalAuth} onClose={() => setShowInternalAuth(false)} />
     </div>
   );
 }

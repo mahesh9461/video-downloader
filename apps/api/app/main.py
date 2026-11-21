@@ -1508,9 +1508,10 @@ async def autopilot_trigger_endpoint(
                     "duration": vid_duration,
                     "thumbnail": vid_thumbnail,
                 }
+                should_auto_upload = bool(user_id)
                 await autopilot_manager.create_and_render_batch(
                     vid_info,
-                    sequential_upload=True,
+                    sequential_upload=should_auto_upload,
                     target_channel_id=target_channel_id,
                     user_id=user_id,
                 )
@@ -1529,9 +1530,10 @@ async def autopilot_trigger_endpoint(
         else:
             video = await autopilot_manager.search_viral_gta_video()
             if video:
+                should_auto_upload = bool(user_id)
                 await autopilot_manager.create_and_render_batch(
                     video,
-                    sequential_upload=True,
+                    sequential_upload=should_auto_upload,
                     target_channel_id=target_channel_id,
                     user_id=user_id,
                 )

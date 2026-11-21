@@ -11,10 +11,10 @@
   "upload_interval_seconds": 3600,
   "cooldown_until": null,
   "disk_space_cleaned_mb": 0.0,
-  "last_cleaned_at": "2026-11-21T14:28:48.887234",
+  "last_cleaned_at": "2026-11-21T14:43:56.743008",
   "recent_logs": [
-    "[14:28:48] \ud83e\uddf9 Cleared all published video history and deduplication cache.",
-    "[14:28:48] \ud83d\udd04 Reset autopilot state, cooldown, and daily upload counter."
+    "[14:43:56] \ud83e\uddf9 Cleared all published video history and deduplication cache.",
+    "[14:43:56] \ud83d\udd04 Reset autopilot state, cooldown, and daily upload counter."
   ],
   "all_published_videos": [],
   "recent_errors": []

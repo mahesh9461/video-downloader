@@ -340,7 +340,7 @@ export default function Home() {
         {/* TAB 4: GTA 6 VIRAL AUTOPILOT */}
         {activeTab === "autopilot" && (
           <div className="w-full flex flex-col items-center">
-            <AutopilotDashboard />
+            <AutopilotDashboard onOpenAuth={() => setIsAuthOpen(true)} />
           </div>
         )}
 

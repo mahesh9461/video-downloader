@@ -649,8 +649,9 @@ class AutopilotManager:
             except Exception as sb_err:
                 logger.debug("Supabase batch sync hook error: %s", sb_err)
 
-            # Sequential auto-upload of all 6 clips one by one
-            if sequential_upload and self.current_batch and self.current_batch.clips:
+            # Sequential auto-upload of all 6 clips one by one (requires authenticated user)
+            can_upload = bool(user_id) and sequential_upload
+            if can_upload and self.current_batch and self.current_batch.clips:
                 self._log("🚀 Starting sequential auto-upload: uploading all 6 clips to YouTube one by one...")
                 for clip in self.current_batch.clips:
                     self._log(f"📤 Uploading Short #{clip.clip_index}/6: '{clip.hook_title}'")
@@ -669,9 +670,15 @@ class AutopilotManager:
                     self.current_step_label = "All 6 clips successfully uploaded to YouTube!"
                     self._log("🎉 Batch complete! All 6 clips published to YouTube one by one.")
                     self._save_state()
-            elif self.current_batch and self.current_batch.clips:
-                first_clip = self.current_batch.clips[0]
-                await self.publish_clip(first_clip, cleanup_after=False)
+            else:
+                # Guest user or manual download mode: all 6 clips rendered and ready for free download
+                if self.current_batch:
+                    self.current_batch.status = "ready"
+                    self.state = "idle"
+                    self.current_step = "preview_ready"
+                    self.current_step_label = "6 Shorts ready for free download! (Sign in to auto-upload to YouTube)"
+                    self._log("🎉 All 6 clips rendered & ready for free download! Sign in to auto-upload directly to YouTube.")
+                    self._save_state()
 
             return self.current_batch
 

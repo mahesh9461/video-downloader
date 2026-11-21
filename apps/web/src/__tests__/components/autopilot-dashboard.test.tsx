@@ -3,7 +3,7 @@ import React from "react";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { Provider } from "react-redux";
-import { createTestStore, setCurrentUrl } from "@/lib/store";
+import { createTestStore, setCurrentUrl, logoutUser, setAuthUser } from "@/lib/store";
 
 // Rule 10 & 11: Mocks defined before main component, names start with mock...
 const mockGetAutopilotStatus = jest.fn();
@@ -94,7 +94,18 @@ describe("AutopilotDashboard", () => {
     });
     mockDisconnectYouTube.mockResolvedValue({ status: "disconnected" });
     // Rule 3: Always use real Redux store configured with configureStore
-    store = createTestStore();
+    store = createTestStore({
+      auth: {
+        isAuthenticated: true,
+        token: "fake-jwt-token",
+        user: {
+          id: "u123",
+          email: "creator@example.com",
+          name: "GTA Creator",
+          created_at: "2026-11-20T12:00:00Z",
+        },
+      },
+    });
   });
 
   describe("render tests", () => {
@@ -107,6 +118,18 @@ describe("AutopilotDashboard", () => {
       expect(screen.getByRole("button", { name: /Clip & Upload 6 Shorts/i })).toBeInTheDocument();
       expect(screen.getByPlaceholderText(/Paste YouTube video or podcast URL/i)).toBeInTheDocument();
       expect(screen.getByText(/Max 6 uploads\/day protects your 10,000 Google API quota limit/i)).toBeInTheDocument();
+    });
+
+    test("should render guest mode with free download button and sign-in prompt for YouTube auto-upload", async () => {
+      // Arrange
+      const guestStore = createTestStore();
+      renderWithProvider(<AutopilotDashboard />, guestStore);
+
+      // Act & Assert
+      expect(await screen.findByRole("button", { name: /Clip 6 Shorts \(Free Download\)/i })).toBeInTheDocument();
+      expect(screen.getByText(/Free Slicing & Downloads/i)).toBeInTheDocument();
+      expect(screen.getByText(/Sign In Required for YouTube Auto-Upload/i)).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: /Sign In \/ Register/i })).toBeInTheDocument();
     });
 
     test("should render the 6 scheduled clips when a batch is active", async () => {
@@ -240,6 +263,74 @@ describe("AutopilotDashboard", () => {
 
       // Assert
       expect(await screen.findByText(/Please paste a valid YouTube video URL/i)).toBeInTheDocument();
+    });
+
+    test("should call onOpenAuth when guest user clicks Sign In / Register in the YouTube channel panel", async () => {
+      // Arrange
+      const user = userEvent.setup();
+      const mockOpenAuth = jest.fn();
+      const guestStore = createTestStore();
+      renderWithProvider(<AutopilotDashboard onOpenAuth={mockOpenAuth} />, guestStore);
+
+      // Act
+      const signInBtn = await screen.findByRole("button", { name: /Sign In \/ Register/i });
+      await user.click(signInBtn);
+
+      // Assert
+      expect(mockOpenAuth).toHaveBeenCalledTimes(1);
+    });
+
+    test("should allow guest user to trigger free clipping and see sign in prompt on clip cards", async () => {
+      // Arrange
+      const user = userEvent.setup();
+      const mockOpenAuth = jest.fn();
+      const guestStore = createTestStore();
+      const batchStatus = {
+        ...defaultStatus,
+        is_running: true,
+        state: "idle",
+        current_batch: {
+          batch_id: "batch_guest_01",
+          source_video_id: "vid_guest_1",
+          source_title: "Free Gameplay Clip",
+          source_url: "https://youtube.com/watch?v=vid_guest_1",
+          created_at: "2026-11-20T12:00:00Z",
+          clips: [
+            {
+              id: "clip_free_1",
+              source_video_id: "vid_guest_1",
+              source_title: "Free Gameplay Clip",
+              clip_index: 1,
+              start_time: 10.0,
+              end_time: 40.0,
+              duration: 30.0,
+              hook_title: "VIRAL MOMENT READY TO DOWNLOAD",
+              hook_style: "neon_cyber",
+              progress_bar_color: "emerald",
+              layout: "center_crop",
+              background_music: "synthwave_loop.mp3",
+              filename: "gta6_short_guest_1.mp4",
+              preview_url: "/api/file/gta6_short_guest_1.mp4",
+              scheduled_time: "2026-11-20T12:01:00Z",
+              status: "preview_ready",
+            },
+          ],
+        },
+      };
+      mockGetAutopilotStatus.mockResolvedValue(batchStatus);
+
+      renderWithProvider(<AutopilotDashboard onOpenAuth={mockOpenAuth} />, guestStore);
+
+      // Assert free download indicator
+      expect(await screen.findByText(/Free Download Ready/i)).toBeInTheDocument();
+      const signInToUploadBtn = screen.getByRole("button", { name: /Sign in to Upload/i });
+      expect(signInToUploadBtn).toBeInTheDocument();
+
+      // Act: Click Sign in to Upload
+      await user.click(signInToUploadBtn);
+
+      // Assert: onOpenAuth invoked
+      expect(mockOpenAuth).toHaveBeenCalled();
     });
 
     test("should allow typing custom video URL and submitting to pipeline to clip and upload", async () => {
@@ -509,15 +600,25 @@ describe("AutopilotDashboard", () => {
     test("should verify real Redux store state remains valid during autopilot interaction", async () => {
       // Arrange: Real store initial state
       expect(store.getState().video.currentUrl).toBe("");
+      expect(store.getState().auth.isAuthenticated).toBe(true);
 
       // Act: Dispatch action on real Redux store
       store.dispatch(setCurrentUrl("https://www.youtube.com/watch?v=gta6_trailer_official"));
 
-      renderWithProvider(<AutopilotDashboard />, store);
+      const { rerender } = renderWithProvider(<AutopilotDashboard />, store);
 
       // Assert: Real Redux store reflects state update
       expect(store.getState().video.currentUrl).toBe("https://www.youtube.com/watch?v=gta6_trailer_official");
       expect(await screen.findByRole("heading", { name: /GTA 6 Viral Shorts Clipper & YouTube Auto-Publisher/i })).toBeInTheDocument();
+
+      // Act: Dispatch logout to transition store to guest state
+      store.dispatch(logoutUser());
+      expect(store.getState().auth.isAuthenticated).toBe(false);
+
+      rerender(<Provider store={store}><AutopilotDashboard /></Provider>);
+
+      // Assert: UI reacts to Redux store auth change and shows free download mode
+      expect(await screen.findByRole("button", { name: /Clip 6 Shorts \(Free Download\)/i })).toBeInTheDocument();
     });
   });
 });
