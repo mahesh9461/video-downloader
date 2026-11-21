@@ -1282,7 +1282,7 @@ async def auth_signup_endpoint(payload: AuthSignUpRequest):
     """Creates a new user profile via Supabase Auth or local store."""
     try:
         from app.auth import register_user
-        res = await register_user(payload.email, payload.password, payload.name)
+        res = await register_user(payload.email, payload.password, payload.name, payload.surname)
         return AuthResponse(**res)
     except ValueError as ve:
         raise HTTPException(status_code=400, detail=str(ve))

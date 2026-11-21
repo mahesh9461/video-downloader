@@ -76,7 +76,9 @@ def verify_password(password: str, hashed: str, salt: str) -> bool:
     return hmac.compare_digest(expected, hashed)
 
 
-async def register_user(email: str, password: str, name: Optional[str] = None) -> Dict[str, Any]:
+async def register_user(
+    email: str, password: str, name: Optional[str] = None, surname: Optional[str] = None
+) -> Dict[str, Any]:
     """Registers a new user via Supabase Auth with automatic local store synchronization."""
     clean_email = email.strip().lower()
     if not clean_email or "@" not in clean_email:
@@ -85,6 +87,12 @@ async def register_user(email: str, password: str, name: Optional[str] = None) -
         raise ValueError("Password must be at least 6 characters long.")
 
     display_name = (name or clean_email.split("@")[0]).strip()
+    clean_surname = (surname or "").strip() or None
+    if clean_surname:
+        if name and name.strip():
+            display_name = f"{name.strip()} {clean_surname}"
+        else:
+            display_name = clean_surname
 
     # Attempt Supabase Auth registration if configured
     supabase_user = None
@@ -127,6 +135,7 @@ async def register_user(email: str, password: str, name: Optional[str] = None) -
         "id": user_id,
         "email": clean_email,
         "name": display_name,
+        "surname": clean_surname,
         "avatar_url": f"https://api.dicebear.com/7.x/bottts/svg?seed={user_id}",
         "hashed_password": hashed,
         "salt": salt,
@@ -150,6 +159,7 @@ async def register_user(email: str, password: str, name: Optional[str] = None) -
             id=user_id,
             email=clean_email,
             name=display_name,
+            surname=clean_surname,
             avatar_url=user_record["avatar_url"],
             created_at=now_iso,
         ),
@@ -209,6 +219,7 @@ async def login_user(email: str, password: str) -> Dict[str, Any]:
             id=user_record["id"],
             email=user_record["email"],
             name=user_record.get("name"),
+            surname=user_record.get("surname"),
             avatar_url=user_record.get("avatar_url"),
             created_at=user_record.get("created_at"),
         ),
@@ -230,6 +241,7 @@ async def get_user_by_token(token: str) -> Optional[UserProfile]:
                 id=user_record["id"],
                 email=user_record["email"],
                 name=user_record.get("name"),
+                surname=user_record.get("surname"),
                 avatar_url=user_record.get("avatar_url"),
                 created_at=user_record.get("created_at"),
             )

@@ -40,3 +40,16 @@ async def test_register_and_login_user():
 async def test_invalid_login():
     with pytest.raises(ValueError):
         await login_user("nonexistent_unknown_user_99@example.com", "wrongpass")
+
+
+@pytest.mark.anyio
+async def test_register_user_with_name_and_surname():
+    email = "alex.vance@example.com"
+    password = "secretpassword123"
+    name = "Alex"
+    surname = "Vance"
+
+    reg_res = await register_user(email, password, name, surname)
+    assert reg_res["user"].email == email
+    assert reg_res["user"].name == "Alex Vance"
+    assert reg_res["user"].surname == "Vance"

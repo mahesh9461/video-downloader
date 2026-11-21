@@ -292,6 +292,7 @@ class UserProfile(BaseModel):
     id: str
     email: str
     name: Optional[str] = None
+    surname: Optional[str] = None
     avatar_url: Optional[str] = None
     created_at: Optional[str] = None
 
@@ -305,6 +306,7 @@ class AuthSignUpRequest(BaseModel):
     email: str
     password: str
     name: Optional[str] = None
+    surname: Optional[str] = None
 
 
 class AuthResponse(BaseModel):

@@ -452,11 +452,11 @@ class ApiClient {
   }
 
   // User Authentication
-  async signup(email: string, password: string, name?: string): Promise<AuthResponse> {
+  async signup(email: string, password: string, name?: string, surname?: string): Promise<AuthResponse> {
     const response = await fetch(this.resolveUrl("/api/auth/signup"), {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ email, password, name }),
+      body: JSON.stringify({ email, password, name, surname }),
     });
     if (!response.ok) {
       let detail = "Signup failed";

@@ -95,7 +95,55 @@ describe("AuthModal", () => {
       // Assert
       expect(screen.getByRole("heading", { name: /Create Your Account/i })).toBeInTheDocument();
       expect(screen.getByPlaceholderText(/e\.g\. Alex Vance/i)).toBeInTheDocument();
+      expect(screen.getByPlaceholderText(/e\.g\. Vance/i)).toBeInTheDocument();
       expect(screen.getByRole("button", { name: /Submit Create Account/i })).toBeInTheDocument();
+    });
+
+    test("should submit signup form with name and surname and dispatch user into Redux store", async () => {
+      // Arrange
+      const user = userEvent.setup();
+      mockSignup.mockResolvedValueOnce({
+        user: {
+          id: "usr_signup_success_888",
+          email: "alex@example.com",
+          name: "Alex Vance",
+          surname: "Vance",
+        },
+        access_token: "tok_signup_888",
+      });
+
+      renderWithProvider(
+        <AuthModal isOpen={true} onClose={mockOnClose} onSuccess={mockOnSuccess} />,
+        store
+      );
+
+      // Act: Switch to signup mode
+      const createAccountTab = screen.getByRole("tab", { name: /Create Account/i });
+      await user.click(createAccountTab);
+
+      const nameInput = screen.getByPlaceholderText(/e\.g\. Alex Vance/i);
+      const surnameInput = screen.getByPlaceholderText(/e\.g\. Vance/i);
+      const emailInput = screen.getByPlaceholderText(/creator@example\.com/i);
+      const passwordInput = screen.getByPlaceholderText(/••••••••/i);
+      const submitBtn = screen.getByRole("button", { name: /Submit Create Account/i });
+
+      await user.type(nameInput, "Alex");
+      await user.type(surnameInput, "Vance");
+      await user.type(emailInput, "alex@example.com");
+      await user.type(passwordInput, "secret123");
+      await user.click(submitBtn);
+
+      // Assert
+      await waitFor(() => {
+        expect(mockSignup).toHaveBeenCalledWith(
+          "alex@example.com",
+          "secret123",
+          "Alex Vance",
+          "Vance"
+        );
+      });
+      expect(store.getState().auth.isAuthenticated).toBe(true);
+      expect(store.getState().auth.user?.name).toBe("Alex Vance");
     });
 
     test("should submit login form and dispatch user into Redux store", async () => {

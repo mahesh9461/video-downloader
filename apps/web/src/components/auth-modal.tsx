@@ -21,6 +21,7 @@ export function AuthModal({ isOpen, onClose, onSuccess }: AuthModalProps) {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [name, setName] = useState("");
+  const [surname, setSurname] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
@@ -35,7 +36,10 @@ export function AuthModal({ isOpen, onClose, onSuccess }: AuthModalProps) {
 
     try {
       if (mode === "signup") {
-        const res = await apiClient.signup(email, password, name || undefined);
+        const cleanName = name.trim();
+        const cleanSurname = surname.trim();
+        const fullName = [cleanName, cleanSurname].filter(Boolean).join(" ") || undefined;
+        const res = await apiClient.signup(email, password, fullName, cleanSurname || undefined);
         dispatch(setAuthUser({ user: res.user, token: res.access_token }));
         setSuccessMsg("Account created successfully!");
       } else {
@@ -50,8 +54,9 @@ export function AuthModal({ isOpen, onClose, onSuccess }: AuthModalProps) {
       setTimeout(() => {
         onClose();
       }, 500);
-    } catch (err: any) {
-      setError(err?.message || "Authentication failed. Please check your credentials.");
+    } catch (err: unknown) {
+      const errorMsg = err instanceof Error ? err.message : "Authentication failed. Please check your credentials.";
+      setError(errorMsg);
     } finally {
       setLoading(false);
     }
@@ -199,20 +204,39 @@ export function AuthModal({ isOpen, onClose, onSuccess }: AuthModalProps) {
 
             <form onSubmit={handleSubmit} className="space-y-4">
               {mode === "signup" && (
-                <div>
-                  <label htmlFor="auth-name" className="block text-xs font-medium text-zinc-300 mb-1.5">
-                    Your Name
-                  </label>
-                  <div className="relative">
-                    <User className="absolute left-3 top-3 w-4 h-4 text-zinc-500" />
-                    <input
-                      id="auth-name"
-                      type="text"
-                      placeholder="e.g. Alex Vance"
-                      value={name}
-                      onChange={(e) => setName(e.target.value)}
-                      className="w-full pl-9 pr-3 py-2.5 bg-zinc-950 border border-zinc-800 rounded-xl text-sm text-white placeholder-zinc-500 focus:outline-none focus:border-violet-500 focus:ring-1 focus:ring-violet-500"
-                    />
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label htmlFor="auth-name" className="block text-xs font-medium text-zinc-300 mb-1.5">
+                      Name
+                    </label>
+                    <div className="relative">
+                      <User className="absolute left-3 top-3 w-4 h-4 text-zinc-500" />
+                      <input
+                        id="auth-name"
+                        type="text"
+                        placeholder="e.g. Alex Vance"
+                        value={name}
+                        onChange={(e) => setName(e.target.value)}
+                        className="w-full pl-9 pr-3 py-2.5 bg-zinc-950 border border-zinc-800 rounded-xl text-sm text-white placeholder-zinc-500 focus:outline-none focus:border-violet-500 focus:ring-1 focus:ring-violet-500"
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <label htmlFor="auth-surname" className="block text-xs font-medium text-zinc-300 mb-1.5">
+                      Surname
+                    </label>
+                    <div className="relative">
+                      <User className="absolute left-3 top-3 w-4 h-4 text-zinc-500" />
+                      <input
+                        id="auth-surname"
+                        type="text"
+                        placeholder="e.g. Vance"
+                        value={surname}
+                        onChange={(e) => setSurname(e.target.value)}
+                        className="w-full pl-9 pr-3 py-2.5 bg-zinc-950 border border-zinc-800 rounded-xl text-sm text-white placeholder-zinc-500 focus:outline-none focus:border-violet-500 focus:ring-1 focus:ring-violet-500"
+                      />
+                    </div>
                   </div>
                 </div>
               )}
