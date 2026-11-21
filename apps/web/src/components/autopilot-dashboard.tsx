@@ -33,11 +33,13 @@ import {
   Image as ImageIcon,
 } from "lucide-react";
 import { apiClient } from "@/lib/api";
-import { AutopilotStatus, AutopilotClipItem, YouTubeAuthStatus } from "@/lib/types";
+import { AutopilotStatus, AutopilotClipItem, YouTubeAuthStatus, YouTubeChannelItem } from "@/lib/types";
 
 export function AutopilotDashboard() {
   const [status, setStatus] = useState<AutopilotStatus | null>(null);
   const [ytStatus, setYtStatus] = useState<YouTubeAuthStatus | null>(null);
+  const [channels, setChannels] = useState<YouTubeChannelItem[]>([]);
+  const [activeChannelId, setActiveChannelId] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [isActionLoading, setIsActionLoading] = useState(false);
   const [customAudioCount, setCustomAudioCount] = useState(0);
@@ -64,6 +66,12 @@ export function AutopilotDashboard() {
     try {
       const data = await apiClient.getAutopilotStatus();
       setStatus(data);
+      if (data.channels) {
+        setChannels(data.channels);
+      }
+      if (data.active_channel_id) {
+        setActiveChannelId(data.active_channel_id);
+      }
       if (data.seconds_until_next_upload !== null && data.seconds_until_next_upload !== undefined) {
         setCountdown(data.seconds_until_next_upload);
       } else {
@@ -71,6 +79,22 @@ export function AutopilotDashboard() {
       }
     } catch {
       // Background polling failure
+    }
+  }, []);
+
+  const fetchChannels = useCallback(async () => {
+    try {
+      if (typeof apiClient.getYouTubeChannels === "function") {
+        const res = await apiClient.getYouTubeChannels();
+        if (res?.channels) {
+          setChannels(res.channels);
+          if (res.active_channel_id) {
+            setActiveChannelId(res.active_channel_id);
+          }
+        }
+      }
+    } catch {
+      // Ignore
     }
   }, []);
 
@@ -95,8 +119,8 @@ export function AutopilotDashboard() {
 
   useEffect(() => {
     setIsLoading(true);
-    Promise.all([fetchStatus(), fetchAudio(), fetchYtStatus()]).finally(() => setIsLoading(false));
-  }, [fetchStatus, fetchAudio, fetchYtStatus]);
+    Promise.all([fetchStatus(), fetchAudio(), fetchYtStatus(), fetchChannels()]).finally(() => setIsLoading(false));
+  }, [fetchStatus, fetchAudio, fetchYtStatus, fetchChannels]);
 
   // Check OAuth callback parameters from URL
   useEffect(() => {
@@ -173,7 +197,10 @@ export function AutopilotDashboard() {
     setIsActionLoading(true);
     setErrorMsg(null);
     try {
-      const res = await apiClient.triggerAutopilot(customUrl.trim() || undefined);
+      const urlParam = customUrl.trim() || undefined;
+      const res = activeChannelId
+        ? await apiClient.triggerAutopilot(urlParam, activeChannelId)
+        : await apiClient.triggerAutopilot(urlParam);
       setStatus(res);
       setSuccessMsg(
         customUrl.trim()
@@ -270,6 +297,37 @@ export function AutopilotDashboard() {
     }
   };
 
+  const handleSelectChannel = async (cid: string) => {
+    setIsActionLoading(true);
+    try {
+      if (typeof apiClient.selectYouTubeChannel === "function") {
+        await apiClient.selectYouTubeChannel(cid);
+      }
+      setActiveChannelId(cid);
+      setSuccessMsg(`Switched upload channel to: ${cid}`);
+      await Promise.all([fetchChannels(), fetchStatus(), fetchYtStatus()]);
+    } catch (err: any) {
+      setErrorMsg(err?.message || "Failed to switch channel.");
+    } finally {
+      setIsActionLoading(false);
+    }
+  };
+
+  const handleDeleteChannel = async (cid: string) => {
+    setIsActionLoading(true);
+    try {
+      if (typeof apiClient.deleteYouTubeChannel === "function") {
+        await apiClient.deleteYouTubeChannel(cid);
+      }
+      setSuccessMsg("Channel disconnected.");
+      await Promise.all([fetchChannels(), fetchStatus(), fetchYtStatus()]);
+    } catch (err: any) {
+      setErrorMsg(err?.message || "Failed to delete channel.");
+    } finally {
+      setIsActionLoading(false);
+    }
+  };
+
   const handleApplyManualToken = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!manualToken.trim()) {
@@ -286,6 +344,7 @@ export function AutopilotDashboard() {
       setSuccessMsg("YouTube Access Token saved and verified successfully!");
       setManualToken("");
       setShowOAuthModal(false);
+      await fetchChannels();
       if (connectingTargetClip?.id) {
         const targetId = connectingTargetClip.id;
         setConnectingTargetClip(null);
@@ -314,6 +373,7 @@ export function AutopilotDashboard() {
       }
       setSuccessMsg("YouTube token saved! Retrying upload for this Short now...");
       setCardTokenInput((prev) => ({ ...prev, [clipId]: "" }));
+      await fetchChannels();
       // Immediately retry uploading this specific clip
       const retryRes = await apiClient.retryAutopilotClip(clipId);
       setStatus(retryRes);
@@ -329,7 +389,7 @@ export function AutopilotDashboard() {
     setIsActionLoading(true);
     try {
       await apiClient.disconnectYouTube();
-      await fetchYtStatus();
+      await Promise.all([fetchYtStatus(), fetchChannels()]);
       setSuccessMsg("YouTube channel disconnected.");
     } catch (err: any) {
       setErrorMsg(err?.message || "Failed to disconnect channel.");
@@ -380,6 +440,7 @@ export function AutopilotDashboard() {
       youtube_video_id: string;
       published_at?: string;
       clip_index?: number;
+      cover_url?: string | null;
     }> = [];
     const seen = new Set<string>();
 
@@ -402,6 +463,7 @@ export function AutopilotDashboard() {
             youtube_url: c.youtube_url,
             youtube_video_id: c.youtube_video_id || "",
             clip_index: c.clip_index,
+            cover_url: c.cover_url,
           });
         }
       }
@@ -619,12 +681,12 @@ export function AutopilotDashboard() {
           <div className="flex items-center gap-3">
             <div
               className={`w-10 h-10 rounded-2xl flex items-center justify-center shrink-0 border ${
-                ytStatus?.connected
+                ytStatus?.connected || channels.length > 0
                   ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20"
                   : "bg-red-500/10 text-red-400 border-red-500/20"
               }`}
             >
-              {ytStatus?.connected ? (
+              {ytStatus?.connected || channels.length > 0 ? (
                 <CheckCircle2 className="w-5 h-5" />
               ) : (
                 <AlertTriangle className="w-5 h-5 text-amber-400" />
@@ -635,7 +697,7 @@ export function AutopilotDashboard() {
                 <h3 className="text-sm font-bold text-white">
                   YouTube Channel Connection
                 </h3>
-                {ytStatus?.connected ? (
+                {ytStatus?.connected || channels.length > 0 ? (
                   <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 uppercase">
                     Connected
                   </span>
@@ -646,9 +708,11 @@ export function AutopilotDashboard() {
                 )}
               </div>
               <p className="text-xs text-zinc-400 mt-0.5">
-                {ytStatus?.connected ? (
+                {ytStatus?.connected || channels.length > 0 ? (
                   <span>
-                    Linked Channel: <strong className="text-zinc-200">{ytStatus.channel_title || "My YouTube Channel"}</strong> (Ready for automatic upload)
+                    Linked Channel: <strong className="text-zinc-200">
+                      {channels.find((c) => c.channel_id === activeChannelId)?.channel_title || ytStatus?.channel_title || "My YouTube Channel"}
+                    </strong> (Ready for automatic upload)
                   </span>
                 ) : (
                   <span>
@@ -660,7 +724,7 @@ export function AutopilotDashboard() {
           </div>
 
           <div className="flex flex-wrap items-center gap-2.5 shrink-0">
-            {ytStatus?.connected ? (
+            {ytStatus?.connected || channels.length > 0 ? (
               <button
                 type="button"
                 onClick={handleDisconnectYouTube}
@@ -669,35 +733,108 @@ export function AutopilotDashboard() {
               >
                 Disconnect Channel
               </button>
-            ) : (
-              <>
-                {ytStatus?.auth_url ? (
-                  <a
-                    href={ytStatus.auth_url}
-                    className="flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold bg-white hover:bg-zinc-100 text-zinc-950 shadow-md shadow-white/10 transition-all active:scale-95"
-                  >
-                    <svg className="w-3.5 h-3.5" viewBox="0 0 24 24">
-                      <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
-                      <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
-                      <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z"/>
-                      <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"/>
-                    </svg>
-                    <span>Sign In with Google</span>
-                  </a>
-                ) : null}
+            ) : null}
 
-                <button
-                  type="button"
-                  onClick={() => setShowOAuthModal(!showOAuthModal)}
-                  className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-semibold bg-zinc-900 hover:bg-zinc-800 text-zinc-300 border border-zinc-800 transition-all active:scale-95"
-                >
-                  <Settings className="w-3.5 h-3.5 text-zinc-400" />
-                  <span>Setup Credentials / Token</span>
-                </button>
-              </>
-            )}
+            {ytStatus?.auth_url && !ytStatus?.connected ? (
+              <a
+                href={ytStatus.auth_url}
+                className="flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold bg-white hover:bg-zinc-100 text-zinc-950 shadow-md shadow-white/10 transition-all active:scale-95"
+              >
+                <svg className="w-3.5 h-3.5" viewBox="0 0 24 24">
+                  <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
+                  <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
+                  <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z"/>
+                  <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"/>
+                </svg>
+                <span>Sign In with Google</span>
+              </a>
+            ) : null}
+
+            <button
+              type="button"
+              onClick={() => setShowOAuthModal(!showOAuthModal)}
+              className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-semibold bg-zinc-900 hover:bg-zinc-800 text-zinc-300 border border-zinc-800 transition-all active:scale-95"
+            >
+              <Settings className="w-3.5 h-3.5 text-zinc-400" />
+              <span>Setup Credentials / Token</span>
+            </button>
           </div>
         </div>
+
+        {/* Multi-Channel List & Target Selector */}
+        {channels.length > 0 && (
+          <div className="pt-3 border-t border-zinc-800/80 space-y-3">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-semibold uppercase tracking-wider text-zinc-400">
+                Connected YouTube Channels ({channels.length})
+              </span>
+              <span className="text-[11px] text-zinc-500">
+                Select which channel to upload videos to
+              </span>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2.5">
+              {channels.map((chan) => {
+                const isActive = (chan.channel_id === activeChannelId) || (chan.is_default && !activeChannelId);
+                return (
+                  <div
+                    key={chan.channel_id}
+                    className={`flex items-center justify-between p-3 rounded-xl border transition-all ${
+                      isActive
+                        ? "bg-violet-950/30 border-violet-500/50 shadow-sm shadow-violet-500/10"
+                        : "bg-zinc-900/60 border-zinc-800 hover:border-zinc-700"
+                    }`}
+                  >
+                    <div className="flex items-center gap-2.5 min-w-0">
+                      <div className="w-8 h-8 rounded-lg bg-red-600/20 text-red-400 border border-red-500/30 flex items-center justify-center font-bold text-xs shrink-0">
+                        {chan.thumbnail_url ? (
+                          <img src={chan.thumbnail_url} alt="" className="w-8 h-8 rounded-lg object-cover" />
+                        ) : (
+                          "YT"
+                        )}
+                      </div>
+                      <div className="min-w-0">
+                        <div className="text-xs font-bold text-white truncate">
+                          {chan.channel_title}
+                        </div>
+                        <div className="text-[10px] text-zinc-400 truncate font-mono">
+                          {chan.channel_id}
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-1.5 shrink-0 ml-2">
+                      {isActive ? (
+                        <span className="px-2 py-0.5 rounded-full text-[9px] font-bold bg-violet-500/20 text-violet-300 border border-violet-500/30">
+                          Active Target
+                        </span>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => handleSelectChannel(chan.channel_id)}
+                          disabled={isActionLoading}
+                          className="px-2 py-1 rounded-lg text-[10px] font-semibold bg-zinc-800 hover:bg-zinc-700 text-zinc-200 transition-colors"
+                        >
+                          Select
+                        </button>
+                      )}
+                      <button
+                        type="button"
+                        onClick={() => handleDeleteChannel(chan.channel_id)}
+                        disabled={isActionLoading}
+                        title="Remove channel"
+                        aria-label={`Remove channel ${chan.channel_title}`}
+                        className="p-1 text-zinc-500 hover:text-red-400 rounded transition-colors"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Real-time Dynamic Pipeline Phase Tracker */}
@@ -1223,7 +1360,7 @@ export function AutopilotDashboard() {
                   Source: <strong className="text-zinc-200">{status.current_batch.source_title}</strong> (Source video deleted immediately after clipping)
                 </span>
               ) : (
-                <span>No active batch queued. Click "Queue Next Video Now" or Start Autopilot to begin.</span>
+                <span>No active batch queued. Click &quot;Queue Next Video Now&quot; or Start Autopilot to begin.</span>
               )}
             </p>
           </div>

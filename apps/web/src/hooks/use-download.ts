@@ -57,7 +57,7 @@ export function useDownload(): UseDownloadReturn {
       const data = await apiClient.fetchMetadata(url);
       setMetadata(data);
     } catch (err) {
-      if (err instanceof DownloadError || (err && typeof err === "object" && (err as any).name === "DownloadError")) {
+      if (err instanceof DownloadError || (err && typeof err === "object" && "name" in err && (err as { name?: string }).name === "DownloadError")) {
         const errorMsg = (err as DownloadError).message;
         const type = (err as DownloadError).type;
         setError(errorMsg);
@@ -129,7 +129,7 @@ export function useDownload(): UseDownloadReturn {
     );
 
     cancelRef.current = cancel;
-  }, []);
+  }, [metadata?.duration, metadata?.platform, metadata?.title]);
 
   const cancelDownload = useCallback(() => {
     if (cancelRef.current) {

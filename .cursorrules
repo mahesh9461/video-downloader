@@ -1,0 +1,30 @@
+# Cursor Rules for SaveIt Monorepo
+
+# Monorepo Structure
+- apps/web: Next.js 16 (App Router, React 19, TypeScript, Tailwind CSS v4, Redux Toolkit)
+- apps/api: FastAPI (Python 3.11+, yt-dlp, static-ffmpeg 7.0, async SSE)
+
+# Quality Gates
+- Always run `npm run lint` and ensure 0 errors.
+- Always run `npm test` and ensure all Jest tests pass.
+- Always run `npm run test:api` and ensure all Pytest tests pass.
+
+# React & Next.js 16 Rules
+- Do NOT call `setState` synchronously inside `useEffect` to derive state. Calculate derived values during render.
+- Always escape unescaped JSX quotes (`&quot;`, `&ldquo;`, `&rdquo;`, `&apos;`).
+- Maintain dark-mode zinc aesthetic with violet accents.
+
+# Jest Testing Rules
+- Always use @testing-library/react and import '@testing-library/jest-dom'.
+- Always use real Redux store with configureStore.
+- NEVER mock Redux store, useSelector, useDispatch, or dispatch.
+- Every test file MUST include: render test, user interaction test, and Redux state verification test.
+- Follow Arrange -> Act -> Assert (AAA) structure.
+- Wrap components in real <Provider store={store}>.
+- Prefer screen.getByRole over getByTestId.
+- Mock functions must use jest.fn(), start with mock..., and be cleared in beforeEach.
+- Import/define mocks before importing the component under test.
+
+# FastAPI Rules
+- Use Pydantic v2 schemas for all inputs and outputs.
+- Subprocesses (yt-dlp, FFmpeg) must have timeouts and cleanup in downloads/.

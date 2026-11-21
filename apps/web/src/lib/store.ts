@@ -1,7 +1,7 @@
 import { configureStore, createSlice, PayloadAction } from "@reduxjs/toolkit";
-import { VideoMetadata, DownloadProgress, HistoryItem } from "./types";
+import { VideoMetadata, DownloadProgress, HistoryItem, UserProfile } from "./types";
 
-interface VideoState {
+export interface VideoState {
   currentUrl: string;
   metadata: VideoMetadata | null;
   progress: DownloadProgress | null;
@@ -9,7 +9,13 @@ interface VideoState {
   history: HistoryItem[];
 }
 
-const initialState: VideoState = {
+export interface AuthState {
+  user: UserProfile | null;
+  token: string | null;
+  isAuthenticated: boolean;
+}
+
+const initialVideoState: VideoState = {
   currentUrl: "",
   metadata: null,
   progress: null,
@@ -17,9 +23,15 @@ const initialState: VideoState = {
   history: [],
 };
 
+const initialAuthState: AuthState = {
+  user: null,
+  token: null,
+  isAuthenticated: false,
+};
+
 export const videoSlice = createSlice({
   name: "video",
-  initialState,
+  initialState: initialVideoState,
   reducers: {
     setCurrentUrl: (state, action: PayloadAction<string>) => {
       state.currentUrl = action.payload;
@@ -45,6 +57,26 @@ export const videoSlice = createSlice({
   },
 });
 
+export const authSlice = createSlice({
+  name: "auth",
+  initialState: initialAuthState,
+  reducers: {
+    setAuthUser: (state, action: PayloadAction<{ user: UserProfile; token: string }>) => {
+      state.user = action.payload.user;
+      state.token = action.payload.token;
+      state.isAuthenticated = true;
+    },
+    updateUserProfile: (state, action: PayloadAction<UserProfile>) => {
+      state.user = action.payload;
+    },
+    logoutUser: (state) => {
+      state.user = null;
+      state.token = null;
+      state.isAuthenticated = false;
+    },
+  },
+});
+
 export const {
   setCurrentUrl,
   setMetadata,
@@ -55,15 +87,43 @@ export const {
   removeHistoryItem,
 } = videoSlice.actions;
 
-export function createTestStore(preloadedState?: Partial<VideoState>) {
+export const {
+  setAuthUser,
+  updateUserProfile,
+  logoutUser,
+} = authSlice.actions;
+
+export function createTestStore(
+  preloadedState?:
+    | { video?: Partial<VideoState>; auth?: Partial<AuthState> }
+    | Partial<VideoState>
+) {
+  let videoPreloaded: VideoState | undefined;
+  let authPreloaded: AuthState | undefined;
+
+  if (preloadedState) {
+    if ("video" in preloadedState || "auth" in preloadedState) {
+      const complex = preloadedState as { video?: Partial<VideoState>; auth?: Partial<AuthState> };
+      if (complex.video) videoPreloaded = { ...initialVideoState, ...complex.video };
+      if (complex.auth) authPreloaded = { ...initialAuthState, ...complex.auth };
+    } else {
+      videoPreloaded = { ...initialVideoState, ...(preloadedState as Partial<VideoState>) };
+    }
+  }
+
   return configureStore({
     reducer: {
       video: videoSlice.reducer,
+      auth: authSlice.reducer,
     },
-    preloadedState: preloadedState ? { video: { ...initialState, ...preloadedState } } : undefined,
+    preloadedState: {
+      video: videoPreloaded || initialVideoState,
+      auth: authPreloaded || initialAuthState,
+    },
   });
 }
 
 export type RootState = ReturnType<ReturnType<typeof createTestStore>["getState"]>;
 export type AppDispatch = ReturnType<typeof createTestStore>["dispatch"];
+
 

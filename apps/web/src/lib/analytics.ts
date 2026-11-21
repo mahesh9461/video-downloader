@@ -37,7 +37,7 @@ export function getUserCountry(): string {
 }
 
 // Track page session start time
-let pageLoadTimestamp = typeof window !== "undefined" ? Date.now() : 0;
+const pageLoadTimestamp = typeof window !== "undefined" ? Date.now() : 0;
 
 /**
  * Returns number of seconds user has spent on the page

@@ -672,7 +672,7 @@ export function ViralClips() {
                         </div>
                         <div className="p-2.5 rounded-lg bg-zinc-900/90 border border-zinc-800 text-xs text-zinc-300">
                           <p className="font-medium text-white mb-1">Snippet Dialogue / Audio:</p>
-                          <p className="italic text-zinc-400 leading-relaxed">"{clip.summary}"</p>
+                          <p className="italic text-zinc-400 leading-relaxed">&ldquo;{clip.summary}&rdquo;</p>
                         </div>
                       </div>
                     )}
@@ -908,7 +908,7 @@ export function ViralClips() {
                         : "Local NLP Engine"}
                     </Badge>
                   </span>
-                  <p className="text-zinc-300 italic">"{aiTranscript}"</p>
+                  <p className="text-zinc-300 italic">&ldquo;{aiTranscript}&rdquo;</p>
                 </div>
               )}
 

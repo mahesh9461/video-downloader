@@ -1,36 +1,74 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# 🎬 SaveIt Web Application (`apps/web`)
 
-## Getting Started
+Modern, high-performance web interface for the SaveIt video downloader, viral shorts engine, and watermark remover.
 
-First, run the development server:
+---
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+## 🛠️ Tech Stack
+- **Framework:** Next.js 16 (App Router)
+- **UI Runtime:** React 19
+- **Language:** TypeScript 5
+- **Styling:** Tailwind CSS v4 + Radix UI primitives
+- **Icons:** Lucide React
+- **State Management:** Redux Toolkit 2 + React-Redux 9
+- **Testing:** Jest 30 + React Testing Library + jest-dom
+- **Linting:** ESLint 9 (Flat Config)
+
+---
+
+## 📂 Source Structure
+
+```
+apps/web/src/
+├── app/                      # Next.js App Router
+│   ├── layout.tsx            # Global Root Layout (Fonts, Metadata)
+│   ├── page.tsx              # Main Dashboard (Tabs for Downloader, Watermark, Viral Clips, Autopilot)
+│   └── api/                  # Route handlers (Proxy & OAuth callback)
+├── components/               # React components
+│   ├── ui/                   # Reusable primitive UI elements (Button, Card, Input, Progress, etc.)
+│   ├── header.tsx            # Navigation & status bar
+│   ├── url-input.tsx         # Smart URL input with platform detection
+│   ├── video-preview.tsx     # Rich video metadata preview
+│   ├── download-options.tsx  # Format selector (4K, 1080p, MP3)
+│   ├── progress-bar.tsx      # Real-time SSE download progress
+│   ├── watermark-remover.tsx # TikTok/logo removal interface
+│   ├── viral-clips.tsx       # AI viral shorts analyzer & renderer
+│   ├── autopilot-dashboard.tsx # 24/7 autonomous shorts batch publisher
+│   └── history-drawer.tsx    # Download history with replay
+├── hooks/                    # Custom React hooks
+│   ├── use-download.ts       # SSE download controller
+│   └── use-history.ts        # Persisted download history
+├── lib/                      # Utilities & core logic
+│   ├── api.ts                # Backend API client
+│   ├── store.ts              # Redux Toolkit store & slices
+│   ├── types.ts              # TypeScript interfaces & types
+│   ├── validators.ts         # URL detection & validation
+│   └── utils.ts              # Formatting helpers
+└── __tests__/                # 19 Jest test suites (170+ tests)
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+---
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## 🧪 Testing Guidelines
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+Run tests with:
+```bash
+npm test -w web
+```
 
-## Learn More
+All test files follow the repository's strict standard:
+- Import `@testing-library/jest-dom` and use `@testing-library/react`.
+- Real Redux store configured via `configureStore`.
+- Strict AAA (Arrange → Act → Assert) pattern.
+- Every test suite contains: render test, user interaction test, and Redux state verification test.
 
-To learn more about Next.js, take a look at the following resources:
+---
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## 🎨 Linting & Code Quality
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+Run ESLint with:
+```bash
+npm run lint -w web
+```
 
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+Configured with ESLint 9 Flat Config (`eslint.config.mjs`) ensuring zero warnings/errors on builds.

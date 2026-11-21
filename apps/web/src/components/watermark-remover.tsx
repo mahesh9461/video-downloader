@@ -3,7 +3,6 @@
 import { useState, useRef, useCallback } from "react";
 import {
   Upload,
-  Sparkles,
   Eraser,
   Film,
   CheckCircle2,
@@ -15,7 +14,6 @@ import {
 } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import { apiClient } from "@/lib/api";
 import { WatermarkResult } from "@/lib/types";
 import { formatFileSize } from "@/lib/utils";
@@ -24,7 +22,7 @@ export function WatermarkRemover() {
   const [file, setFile] = useState<File | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [mode, setMode] = useState<"preset" | "auto" | "manual">("preset");
-  const [platform, setPlatform] = useState<string>("tiktok");
+  const platform = "tiktok";
   const [band, setBand] = useState<number>(4);
   const [isProcessing, setIsProcessing] = useState(false);
   const [error, setError] = useState<string | null>(null);

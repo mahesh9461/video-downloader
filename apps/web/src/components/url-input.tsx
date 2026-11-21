@@ -17,14 +17,9 @@ interface UrlInputProps {
 
 export function UrlInput({ onSubmit, isLoading, disabled }: UrlInputProps) {
   const [url, setUrl] = useState("");
-  const [platform, setPlatform] = useState<Platform | null>(null);
+  const platform = detectPlatform(url);
   const [isFocused, setIsFocused] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
-
-  useEffect(() => {
-    const detected = detectPlatform(url);
-    setPlatform(detected);
-  }, [url]);
 
   const handleSubmit = useCallback(
     (e?: React.FormEvent) => {
@@ -60,7 +55,6 @@ export function UrlInput({ onSubmit, isLoading, disabled }: UrlInputProps) {
 
   const handleClear = useCallback(() => {
     setUrl("");
-    setPlatform(null);
     inputRef.current?.focus();
   }, []);
 

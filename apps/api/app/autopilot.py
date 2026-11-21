@@ -293,7 +293,13 @@ class AutopilotManager:
             self._log(f"❌ Error searching viral video: {e}")
         return None
 
-    async def create_and_render_batch(self, video_info: Dict[str, Any], sequential_upload: bool = True) -> Optional[AutopilotBatch]:
+    async def create_and_render_batch(
+        self,
+        video_info: Dict[str, Any],
+        sequential_upload: bool = True,
+        target_channel_id: Optional[str] = None,
+        user_id: Optional[str] = None,
+    ) -> Optional[AutopilotBatch]:
         """
         Downloads the source video once, slices exactly 6 clips with randomized styles,
         mixes custom audio, immediately cleans the source video, and sets up 1-hour schedule.
@@ -485,6 +491,8 @@ class AutopilotManager:
                     status="queued",
                     current_step="queued",
                     step_description="Clip queued in batch",
+                    user_id=user_id,
+                    channel_id=target_channel_id,
                 ))
 
             batch = AutopilotBatch(
@@ -495,6 +503,8 @@ class AutopilotManager:
                 created_at=datetime.now(timezone.utc).isoformat(),
                 clips=preliminary_clips,
                 status="processing",
+                user_id=user_id,
+                channel_id=target_channel_id,
             )
             self.current_batch = batch
             self._save_state()
@@ -721,6 +731,8 @@ class AutopilotManager:
                 description=DEFAULT_YOUTUBE_DESCRIPTION,
                 tags=DEFAULT_YOUTUBE_TAGS,
                 privacy="public",
+                channel_id=clip.channel_id,
+                user_id=clip.user_id,
             )
 
             vid_id = pub_res.get("video_id")
@@ -732,7 +744,12 @@ class AutopilotManager:
                 if os.path.exists(cover_full_path):
                     try:
                         from app.youtube_publisher import set_video_thumbnail
-                        await set_video_thumbnail(vid_id, cover_full_path)
+                        await set_video_thumbnail(
+                            vid_id,
+                            cover_full_path,
+                            channel_id=clip.channel_id,
+                            user_id=clip.user_id,
+                        )
                     except Exception as thumb_err:
                         logger.debug("YouTube thumbnail upload skipped: %s", thumb_err)
 
@@ -891,7 +908,7 @@ class AutopilotManager:
         self._save_state()
         return self.get_status()
 
-    def get_status(self) -> AutopilotStatus:
+    def get_status(self, user_id: Optional[str] = None) -> AutopilotStatus:
         """Returns the full runtime status and countdown."""
         now = time.time()
         next_upload_time = None
@@ -912,6 +929,20 @@ class AutopilotManager:
         if self.cooldown_until:
             cooldown_iso = datetime.fromtimestamp(self.cooldown_until, tz=timezone.utc).isoformat()
 
+        # Multi-channel information
+        channels_items = []
+        active_id = None
+        try:
+            from app.youtube_publisher import get_user_channels, _channels_store
+            from app.schemas import YouTubeChannelItem
+            channels_raw = get_user_channels(user_id)
+            channels_items = [YouTubeChannelItem(**c) for c in channels_raw]
+            active_id = _channels_store.get("active_channel_id")
+            if not active_id and channels_items:
+                active_id = channels_items[0].channel_id
+        except Exception as e:
+            logger.debug("Failed to populate channels in get_status: %s", e)
+
         return AutopilotStatus(
             is_running=self.is_running,
             state=self.state,
@@ -930,6 +961,8 @@ class AutopilotManager:
             recent_logs=self.recent_logs[-25:],
             all_published_videos=self.all_published_videos,
             recent_errors=self.recent_errors[:10],
+            channels=channels_items,
+            active_channel_id=active_id,
         )
 
 

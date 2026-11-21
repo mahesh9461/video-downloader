@@ -10,7 +10,7 @@ from collections import defaultdict
 from typing import Dict, List, Optional
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, Request, HTTPException, BackgroundTasks, status
+from fastapi import FastAPI, Request, HTTPException, BackgroundTasks, Header, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, StreamingResponse, FileResponse
 
@@ -45,6 +45,15 @@ from app.schemas import (
     YouTubeAuthStatus,
     AutopilotStatus,
     AutopilotTriggerRequest,
+    UserProfile,
+    AuthLoginRequest,
+    AuthSignUpRequest,
+    AuthResponse,
+    YouTubeChannelItem,
+    YouTubeChannelsResponse,
+    SelectChannelRequest,
+    HistoryItemSchema,
+    HistoryListResponse,
 )
 from app.autopilot import autopilot_manager
 from app.ai_hook import generate_ai_hook
@@ -56,6 +65,11 @@ from app.youtube_publisher import (
     save_google_credentials,
     save_stored_token,
     clear_stored_token,
+    save_user_channel,
+    get_user_channels,
+    set_active_channel_id,
+    delete_user_channel,
+    get_channel_token,
 )
 from app.downloader import (
     extract_metadata,
@@ -1152,13 +1166,43 @@ async def youtube_disconnect_endpoint():
 
 
 @app.post("/api/youtube/set-token")
-async def youtube_set_token_endpoint(payload: dict):
-    """Directly save an access token manually."""
+async def youtube_set_token_endpoint(payload: dict, authorization: Optional[str] = Header(None)):
+    """Directly save an access token manually as a connected channel."""
     token = payload.get("token") or payload.get("access_token")
     if not token or not str(token).strip():
         raise HTTPException(status_code=400, detail="Token is required.")
-    save_stored_token({"access_token": str(token).strip(), "created_at": time.time()})
-    status_data = await get_youtube_status()
+    user_id = None
+    if authorization:
+        try:
+            from app.auth import get_user_by_token
+            u = await get_user_by_token(authorization.replace("Bearer ", "").strip())
+            if u:
+                user_id = u.id
+        except Exception:
+            pass
+    from app.youtube_publisher import get_channel_info
+    tok_str = str(token).strip()
+    explicit_id = payload.get("channel_id")
+    explicit_title = payload.get("channel_title")
+    chan_info = {}
+    if not explicit_id or not explicit_title:
+        try:
+            chan_info = await get_channel_info(tok_str)
+        except Exception:
+            pass
+    chan_id = explicit_id or chan_info.get("channel_id") or f"chan_{tok_str[:8]}"
+    chan_title = explicit_title or chan_info.get("channel_title") or "YouTube Channel"
+
+    save_user_channel({
+        "channel_id": chan_id,
+        "channel_title": chan_title,
+        "thumbnail_url": payload.get("thumbnail_url") or chan_info.get("thumbnail_url"),
+        "access_token": tok_str,
+        "refresh_token": payload.get("refresh_token"),
+        "is_default": True,
+    }, user_id=user_id)
+
+    status_data = await get_youtube_status(user_id=user_id)
     return {"status": "connected", "youtube_status": status_data}
 
 
@@ -1210,14 +1254,183 @@ async def youtube_publish_endpoint(req: YouTubePublishRequest):
 
 
 # ---------------------------------------------------------------------------
+# User Authentication & Profiles Endpoints
+# ---------------------------------------------------------------------------
+
+
+@app.post("/api/auth/signup", response_model=AuthResponse)
+async def auth_signup_endpoint(payload: AuthSignUpRequest):
+    """Creates a new user profile via Supabase Auth or local store."""
+    try:
+        from app.auth import register_user
+        res = await register_user(payload.email, payload.password, payload.name)
+        return AuthResponse(**res)
+    except ValueError as ve:
+        raise HTTPException(status_code=400, detail=str(ve))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Registration failed: {e}")
+
+
+@app.post("/api/auth/login", response_model=AuthResponse)
+async def auth_login_endpoint(payload: AuthLoginRequest):
+    """Authenticates user via email and password."""
+    try:
+        from app.auth import login_user
+        res = await login_user(payload.email, payload.password)
+        return AuthResponse(**res)
+    except ValueError as ve:
+        raise HTTPException(status_code=401, detail=str(ve))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Login failed: {e}")
+
+
+@app.get("/api/auth/me", response_model=UserProfile)
+async def auth_me_endpoint(authorization: Optional[str] = Header(None)):
+    """Returns the authenticated user's profile."""
+    if not authorization:
+        raise HTTPException(status_code=401, detail="Authentication token required.")
+    token = authorization.replace("Bearer ", "").strip()
+    from app.auth import get_user_by_token
+    user = await get_user_by_token(token)
+    if not user:
+        raise HTTPException(status_code=401, detail="Invalid or expired session.")
+    return user
+
+
+@app.post("/api/auth/logout")
+async def auth_logout_endpoint(authorization: Optional[str] = Header(None)):
+    """Logs out and invalidates the session token."""
+    if authorization:
+        token = authorization.replace("Bearer ", "").strip()
+        from app.auth import logout_token
+        logout_token(token)
+    return {"ok": True}
+
+
+# ---------------------------------------------------------------------------
+# Multiple YouTube Channels Endpoints
+# ---------------------------------------------------------------------------
+
+
+@app.get("/api/youtube/channels", response_model=YouTubeChannelsResponse)
+async def youtube_channels_endpoint(authorization: Optional[str] = Header(None)):
+    """Returns all connected YouTube channels for the authenticated user."""
+    user_id = None
+    if authorization:
+        try:
+            from app.auth import get_user_by_token
+            u = await get_user_by_token(authorization.replace("Bearer ", "").strip())
+            if u:
+                user_id = u.id
+        except Exception:
+            pass
+    from app.youtube_publisher import get_user_channels, _channels_store
+    channels_raw = get_user_channels(user_id=user_id)
+    items = [YouTubeChannelItem(**c) for c in channels_raw]
+    active_id = _channels_store.get("active_channel_id")
+    if not active_id and items:
+        active_id = items[0].channel_id
+    return YouTubeChannelsResponse(channels=items, active_channel_id=active_id)
+
+
+@app.post("/api/youtube/channels/select", response_model=YouTubeChannelsResponse)
+async def youtube_select_channel_endpoint(payload: SelectChannelRequest, authorization: Optional[str] = Header(None)):
+    """Sets a YouTube channel as the active upload target."""
+    user_id = None
+    if authorization:
+        try:
+            from app.auth import get_user_by_token
+            u = await get_user_by_token(authorization.replace("Bearer ", "").strip())
+            if u:
+                user_id = u.id
+        except Exception:
+            pass
+    from app.youtube_publisher import set_active_channel_id, get_user_channels
+    ok = set_active_channel_id(payload.channel_id, user_id=user_id)
+    if not ok:
+        raise HTTPException(status_code=404, detail="Channel not found in your connected accounts.")
+    channels_raw = get_user_channels(user_id=user_id)
+    return YouTubeChannelsResponse(channels=[YouTubeChannelItem(**c) for c in channels_raw], active_channel_id=payload.channel_id)
+
+
+@app.delete("/api/youtube/channels/{channel_id}")
+async def youtube_delete_channel_endpoint(channel_id: str, authorization: Optional[str] = Header(None)):
+    """Disconnects a specific YouTube channel."""
+    user_id = None
+    if authorization:
+        try:
+            from app.auth import get_user_by_token
+            u = await get_user_by_token(authorization.replace("Bearer ", "").strip())
+            if u:
+                user_id = u.id
+        except Exception:
+            pass
+    from app.youtube_publisher import delete_user_channel
+    delete_user_channel(channel_id, user_id=user_id)
+    return {"ok": True, "deleted_channel_id": channel_id}
+
+
+# ---------------------------------------------------------------------------
+# User Download History Endpoints
+# ---------------------------------------------------------------------------
+
+
+@app.get("/api/history", response_model=HistoryListResponse)
+async def get_history_endpoint(authorization: Optional[str] = Header(None)):
+    """Retrieves download history specific to the authenticated user."""
+    user_id = None
+    if authorization:
+        try:
+            from app.auth import get_user_by_token
+            u = await get_user_by_token(authorization.replace("Bearer ", "").strip())
+            if u:
+                user_id = u.id
+        except Exception:
+            pass
+    from app.supabase_client import get_download_history_supabase
+    history = await get_download_history_supabase(user_id=user_id)
+    return HistoryListResponse(history=[HistoryItemSchema(**h) for h in history])
+
+
+@app.post("/api/history")
+async def save_history_endpoint(item: HistoryItemSchema, authorization: Optional[str] = Header(None)):
+    """Saves a download history item for the authenticated user."""
+    user_id = item.user_id
+    if authorization and not user_id:
+        try:
+            from app.auth import get_user_by_token
+            u = await get_user_by_token(authorization.replace("Bearer ", "").strip())
+            if u:
+                user_id = u.id
+        except Exception:
+            pass
+    from app.supabase_client import save_download_history_supabase
+    await save_download_history_supabase(item.model_dump(), user_id=user_id)
+    return {"ok": True}
+
+
+# ---------------------------------------------------------------------------
 # GTA 6 Autopilot & Scheduled Publishing Endpoints
 # ---------------------------------------------------------------------------
 
 
 @app.get("/api/autopilot/status", response_model=AutopilotStatus)
-async def autopilot_status_endpoint():
+async def autopilot_status_endpoint(authorization: Optional[str] = Header(None)):
     """Retrieve runtime status, queue, cooldown, and disk space cleaned."""
-    return autopilot_manager.get_status()
+    user_id = None
+    user = None
+    if authorization:
+        try:
+            from app.auth import get_user_by_token
+            user = await get_user_by_token(authorization.replace("Bearer ", "").strip())
+            if user:
+                user_id = user.id
+        except Exception:
+            pass
+    status_obj = autopilot_manager.get_status(user_id=user_id)
+    if user:
+        status_obj.user = user
+    return status_obj
 
 
 @app.post("/api/autopilot/start", response_model=AutopilotStatus)
@@ -1245,9 +1458,20 @@ async def autopilot_cancel_endpoint():
 async def autopilot_trigger_endpoint(
     background_tasks: BackgroundTasks,
     request: Optional[AutopilotTriggerRequest] = None,
+    authorization: Optional[str] = Header(None),
 ):
     """Immediately triggers viral discovery or custom video URL ingestion and 6-clip batch creation."""
     url = request.url.strip() if request and request.url else None
+    target_channel_id = request.channel_id.strip() if request and request.channel_id else None
+    user_id = None
+    if authorization:
+        try:
+            from app.auth import get_user_by_token
+            u = await get_user_by_token(authorization.replace("Bearer ", "").strip())
+            if u:
+                user_id = u.id
+        except Exception:
+            pass
 
     # Reset any stale error or cooldown state so manual run starts immediately
     autopilot_manager.state = "idle"
@@ -1284,7 +1508,12 @@ async def autopilot_trigger_endpoint(
                     "duration": vid_duration,
                     "thumbnail": vid_thumbnail,
                 }
-                await autopilot_manager.create_and_render_batch(vid_info, sequential_upload=True)
+                await autopilot_manager.create_and_render_batch(
+                    vid_info,
+                    sequential_upload=True,
+                    target_channel_id=target_channel_id,
+                    user_id=user_id,
+                )
             except Exception as e:
                 autopilot_manager._log(f"❌ Failed to process URL '{url}': {e}")
                 autopilot_manager.state = "error"
@@ -1300,10 +1529,15 @@ async def autopilot_trigger_endpoint(
         else:
             video = await autopilot_manager.search_viral_gta_video()
             if video:
-                await autopilot_manager.create_and_render_batch(video, sequential_upload=True)
+                await autopilot_manager.create_and_render_batch(
+                    video,
+                    sequential_upload=True,
+                    target_channel_id=target_channel_id,
+                    user_id=user_id,
+                )
 
     background_tasks.add_task(_run_batch)
-    return autopilot_manager.get_status()
+    return autopilot_manager.get_status(user_id=user_id)
 
 
 @app.post("/api/autopilot/reset", response_model=AutopilotStatus)

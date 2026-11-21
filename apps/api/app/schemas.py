@@ -238,6 +238,9 @@ class AutopilotClipItem(BaseModel):
     step_description: Optional[str] = None
     youtube_video_id: Optional[str] = None
     youtube_url: Optional[str] = None
+    user_id: Optional[str] = None
+    channel_id: Optional[str] = None
+    channel_title: Optional[str] = None
     error: Optional[str] = None
 
 
@@ -249,6 +252,8 @@ class AutopilotBatch(BaseModel):
     created_at: str
     clips: List[AutopilotClipItem] = Field(default_factory=list)
     status: str = Field("processing", description="'processing', 'queued', 'completed', 'cooldown'")
+    user_id: Optional[str] = None
+    channel_id: Optional[str] = None
 
 
 class AutopilotPublishedVideo(BaseModel):
@@ -260,6 +265,9 @@ class AutopilotPublishedVideo(BaseModel):
     published_at: str
     preview_url: Optional[str] = None
     duration: Optional[float] = 0.0
+    channel_id: Optional[str] = None
+    channel_title: Optional[str] = None
+    user_id: Optional[str] = None
 
 
 class AutopilotIssue(BaseModel):
@@ -272,6 +280,82 @@ class AutopilotIssue(BaseModel):
 
 class AutopilotTriggerRequest(BaseModel):
     url: Optional[str] = None
+    channel_id: Optional[str] = None
+
+
+# ---------------------------------------------------------------------------
+# User Authentication & Profiles
+# ---------------------------------------------------------------------------
+
+
+class UserProfile(BaseModel):
+    id: str
+    email: str
+    name: Optional[str] = None
+    avatar_url: Optional[str] = None
+    created_at: Optional[str] = None
+
+
+class AuthLoginRequest(BaseModel):
+    email: str
+    password: str
+
+
+class AuthSignUpRequest(BaseModel):
+    email: str
+    password: str
+    name: Optional[str] = None
+
+
+class AuthResponse(BaseModel):
+    user: UserProfile
+    access_token: str
+    token_type: str = "bearer"
+
+
+# ---------------------------------------------------------------------------
+# Multiple YouTube Channels Support
+# ---------------------------------------------------------------------------
+
+
+class YouTubeChannelItem(BaseModel):
+    id: str
+    channel_id: str
+    channel_title: str
+    thumbnail_url: Optional[str] = None
+    is_default: bool = False
+    user_id: Optional[str] = None
+    connected_at: Optional[str] = None
+
+
+class YouTubeChannelsResponse(BaseModel):
+    channels: List[YouTubeChannelItem] = Field(default_factory=list)
+    active_channel_id: Optional[str] = None
+
+
+class SelectChannelRequest(BaseModel):
+    channel_id: str
+
+
+# ---------------------------------------------------------------------------
+# User Download History
+# ---------------------------------------------------------------------------
+
+
+class HistoryItemSchema(BaseModel):
+    id: str
+    platform: str
+    title: str
+    thumbnail: Optional[str] = None
+    creator: Optional[str] = None
+    format: Optional[str] = None
+    filesize: Optional[int] = None
+    timestamp: Optional[str] = None
+    user_id: Optional[str] = None
+
+
+class HistoryListResponse(BaseModel):
+    history: List[HistoryItemSchema] = Field(default_factory=list)
 
 
 class AutopilotStatus(BaseModel):
@@ -292,6 +376,10 @@ class AutopilotStatus(BaseModel):
     recent_logs: List[str] = Field(default_factory=list)
     all_published_videos: List[AutopilotPublishedVideo] = Field(default_factory=list)
     recent_errors: List[AutopilotIssue] = Field(default_factory=list)
+    channels: List[YouTubeChannelItem] = Field(default_factory=list)
+    active_channel_id: Optional[str] = None
+    user: Optional[UserProfile] = None
+
 
 
 

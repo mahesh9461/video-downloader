@@ -1,24 +1,41 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import { HistoryItem } from "@/lib/types";
+import { apiClient } from "@/lib/api";
 
-const STORAGE_KEY = "vd-download-history";
+const BASE_STORAGE_KEY = "vd-download-history";
 const MAX_HISTORY = 50;
 
-export function useHistory() {
-  const [history, setHistory] = useState<HistoryItem[]>([]);
+export function useHistory(userId?: string | null) {
+  const storageKey = userId ? `${BASE_STORAGE_KEY}-${userId}` : BASE_STORAGE_KEY;
 
-  useEffect(() => {
+  const [history, setHistory] = useState<HistoryItem[]>(() => {
+    if (typeof window === "undefined") return [];
     try {
-      const stored = localStorage.getItem(STORAGE_KEY);
-      if (stored) {
-        setHistory(JSON.parse(stored));
-      }
+      const stored = localStorage.getItem(storageKey);
+      return stored ? JSON.parse(stored) : [];
     } catch {
-      // Ignore parse errors
+      return [];
     }
-  }, []);
+  });
+
+  // Load remote history asynchronously when logged in
+  useEffect(() => {
+    if (!userId) return;
+    let isCancelled = false;
+    apiClient
+      .getRemoteHistory()
+      .then((remoteItems) => {
+        if (!isCancelled && remoteItems && remoteItems.length > 0) {
+          setHistory(remoteItems.slice(0, MAX_HISTORY));
+        }
+      })
+      .catch(() => {});
+    return () => {
+      isCancelled = true;
+    };
+  }, [userId]);
 
   const addToHistory = useCallback((item: Omit<HistoryItem, "id" | "timestamp">) => {
     setHistory((prev) => {
@@ -28,24 +45,35 @@ export function useHistory() {
         timestamp: new Date().toISOString(),
       };
       const updated = [newItem, ...prev].slice(0, MAX_HISTORY);
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
+      try {
+        localStorage.setItem(storageKey, JSON.stringify(updated));
+      } catch {}
+      // Sync remotely if user is logged in
+      if (userId) {
+        apiClient.saveRemoteHistory(newItem).catch(() => {});
+      }
       return updated;
     });
-  }, []);
+  }, [storageKey, userId]);
 
   const clearHistory = useCallback(() => {
     setHistory([]);
-    localStorage.removeItem(STORAGE_KEY);
-  }, []);
+    try {
+      localStorage.removeItem(storageKey);
+    } catch {}
+  }, [storageKey]);
 
   const removeFromHistory = useCallback((id: string) => {
     setHistory((prev) => {
       const updated = prev.filter((item) => item.id !== id);
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
+      try {
+        localStorage.setItem(storageKey, JSON.stringify(updated));
+      } catch {}
       return updated;
     });
-  }, []);
+  }, [storageKey]);
 
   return { history, addToHistory, clearHistory, removeFromHistory };
 }
+
 

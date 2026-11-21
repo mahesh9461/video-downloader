@@ -222,3 +222,130 @@ async def update_clip_status_supabase(clip_id: str, updates: Dict[str, Any]) -> 
     except Exception as e:
         logger.debug("Supabase clip update skipped: %s", e)
     return False
+
+
+# ---------------------------------------------------------------------------
+# 4. Multi-Channel YouTube Support in Supabase
+# ---------------------------------------------------------------------------
+
+
+async def save_user_channel_supabase(channel_data: Dict[str, Any], user_id: str = "primary") -> bool:
+    """Saves or updates a YouTube channel for a user in Supabase."""
+    if not is_supabase_configured():
+        return False
+
+    endpoint = f"{get_supabase_url()}/rest/v1/user_youtube_channels"
+    headers = _get_headers()
+    headers["Prefer"] = "resolution=merge-duplicates"
+
+    chan_id = channel_data.get("channel_id") or "primary"
+    record_id = f"{user_id}_{chan_id}"
+
+    payload = {
+        "id": record_id,
+        "user_id": user_id,
+        "channel_id": chan_id,
+        "channel_title": channel_data.get("channel_title", "YouTube Channel"),
+        "thumbnail_url": channel_data.get("thumbnail_url"),
+        "access_token": channel_data.get("access_token", ""),
+        "refresh_token": channel_data.get("refresh_token"),
+        "is_default": bool(channel_data.get("is_default", False)),
+    }
+
+    try:
+        async with httpx.AsyncClient(timeout=8.0) as client:
+            resp = await client.post(endpoint, headers=headers, json=payload)
+            return resp.status_code in (200, 201)
+    except Exception as e:
+        logger.debug("Supabase user channel save skipped: %s", e)
+    return False
+
+
+async def get_user_channels_supabase(user_id: Optional[str] = None) -> List[Dict[str, Any]]:
+    """Retrieves all connected YouTube channels for a user from Supabase."""
+    if not is_supabase_configured():
+        return []
+
+    url = f"{get_supabase_url()}/rest/v1/user_youtube_channels?select=*"
+    if user_id:
+        url += f"&user_id=eq.{user_id}"
+
+    try:
+        async with httpx.AsyncClient(timeout=8.0) as client:
+            resp = await client.get(url, headers=_get_headers())
+            if resp.status_code == 200:
+                return resp.json()
+    except Exception as e:
+        logger.debug("Supabase user channels fetch skipped: %s", e)
+    return []
+
+
+async def delete_user_channel_supabase(channel_id: str, user_id: Optional[str] = None) -> bool:
+    """Deletes a YouTube channel connection from Supabase."""
+    if not is_supabase_configured():
+        return False
+
+    url = f"{get_supabase_url()}/rest/v1/user_youtube_channels?channel_id=eq.{channel_id}"
+    if user_id:
+        url += f"&user_id=eq.{user_id}"
+
+    try:
+        async with httpx.AsyncClient(timeout=8.0) as client:
+            resp = await client.delete(url, headers=_get_headers())
+            return resp.status_code in (200, 204)
+    except Exception as e:
+        logger.debug("Supabase user channel delete skipped: %s", e)
+    return False
+
+
+# ---------------------------------------------------------------------------
+# 5. User-Specific Download History in Supabase
+# ---------------------------------------------------------------------------
+
+
+async def save_download_history_supabase(item: Dict[str, Any], user_id: Optional[str] = None) -> bool:
+    """Records a completed download in Supabase specific to the user."""
+    if not is_supabase_configured():
+        return False
+
+    endpoint = f"{get_supabase_url()}/rest/v1/download_history"
+    headers = _get_headers()
+
+    payload = {
+        "platform": item.get("platform", "unknown"),
+        "title": item.get("title", "Video"),
+        "thumbnail": item.get("thumbnail"),
+        "creator": item.get("creator"),
+        "format": item.get("format"),
+        "filesize": item.get("filesize"),
+    }
+    if user_id:
+        payload["user_id"] = user_id
+
+    try:
+        async with httpx.AsyncClient(timeout=8.0) as client:
+            resp = await client.post(endpoint, headers=headers, json=payload)
+            return resp.status_code in (200, 201)
+    except Exception as e:
+        logger.debug("Supabase download history save skipped: %s", e)
+    return False
+
+
+async def get_download_history_supabase(user_id: Optional[str] = None, limit: int = 50) -> List[Dict[str, Any]]:
+    """Retrieves download history from Supabase, filtered by user if authenticated."""
+    if not is_supabase_configured():
+        return []
+
+    url = f"{get_supabase_url()}/rest/v1/download_history?select=*&order=downloaded_at.desc&limit={limit}"
+    if user_id:
+        url += f"&user_id=eq.{user_id}"
+
+    try:
+        async with httpx.AsyncClient(timeout=8.0) as client:
+            resp = await client.get(url, headers=_get_headers())
+            if resp.status_code == 200:
+                return resp.json()
+    except Exception as e:
+        logger.debug("Supabase download history fetch skipped: %s", e)
+    return []
+

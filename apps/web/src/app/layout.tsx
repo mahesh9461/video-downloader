@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import "./globals.css";
 import { GoogleAnalytics } from "@/components/google-analytics";
+import { Providers } from "@/components/providers";
 
 const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || "https://saveit.app";
 
@@ -181,11 +182,13 @@ export default function RootLayout({
         />
       </head>
       <body className="font-sans antialiased text-zinc-100 selection:bg-violet-500/30 selection:text-violet-200">
-        <GoogleAnalytics />
-        <div className="gradient-bg" />
-        <div className="noise-overlay" />
-        <div className="grid-pattern" />
-        {children}
+        <Providers>
+          <GoogleAnalytics />
+          <div className="gradient-bg" />
+          <div className="noise-overlay" />
+          <div className="grid-pattern" />
+          {children}
+        </Providers>
       </body>
     </html>
   );

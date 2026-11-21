@@ -17,6 +17,23 @@ create table if not exists public.user_youtube_tokens (
     updated_at timestamptz default now()
 );
 
+-- 2b. Multiple YouTube Channels per User
+create table if not exists public.user_youtube_channels (
+    id text primary key,
+    user_id text not null,
+    channel_id text not null,
+    channel_title text not null,
+    thumbnail_url text,
+    access_token text not null,
+    refresh_token text,
+    token_expiry timestamptz,
+    is_default boolean default false,
+    created_at timestamptz default now(),
+    updated_at timestamptz default now()
+);
+
+create index if not exists idx_user_yt_channels_user_id on public.user_youtube_channels(user_id);
+
 -- 3. Viral Video Discovery & Global Deduplication Archive
 create table if not exists public.autopilot_sources (
     video_id text primary key,
@@ -98,6 +115,7 @@ create index if not exists idx_download_history_downloaded_at on public.download
 -- Row Level Security (RLS) & Policies
 -- ==============================================================================
 alter table public.user_youtube_tokens enable row level security;
+alter table public.user_youtube_channels enable row level security;
 alter table public.autopilot_sources enable row level security;
 alter table public.autopilot_batches enable row level security;
 alter table public.autopilot_clips enable row level security;
@@ -107,6 +125,9 @@ alter table public.download_history enable row level security;
 -- Open policies for service and anon keys (single tenant / creator app)
 create policy "Allow all operations for service and anon on user_youtube_tokens"
     on public.user_youtube_tokens for all using (true) with check (true);
+
+create policy "Allow all operations for service and anon on user_youtube_channels"
+    on public.user_youtube_channels for all using (true) with check (true);
 
 create policy "Allow all operations for service and anon on autopilot_sources"
     on public.autopilot_sources for all using (true) with check (true);

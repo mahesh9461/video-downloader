@@ -178,6 +178,34 @@ export interface AutopilotPublishedVideo {
   duration?: number;
 }
 
+export interface UserProfile {
+  id: string;
+  email: string;
+  name?: string | null;
+  avatar_url?: string | null;
+  created_at?: string | null;
+}
+
+export interface AuthResponse {
+  user: UserProfile;
+  access_token: string;
+}
+
+export interface YouTubeChannelItem {
+  id: string;
+  channel_id: string;
+  channel_title: string;
+  thumbnail_url?: string | null;
+  is_default: boolean;
+  user_id?: string;
+  connected_at?: string | null;
+}
+
+export interface YouTubeChannelsResponse {
+  channels: YouTubeChannelItem[];
+  active_channel_id?: string | null;
+}
+
 export interface AutopilotIssue {
   clip_id?: string;
   title?: string;
@@ -211,6 +239,8 @@ export interface AutopilotClipItem {
   youtube_video_id?: string | null;
   youtube_url?: string | null;
   error?: string | null;
+  user_id?: string | null;
+  channel_id?: string | null;
 }
 
 export interface AutopilotBatch {
@@ -221,6 +251,8 @@ export interface AutopilotBatch {
   created_at: string;
   clips: AutopilotClipItem[];
   status: "processing" | "queued" | "completed" | "cooldown";
+  user_id?: string | null;
+  target_channel_id?: string | null;
 }
 
 export interface AutopilotStatus {
@@ -241,6 +273,9 @@ export interface AutopilotStatus {
   recent_logs: string[];
   all_published_videos?: AutopilotPublishedVideo[];
   recent_errors?: AutopilotIssue[];
+  channels?: YouTubeChannelItem[];
+  active_channel_id?: string | null;
+  user?: UserProfile | null;
 }
 
 

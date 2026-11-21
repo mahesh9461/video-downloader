@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
+import { useDispatch, useSelector } from "react-redux";
 import {
   Download,
   Play,
@@ -9,16 +10,12 @@ import {
   Zap,
   ShieldCheck,
   Film,
-  Music,
-  CheckCircle2,
   ChevronDown,
-  Layers,
-  HardDrive,
   Eraser,
   Scissors,
-  Wand2,
 } from "lucide-react";
 import { Header } from "@/components/header";
+import { AuthModal } from "@/components/auth-modal";
 import { UrlInput } from "@/components/url-input";
 import { VideoPreview } from "@/components/video-preview";
 import { DownloadOptions } from "@/components/download-options";
@@ -30,6 +27,8 @@ import { ViralClips } from "@/components/viral-clips";
 import { AutopilotDashboard } from "@/components/autopilot-dashboard";
 import { useDownload } from "@/hooks/use-download";
 import { useHistory } from "@/hooks/use-history";
+import { RootState, setAuthUser } from "@/lib/store";
+import { apiClient } from "@/lib/api";
 import { cleanVideoUrl, detectPlatform } from "@/lib/validators";
 import {
   trackVideoSearch,
@@ -39,8 +38,11 @@ import {
 } from "@/lib/analytics";
 
 export default function Home() {
+  const dispatch = useDispatch();
+  const auth = useSelector((state: RootState) => state.auth);
   const [activeTab, setActiveTab] = useState<"downloader" | "watermark" | "clips" | "autopilot">("downloader");
   const [historyOpen, setHistoryOpen] = useState(false);
+  const [isAuthOpen, setIsAuthOpen] = useState(false);
   const [currentUrl, setCurrentUrl] = useState("");
   const [activeFormatId, setActiveFormatId] = useState<string | null>(null);
   const [openFaq, setOpenFaq] = useState<number | null>(null);
@@ -59,7 +61,24 @@ export default function Home() {
     reset,
   } = useDownload();
 
-  const { history, addToHistory, clearHistory, removeFromHistory } = useHistory();
+  const { history, addToHistory, clearHistory, removeFromHistory } = useHistory(auth?.user?.id);
+
+  // Restore authenticated session on mount if token is saved in localStorage
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      const token = localStorage.getItem("saveit_auth_token");
+      if (token) {
+        apiClient
+          .getMe()
+          .then((user) => {
+            if (user) {
+              dispatch(setAuthUser({ user, token }));
+            }
+          })
+          .catch(() => {});
+      }
+    }
+  }, [dispatch]);
 
   const handleUrlSubmit = useCallback(
     (url: string) => {
@@ -119,6 +138,7 @@ export default function Home() {
           setHistoryOpen(true);
         }}
         historyCount={history.length}
+        onOpenAuth={() => setIsAuthOpen(true)}
       />
 
       <main className="flex-1 flex flex-col items-center px-4 pt-8 sm:pt-12 pb-20">
@@ -487,6 +507,12 @@ export default function Home() {
         history={history}
         onClear={clearHistory}
         onRemove={removeFromHistory}
+      />
+
+      {/* User Authentication & Account Modal */}
+      <AuthModal
+        isOpen={isAuthOpen}
+        onClose={() => setIsAuthOpen(false)}
       />
     </div>
   );

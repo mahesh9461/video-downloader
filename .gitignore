@@ -66,3 +66,9 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 
+# Local runtime data
+apps/api/data/users.json
+apps/api/data/sessions.json
+apps/api/data/youtube_channels.json
+
+

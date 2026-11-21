@@ -1,10 +1,10 @@
 {
   "is_running": false,
-  "state": "idle",
+  "state": "rendering",
   "current_batch": null,
-  "active_clip_id": null,
-  "current_step": "idle",
-  "current_step_label": "Ready to queue next video",
+  "active_clip_id": "batch1_1",
+  "current_step": "downloading",
+  "current_step_label": "Extracting metadata for URL: https://www.youtube.com/watch?v=8-DRGbQ1IXc",
   "processed_video_ids": [
     "YDNs_sPEcJc",
     "8-DRGbQ1IXc",
@@ -16,10 +16,8 @@
   "upload_interval_seconds": 3600,
   "cooldown_until": null,
   "disk_space_cleaned_mb": 0.0,
-  "last_cleaned_at": "2026-11-20T19:26:26.043501",
-  "recent_logs": [
-    "[19:26:50] \ud83d\uded1 Terminated active download/run. Cleaned up 0.0 MB partial files."
-  ],
+  "last_cleaned_at": "2026-11-21T13:54:36.832314",
+  "recent_logs": [],
   "all_published_videos": [
     {
       "id": "batch1_1",
@@ -27,7 +25,7 @@
       "title": "GTA 6 Insane Detail",
       "youtube_url": "https://youtube.com/shorts/yt_short_123",
       "youtube_video_id": "yt_short_123",
-      "published_at": "2026-11-20T13:56:26.043424+00:00",
+      "published_at": "2026-11-21T08:24:36.832239+00:00",
       "preview_url": "/api/file/gta6_short_test_1.mp4",
       "cover_url": null,
       "duration": 30.0

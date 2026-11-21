@@ -1,6 +1,8 @@
 import json
 import logging
 import os
+import secrets
+import time
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 from urllib.parse import urlencode
@@ -43,6 +45,145 @@ DEFAULT_YOUTUBE_CATEGORY_ID = "20"  # Gaming Category
 # In-memory store fallback
 _token_store: Dict[str, Any] = {}
 _creds_store: Dict[str, str] = {}
+CHANNELS_CACHE_FILE = Path(__file__).resolve().parent.parent / "data" / "youtube_channels.json"
+_channels_store: Dict[str, Any] = {"channels": {}, "active_channel_id": None}
+
+
+def _init_channels_store():
+    global _channels_store
+    CHANNELS_CACHE_FILE.parent.mkdir(parents=True, exist_ok=True)
+    if CHANNELS_CACHE_FILE.exists():
+        try:
+            _channels_store = json.loads(CHANNELS_CACHE_FILE.read_text(encoding="utf-8"))
+        except Exception:
+            _channels_store = {"channels": {}, "active_channel_id": None}
+
+
+_init_channels_store()
+
+
+def _save_channels_store():
+    try:
+        CHANNELS_CACHE_FILE.parent.mkdir(parents=True, exist_ok=True)
+        CHANNELS_CACHE_FILE.write_text(json.dumps(_channels_store, indent=2), encoding="utf-8")
+    except Exception as e:
+        logger.warning("Failed to save channels cache: %s", e)
+
+
+def get_user_channels(user_id: Optional[str] = None) -> List[Dict[str, Any]]:
+    """Returns list of connected YouTube channels for user."""
+    channels_map = _channels_store.get("channels", {})
+    active_id = _channels_store.get("active_channel_id")
+
+    # If no channels in store, but legacy _token_store has a channel, bridge it
+    if not channels_map and _token_store.get("channel_id"):
+        cid = _token_store.get("channel_id")
+        channels_map[cid] = {
+            "id": cid,
+            "channel_id": cid,
+            "channel_title": _token_store.get("channel_title") or "YouTube Channel",
+            "thumbnail_url": _token_store.get("thumbnail_url"),
+            "access_token": _token_store.get("access_token"),
+            "refresh_token": _token_store.get("refresh_token"),
+            "is_default": True,
+            "user_id": user_id or "default",
+        }
+        _channels_store["active_channel_id"] = cid
+
+    results = []
+    for cid, ch in channels_map.items():
+        if user_id and ch.get("user_id") and ch.get("user_id") not in (user_id, "default"):
+            continue
+        is_def = (cid == active_id) or ch.get("is_default", False)
+        results.append({
+            "id": cid,
+            "channel_id": ch.get("channel_id", cid),
+            "channel_title": ch.get("channel_title", "YouTube Channel"),
+            "thumbnail_url": ch.get("thumbnail_url"),
+            "is_default": is_def,
+            "user_id": ch.get("user_id", user_id),
+            "connected_at": ch.get("connected_at"),
+        })
+    return results
+
+
+def save_user_channel(channel_data: Dict[str, Any], user_id: Optional[str] = None) -> Dict[str, Any]:
+    cid = channel_data.get("channel_id")
+    if not cid:
+        cid = channel_data.get("id") or f"chan_{secrets.token_hex(4)}"
+
+    channels_map = _channels_store.setdefault("channels", {})
+    user_channels = [c for c in channels_map.values() if not user_id or c.get("user_id") in (user_id, "default")]
+    is_first = len(user_channels) == 0
+    is_def = channel_data.get("is_default")
+    if is_def is None:
+        is_def = is_first
+
+    rec = {
+        "id": cid,
+        "channel_id": cid,
+        "channel_title": channel_data.get("channel_title", "YouTube Channel"),
+        "thumbnail_url": channel_data.get("thumbnail_url"),
+        "access_token": channel_data.get("access_token", ""),
+        "refresh_token": channel_data.get("refresh_token"),
+        "is_default": is_def,
+        "user_id": user_id or "default",
+        "connected_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+    }
+    channels_map[cid] = rec
+    if is_def or not _channels_store.get("active_channel_id"):
+        _channels_store["active_channel_id"] = cid
+    _save_channels_store()
+
+    # Also keep legacy _token_store in sync for compatibility
+    _token_store["access_token"] = rec["access_token"]
+    _token_store["refresh_token"] = rec["refresh_token"]
+    _token_store["channel_id"] = cid
+    _token_store["channel_title"] = rec["channel_title"]
+    _token_store["thumbnail_url"] = rec["thumbnail_url"]
+    save_stored_token(_token_store)
+
+    return rec
+
+
+def set_active_channel_id(channel_id: str, user_id: Optional[str] = None) -> bool:
+    channels_map = _channels_store.get("channels", {})
+    if channel_id in channels_map:
+        _channels_store["active_channel_id"] = channel_id
+        for cid, ch in channels_map.items():
+            ch["is_default"] = (cid == channel_id)
+        _save_channels_store()
+
+        target = channels_map[channel_id]
+        _token_store["access_token"] = target["access_token"]
+        _token_store["refresh_token"] = target.get("refresh_token")
+        _token_store["channel_id"] = channel_id
+        _token_store["channel_title"] = target.get("channel_title")
+        _token_store["thumbnail_url"] = target.get("thumbnail_url")
+        save_stored_token(_token_store)
+        return True
+    return False
+
+
+def delete_user_channel(channel_id: str, user_id: Optional[str] = None) -> bool:
+    channels_map = _channels_store.get("channels", {})
+    if channel_id in channels_map:
+        del channels_map[channel_id]
+        if _channels_store.get("active_channel_id") == channel_id:
+            _channels_store["active_channel_id"] = next(iter(channels_map.keys())) if channels_map else None
+        _save_channels_store()
+        return True
+    return False
+
+
+def get_channel_token(channel_id: Optional[str] = None, user_id: Optional[str] = None) -> Optional[str]:
+    channels_map = _channels_store.get("channels", {})
+    target_id = channel_id or _channels_store.get("active_channel_id")
+    if target_id and target_id in channels_map:
+        tok = channels_map[target_id].get("access_token")
+        if tok:
+            return tok
+    return get_stored_token()
 
 
 def get_google_credentials() -> tuple[Optional[str], Optional[str]]:
@@ -105,10 +246,17 @@ def save_stored_token(token_data: Dict[str, Any]) -> None:
 
 
 def clear_stored_token() -> None:
+    global _channels_store
     _token_store.clear()
+    _channels_store = {"channels": {}, "active_channel_id": None}
     if TOKEN_CACHE_FILE.exists():
         try:
             TOKEN_CACHE_FILE.unlink()
+        except Exception:
+            pass
+    if CHANNELS_CACHE_FILE.exists():
+        try:
+            CHANNELS_CACHE_FILE.unlink()
         except Exception:
             pass
 
@@ -210,10 +358,12 @@ async def get_channel_info(access_token: str) -> Dict[str, Any]:
     """Fetches the connected YouTube channel's title and ID with local caching and token auto-refresh."""
     cached_title = _token_store.get("channel_title")
     cached_id = _token_store.get("channel_id")
-    if cached_title:
+    cached_tok = _token_store.get("access_token")
+    if cached_title and cached_tok == access_token:
         return {
             "channel_title": cached_title,
             "channel_id": cached_id or "connected_account",
+            "thumbnail_url": _token_store.get("thumbnail_url"),
         }
 
     try:
@@ -250,11 +400,11 @@ async def get_channel_info(access_token: str) -> Dict[str, Any]:
     }
 
 
-async def get_youtube_status() -> Dict[str, Any]:
-    """Returns whether YouTube publishing is configured and connected."""
+async def get_youtube_status(user_id: Optional[str] = None) -> Dict[str, Any]:
+    """Returns whether YouTube publishing is configured and connected, including all user channels."""
     client_id, client_secret = get_google_credentials()
     configured = bool(client_id and client_secret)
-    token = get_stored_token()
+    token = get_channel_token(user_id=user_id)
 
     # If not in local cache, attempt to restore from Supabase cloud database
     if not token:
@@ -268,24 +418,36 @@ async def get_youtube_status() -> Dict[str, Any]:
         except Exception as e:
             logger.debug("Failed to restore token from Supabase: %s", e)
 
-    connected = False
+    channels = get_user_channels(user_id=user_id)
+    active_channel_id = _channels_store.get("active_channel_id")
+    connected = bool(token or channels)
     channel_info = {}
 
     if token:
         try:
             channel_info = await get_channel_info(token)
-            connected = True
         except Exception:
-            connected = True
             channel_info = {"channel_title": "YouTube Channel"}
 
+    if channels and not active_channel_id:
+        active_channel_id = channels[0].get("channel_id")
+
     auth_url = get_youtube_auth_url() if configured else None
+
+    active_title = channel_info.get("channel_title")
+    if active_channel_id and channels:
+        for ch in channels:
+            if ch.get("channel_id") == active_channel_id:
+                active_title = ch.get("channel_title")
+                break
 
     return {
         "configured": configured,
         "connected": connected,
-        "channel_title": channel_info.get("channel_title") if connected else None,
-        "channel_id": channel_info.get("channel_id") if connected else None,
+        "channel_title": active_title if connected else None,
+        "channel_id": active_channel_id if connected else None,
+        "channels": channels,
+        "active_channel_id": active_channel_id,
         "auth_url": auth_url,
     }
 
@@ -297,9 +459,11 @@ async def publish_short_video(
     tags: Optional[List[str]] = None,
     privacy: str = "public",
     access_token: Optional[str] = None,
+    channel_id: Optional[str] = None,
+    user_id: Optional[str] = None,
 ) -> Dict[str, Any]:
     """Uploads a vertical short video to YouTube via Data API v3 Resumable Upload."""
-    token = access_token or get_stored_token()
+    token = access_token or get_channel_token(channel_id, user_id)
     if not token:
         token = await refresh_access_token()
     if not token:
@@ -391,9 +555,11 @@ async def set_video_thumbnail(
     video_id: str,
     thumbnail_path: str,
     access_token: Optional[str] = None,
+    channel_id: Optional[str] = None,
+    user_id: Optional[str] = None,
 ) -> bool:
     """Sets/uploads a custom thumbnail for a YouTube video via Data API v3."""
-    token = access_token or get_stored_token()
+    token = access_token or get_channel_token(channel_id, user_id)
     if not token:
         token = await refresh_access_token()
     if not token:

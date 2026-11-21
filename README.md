@@ -34,18 +34,32 @@ npm run dev
 
 ---
 
-## 🧪 Running Automated Tests
+## 🧪 Running Automated Tests & Code Quality
 
 ```bash
-# Run all tests (frontend + backend)
+# Check code quality and linting across the monorepo (0 errors required)
+npm run lint
+
+# Run all tests (frontend Jest test suites)
 npm test
 
-# Run frontend Jest tests only (145 tests)
+# Run frontend Jest tests only (19 suites, 170+ tests)
 npm run test:web
 
-# Run backend Pytest suites only
+# Run backend Pytest suites only (120+ tests)
 npm run test:api
 ```
+
+---
+
+## 📖 Standards & Agent Instructions
+
+This repository enforces strict engineering and automated testing standards:
+- **[AGENTS.md](file:///Users/mahesh/Desktop/Test/video-downloader/AGENTS.md)**: Universal instructions for AI agents (Antigravity, Cursor, Copilot, Claude).
+- **[STANDARDS.md](file:///Users/mahesh/Desktop/Test/video-downloader/STANDARDS.md)**: Engineering standards, architecture principles, and pre-commit checklist.
+- **[.github/copilot-instructions.md](file:///Users/mahesh/Desktop/Test/video-downloader/.github/copilot-instructions.md)**: Dedicated instructions for GitHub Copilot.
+- **[CLAUDE.md](file:///Users/mahesh/Desktop/Test/video-downloader/CLAUDE.md)**: Reference guide for Claude Code.
+- **[.cursorrules](file:///Users/mahesh/Desktop/Test/video-downloader/.cursorrules)**: Rules for Cursor IDE.
 
 ---
 

@@ -4,7 +4,6 @@ import {
   ApiError,
   WatermarkResult,
   WatermarkPresetInfo,
-  ClipCandidate,
   ClipAnalyzeResponse,
   ClipRenderRequest,
   ClipRenderResponse,
@@ -15,6 +14,11 @@ import {
   YouTubePublishResponse,
   YouTubeAuthStatus,
   AutopilotStatus,
+  UserProfile,
+  AuthResponse,
+  YouTubeChannelItem,
+  YouTubeChannelsResponse,
+  HistoryItem,
 } from "./types";
 
 const getApiBase = () => {
@@ -48,6 +52,18 @@ class ApiClient {
       return `${this.baseUrl}/${endpoint}`;
     }
     return `${this.baseUrl}${cleanPath}`;
+  }
+
+  public getAuthHeaders(): Record<string, string> {
+    if (typeof window !== "undefined") {
+      try {
+        const token = localStorage.getItem("saveit_auth_token");
+        if (token) {
+          return { Authorization: `Bearer ${token}` };
+        }
+      } catch {}
+    }
+    return {};
   }
 
   async fetchMetadata(url: string): Promise<VideoMetadata> {
@@ -332,11 +348,18 @@ class ApiClient {
     return response.json();
   }
 
-  async setYouTubeToken(token: string): Promise<any> {
+  async setYouTubeToken(token: string, channelId?: string, channelTitle?: string): Promise<any> {
     const response = await fetch(this.resolveUrl("/api/youtube/set-token"), {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ token }),
+      headers: {
+        "Content-Type": "application/json",
+        ...this.getAuthHeaders(),
+      },
+      body: JSON.stringify({
+        token,
+        channel_id: channelId,
+        channel_title: channelTitle,
+      }),
     });
     if (!response.ok) {
       throw new DownloadError("Failed to save YouTube access token", "unknown");
@@ -347,7 +370,10 @@ class ApiClient {
   async publishToYouTube(req: YouTubePublishRequest): Promise<YouTubePublishResponse> {
     const response = await fetch(this.resolveUrl("/api/youtube/publish"), {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: {
+        "Content-Type": "application/json",
+        ...this.getAuthHeaders(),
+      },
       body: JSON.stringify(req),
     });
 
@@ -366,7 +392,9 @@ class ApiClient {
   }
 
   async getAutopilotStatus(): Promise<AutopilotStatus> {
-    const response = await fetch(this.resolveUrl("/api/autopilot/status"));
+    const response = await fetch(this.resolveUrl("/api/autopilot/status"), {
+      headers: { ...this.getAuthHeaders() },
+    });
     if (!response.ok) {
       throw new DownloadError("Failed to fetch autopilot status", "unknown");
     }
@@ -376,6 +404,7 @@ class ApiClient {
   async startAutopilot(): Promise<AutopilotStatus> {
     const response = await fetch(this.resolveUrl("/api/autopilot/start"), {
       method: "POST",
+      headers: { ...this.getAuthHeaders() },
     });
     if (!response.ok) {
       throw new DownloadError("Failed to start autopilot", "unknown");
@@ -386,6 +415,7 @@ class ApiClient {
   async pauseAutopilot(): Promise<AutopilotStatus> {
     const response = await fetch(this.resolveUrl("/api/autopilot/pause"), {
       method: "POST",
+      headers: { ...this.getAuthHeaders() },
     });
     if (!response.ok) {
       throw new DownloadError("Failed to pause autopilot", "unknown");
@@ -396,6 +426,7 @@ class ApiClient {
   async stopAutopilot(): Promise<AutopilotStatus> {
     const response = await fetch(this.resolveUrl("/api/autopilot/stop"), {
       method: "POST",
+      headers: { ...this.getAuthHeaders() },
     });
     if (!response.ok) {
       throw new DownloadError("Failed to stop autopilot", "unknown");
@@ -403,14 +434,146 @@ class ApiClient {
     return response.json();
   }
 
-  async triggerAutopilot(url?: string): Promise<AutopilotStatus> {
+  async triggerAutopilot(url?: string, channelId?: string): Promise<AutopilotStatus> {
     const response = await fetch(this.resolveUrl("/api/autopilot/trigger"), {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ url: url || null }),
+      headers: {
+        "Content-Type": "application/json",
+        ...this.getAuthHeaders(),
+      },
+      body: JSON.stringify({ url: url || null, channel_id: channelId || null }),
     });
     if (!response.ok) {
       throw new DownloadError("Failed to trigger autopilot", "unknown");
+    }
+    return response.json();
+  }
+
+  // User Authentication
+  async signup(email: string, password: string, name?: string): Promise<AuthResponse> {
+    const response = await fetch(this.resolveUrl("/api/auth/signup"), {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email, password, name }),
+    });
+    if (!response.ok) {
+      let detail = "Signup failed";
+      try {
+        const err = await response.json();
+        detail = err.detail || detail;
+      } catch {}
+      throw new DownloadError(detail, "auth_error");
+    }
+    const data: AuthResponse = await response.json();
+    if (typeof window !== "undefined" && data.access_token) {
+      localStorage.setItem("saveit_auth_token", data.access_token);
+    }
+    return data;
+  }
+
+  async login(email: string, password: string): Promise<AuthResponse> {
+    const response = await fetch(this.resolveUrl("/api/auth/login"), {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email, password }),
+    });
+    if (!response.ok) {
+      let detail = "Invalid email or password";
+      try {
+        const err = await response.json();
+        detail = err.detail || detail;
+      } catch {}
+      throw new DownloadError(detail, "auth_error");
+    }
+    const data: AuthResponse = await response.json();
+    if (typeof window !== "undefined" && data.access_token) {
+      localStorage.setItem("saveit_auth_token", data.access_token);
+    }
+    return data;
+  }
+
+  async getMe(): Promise<UserProfile> {
+    const response = await fetch(this.resolveUrl("/api/auth/me"), {
+      headers: { ...this.getAuthHeaders() },
+    });
+    if (!response.ok) {
+      throw new DownloadError("Not authenticated", "auth_error");
+    }
+    return response.json();
+  }
+
+  async logout(): Promise<void> {
+    try {
+      await fetch(this.resolveUrl("/api/auth/logout"), {
+        method: "POST",
+        headers: { ...this.getAuthHeaders() },
+      });
+    } catch {}
+    if (typeof window !== "undefined") {
+      localStorage.removeItem("saveit_auth_token");
+    }
+  }
+
+  // Multiple YouTube Channels
+  async getYouTubeChannels(): Promise<YouTubeChannelsResponse> {
+    const response = await fetch(this.resolveUrl("/api/youtube/channels"), {
+      headers: { ...this.getAuthHeaders() },
+    });
+    if (!response.ok) {
+      throw new DownloadError("Failed to fetch YouTube channels", "youtube_error");
+    }
+    return response.json();
+  }
+
+  async selectYouTubeChannel(channelId: string): Promise<YouTubeChannelsResponse> {
+    const response = await fetch(this.resolveUrl("/api/youtube/channels/select"), {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        ...this.getAuthHeaders(),
+      },
+      body: JSON.stringify({ channel_id: channelId }),
+    });
+    if (!response.ok) {
+      throw new DownloadError("Failed to select channel", "youtube_error");
+    }
+    return response.json();
+  }
+
+  async deleteYouTubeChannel(channelId: string): Promise<{ ok: boolean; deleted_channel_id: string }> {
+    const response = await fetch(this.resolveUrl(`/api/youtube/channels/${encodeURIComponent(channelId)}`), {
+      method: "DELETE",
+      headers: { ...this.getAuthHeaders() },
+    });
+    if (!response.ok) {
+      throw new DownloadError("Failed to delete channel", "youtube_error");
+    }
+    return response.json();
+  }
+
+  // Remote History
+  async getRemoteHistory(): Promise<HistoryItem[]> {
+    const response = await fetch(this.resolveUrl("/api/history"), {
+      headers: { ...this.getAuthHeaders() },
+    });
+    if (!response.ok) {
+      return [];
+    }
+    const data = await response.json();
+    return data.history || [];
+  }
+
+  async saveRemoteHistory(item: HistoryItem): Promise<HistoryItem> {
+    const response = await fetch(this.resolveUrl("/api/history"), {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        ...this.getAuthHeaders(),
+      },
+      body: JSON.stringify(item),
+    });
+    if (!response.ok) {
+      return item;
     }
     return response.json();
   }
