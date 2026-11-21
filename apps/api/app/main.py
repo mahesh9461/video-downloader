@@ -1234,6 +1234,13 @@ async def autopilot_pause_endpoint():
     return autopilot_manager.get_status()
 
 
+@app.post("/api/autopilot/stop", response_model=AutopilotStatus)
+@app.post("/api/autopilot/cancel", response_model=AutopilotStatus)
+async def autopilot_cancel_endpoint():
+    """Immediately terminates any active download or rendering job and purges partial files."""
+    return autopilot_manager.cancel_active_run()
+
+
 @app.post("/api/autopilot/trigger", response_model=AutopilotStatus)
 async def autopilot_trigger_endpoint(
     background_tasks: BackgroundTasks,

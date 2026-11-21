@@ -871,6 +871,26 @@ class AutopilotManager:
         self._log("⏸️ Autopilot PAUSED.")
         self._save_state()
 
+    def cancel_active_run(self) -> AutopilotStatus:
+        """Immediately terminates any active download or rendering job and purges partial files."""
+        self.is_running = False
+        self.state = "idle"
+        self.current_step = "idle"
+        self.current_step_label = "Ready to queue next video"
+        self.active_clip_id = None
+        self.current_batch = None
+        self.recent_errors = []
+        purged_mb = 0.0
+        for p in DOWNLOAD_DIR.glob("*.part"):
+            try:
+                purged_mb += p.stat().st_size / (1024 * 1024)
+                p.unlink()
+            except Exception:
+                pass
+        self._log(f"🛑 Terminated active download/run. Cleaned up {purged_mb:.1f} MB partial files.")
+        self._save_state()
+        return self.get_status()
+
     def get_status(self) -> AutopilotStatus:
         """Returns the full runtime status and countdown."""
         now = time.time()

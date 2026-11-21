@@ -9,6 +9,7 @@ import { createTestStore, setCurrentUrl } from "@/lib/store";
 const mockGetAutopilotStatus = jest.fn();
 const mockStartAutopilot = jest.fn();
 const mockPauseAutopilot = jest.fn();
+const mockStopAutopilot = jest.fn();
 const mockTriggerAutopilot = jest.fn();
 const mockCleanupAutopilotDisk = jest.fn();
 const mockGetAutopilotAudio = jest.fn();
@@ -24,6 +25,7 @@ jest.mock("@/lib/api", () => ({
     getAutopilotStatus: (...args: any[]) => mockGetAutopilotStatus(...args),
     startAutopilot: (...args: any[]) => mockStartAutopilot(...args),
     pauseAutopilot: (...args: any[]) => mockPauseAutopilot(...args),
+    stopAutopilot: (...args: any[]) => mockStopAutopilot(...args),
     triggerAutopilot: (...args: any[]) => mockTriggerAutopilot(...args),
     cleanupAutopilotDisk: (...args: any[]) => mockCleanupAutopilotDisk(...args),
     getAutopilotAudio: (...args: any[]) => mockGetAutopilotAudio(...args),
@@ -72,6 +74,7 @@ describe("AutopilotDashboard", () => {
       count: 2,
     });
     mockResetAutopilot.mockResolvedValue(defaultStatus);
+    mockStopAutopilot.mockResolvedValue(defaultStatus);
     mockRetryAutopilotClip.mockResolvedValue(defaultStatus);
     mockGetYouTubeStatus.mockResolvedValue({
       configured: true,
@@ -325,6 +328,32 @@ describe("AutopilotDashboard", () => {
 
       // Assert
       expect(mockResetAutopilot).toHaveBeenCalledTimes(1);
+    });
+
+    test("should terminate active download when Stop Download button is clicked", async () => {
+      // Arrange
+      const user = userEvent.setup();
+      mockGetAutopilotStatus.mockResolvedValue({
+        ...defaultStatus,
+        is_running: false,
+        state: "rendering",
+        current_step: "downloading",
+      });
+      mockStopAutopilot.mockResolvedValue({
+        ...defaultStatus,
+        is_running: false,
+        state: "idle",
+        current_step: "idle",
+      });
+
+      renderWithProvider(<AutopilotDashboard />, store);
+      const stopBtn = await screen.findByRole("button", { name: /Stop Download/i });
+
+      // Act
+      await user.click(stopBtn);
+
+      // Assert
+      expect(mockStopAutopilot).toHaveBeenCalledTimes(1);
     });
 
     test("should allow applying manual token to connect YouTube channel", async () => {

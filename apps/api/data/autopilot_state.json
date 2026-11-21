@@ -1,24 +1,24 @@
 {
   "is_running": false,
-  "state": "error",
+  "state": "idle",
   "current_batch": null,
-  "active_clip_id": "batch1_1",
-  "current_step": "failed",
-  "current_step_label": "Failed to download source: [Errno 5] Input/output error",
+  "active_clip_id": null,
+  "current_step": "idle",
+  "current_step_label": "Ready to queue next video",
   "processed_video_ids": [
     "YDNs_sPEcJc",
     "8-DRGbQ1IXc",
-    "4ggwTEKq9MA"
+    "4ggwTEKq9MA",
+    "DYDz_cIgoAw"
   ],
   "daily_uploads_count": 0,
   "daily_upload_limit": 6,
   "upload_interval_seconds": 3600,
   "cooldown_until": null,
   "disk_space_cleaned_mb": 0.0,
-  "last_cleaned_at": "2026-11-20T19:06:55.014570",
+  "last_cleaned_at": "2026-11-20T19:26:26.043501",
   "recent_logs": [
-    "[19:16:37] \ud83d\udce5 Downloading source video for clipping: '\ud83d\udd34PLAYING GTA 6 EARLY ACCESS GAMEPLAY GET IN HERE!'",
-    "[19:20:49] \u274c Failed to download source video: [Errno 5] Input/output error"
+    "[19:26:50] \ud83d\uded1 Terminated active download/run. Cleaned up 0.0 MB partial files."
   ],
   "all_published_videos": [
     {
@@ -27,10 +27,76 @@
       "title": "GTA 6 Insane Detail",
       "youtube_url": "https://youtube.com/shorts/yt_short_123",
       "youtube_video_id": "yt_short_123",
-      "published_at": "2026-11-20T13:36:55.014507+00:00",
+      "published_at": "2026-11-20T13:56:26.043424+00:00",
       "preview_url": "/api/file/gta6_short_test_1.mp4",
       "cover_url": null,
       "duration": 30.0
+    },
+    {
+      "id": "a8c763c5_6",
+      "clip_index": 6,
+      "title": "WAIT FOR WHAT HAPPENS NEXT...",
+      "youtube_url": "https://www.youtube.com/shorts/TceFthJEk8g",
+      "youtube_video_id": "TceFthJEk8g",
+      "published_at": "2026-11-20T13:55:09.728669+00:00",
+      "preview_url": "/api/file/gta6_short_a8c763c5_6.mp4",
+      "cover_url": "/api/file/gta6_cover_a8c763c5_6.jpg",
+      "duration": 25.0
+    },
+    {
+      "id": "a8c763c5_5",
+      "clip_index": 5,
+      "title": "THE MOMENT EVERYTHING CHANGED",
+      "youtube_url": "https://www.youtube.com/shorts/s2lQH-foVPE",
+      "youtube_video_id": "s2lQH-foVPE",
+      "published_at": "2026-11-20T13:54:49.762641+00:00",
+      "preview_url": "/api/file/gta6_short_a8c763c5_5.mp4",
+      "cover_url": "/api/file/gta6_cover_a8c763c5_5.jpg",
+      "duration": 25.0
+    },
+    {
+      "id": "a8c763c5_4",
+      "clip_index": 4,
+      "title": "WATCH TILL THE VERY END",
+      "youtube_url": "https://www.youtube.com/shorts/0RKu86kzRHc",
+      "youtube_video_id": "0RKu86kzRHc",
+      "published_at": "2026-11-20T13:54:38.833673+00:00",
+      "preview_url": "/api/file/gta6_short_a8c763c5_4.mp4",
+      "cover_url": "/api/file/gta6_cover_a8c763c5_4.jpg",
+      "duration": 25.0
+    },
+    {
+      "id": "a8c763c5_3",
+      "clip_index": 3,
+      "title": "THE MOST INTENSE 30 SECONDS",
+      "youtube_url": "https://www.youtube.com/shorts/DaqEjGsupwQ",
+      "youtube_video_id": "DaqEjGsupwQ",
+      "published_at": "2026-11-20T13:54:19.891759+00:00",
+      "preview_url": "/api/file/gta6_short_a8c763c5_3.mp4",
+      "cover_url": "/api/file/gta6_cover_a8c763c5_3.jpg",
+      "duration": 25.0
+    },
+    {
+      "id": "a8c763c5_2",
+      "clip_index": 2,
+      "title": "NOBODY EXPECTED THIS PART",
+      "youtube_url": "https://www.youtube.com/shorts/c5JVXgFJMRs",
+      "youtube_video_id": "c5JVXgFJMRs",
+      "published_at": "2026-11-20T13:53:57.857548+00:00",
+      "preview_url": "/api/file/gta6_short_a8c763c5_2.mp4",
+      "cover_url": "/api/file/gta6_cover_a8c763c5_2.jpg",
+      "duration": 25.0
+    },
+    {
+      "id": "a8c763c5_1",
+      "clip_index": 1,
+      "title": "WAIT FOR WHAT HAPPENS NEXT...",
+      "youtube_url": "https://www.youtube.com/shorts/OY-m88qiIPw",
+      "youtube_video_id": "OY-m88qiIPw",
+      "published_at": "2026-11-20T13:53:37.573625+00:00",
+      "preview_url": "/api/file/gta6_short_a8c763c5_1.mp4",
+      "cover_url": "/api/file/gta6_cover_a8c763c5_1.jpg",
+      "duration": 25.0
     },
     {
       "id": "8fa1db91_1",
@@ -104,19 +170,5 @@
       "duration": 25.0
     }
   ],
-  "recent_errors": [
-    {
-      "title": "\ud83d\udd34PLAYING GTA 6 EARLY ACCESS GAMEPLAY GET IN HERE!",
-      "stage": "download",
-      "error": "[Errno 5] Input/output error",
-      "timestamp": "2026-11-20T13:50:49.916580+00:00"
-    },
-    {
-      "clip_id": "8fa1db91_1",
-      "title": "WAIT FOR WHAT HAPPENS NEXT...",
-      "stage": "upload",
-      "error": "YouTube upload initiation failed (401): Request had invalid authentication credentials. Expected OAuth 2 access token, login cookie or other valid authentication credential. See https://developers.google.com/identity/sign-in/web/devconsole-project.",
-      "timestamp": "2026-11-20T13:35:30.388330+00:00"
-    }
-  ]
+  "recent_errors": []
 }

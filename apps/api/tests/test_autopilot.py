@@ -58,6 +58,24 @@ def test_autopilot_start_and_pause(client):
     assert resp_pause.json()["is_running"] is False
     assert resp_pause.json()["state"] == "paused"
 
+    resp_stop = client.post("/api/autopilot/stop")
+    assert resp_stop.status_code == 200
+    assert resp_stop.json()["state"] == "idle"
+
+
+def test_cancel_active_run_cleans_partial_files(tmp_path):
+    with patch("app.autopilot.DOWNLOAD_DIR", tmp_path):
+        part_file = tmp_path / "test_download.mp4.part"
+        part_file.write_bytes(b"test" * 1024)
+        assert part_file.is_file()
+
+        autopilot_manager.state = "rendering"
+        autopilot_manager.current_step = "downloading"
+        res = autopilot_manager.cancel_active_run()
+
+        assert res.state == "idle"
+        assert not part_file.exists()
+
 
 def test_cleanup_file_tracks_disk_space(tmp_path):
     mgr = AutopilotManager()

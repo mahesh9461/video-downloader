@@ -204,6 +204,21 @@ export function AutopilotDashboard() {
     }
   };
 
+  const handleStop = async () => {
+    setIsActionLoading(true);
+    setErrorMsg(null);
+    try {
+      const res = await apiClient.stopAutopilot();
+      setStatus(res);
+      setSuccessMsg("Terminated active download/batch and cleaned up partial files.");
+      setTimeout(() => setSuccessMsg(null), 4000);
+    } catch (e: any) {
+      setErrorMsg(e.message || "Failed to terminate download");
+    } finally {
+      setIsActionLoading(false);
+    }
+  };
+
   const handleCleanup = async () => {
     setIsActionLoading(true);
     try {
@@ -538,6 +553,19 @@ export function AutopilotDashboard() {
               <RotateCcw className="w-3.5 h-3.5 text-zinc-400" />
               <span>Reset Cooldown</span>
             </button>
+
+            {(status?.state === "rendering" || status?.current_step === "downloading" || status?.state === "error") && (
+              <button
+                type="button"
+                onClick={handleStop}
+                disabled={isActionLoading}
+                title="Immediately terminate download and free up disk space"
+                className="flex items-center gap-1.5 px-3.5 py-2.5 rounded-xl text-xs font-semibold bg-red-950/80 hover:bg-red-900 text-red-200 border border-red-500/50 transition-all shadow-md active:scale-95 hover:border-red-400"
+              >
+                <X className="w-3.5 h-3.5 text-red-400" />
+                <span>Stop Download</span>
+              </button>
+            )}
           </div>
         </div>
 

@@ -393,6 +393,16 @@ class ApiClient {
     return response.json();
   }
 
+  async stopAutopilot(): Promise<AutopilotStatus> {
+    const response = await fetch(this.resolveUrl("/api/autopilot/stop"), {
+      method: "POST",
+    });
+    if (!response.ok) {
+      throw new DownloadError("Failed to stop autopilot", "unknown");
+    }
+    return response.json();
+  }
+
   async triggerAutopilot(url?: string): Promise<AutopilotStatus> {
     const response = await fetch(this.resolveUrl("/api/autopilot/trigger"), {
       method: "POST",
