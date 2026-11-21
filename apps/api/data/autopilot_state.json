@@ -3,19 +3,125 @@
   "state": "idle",
   "current_batch": null,
   "active_clip_id": null,
-  "current_step": null,
-  "current_step_label": null,
-  "processed_video_ids": [],
-  "daily_uploads_count": 0,
+  "current_step": "completed",
+  "current_step_label": "All 6 clips successfully uploaded to YouTube!",
+  "processed_video_ids": [
+    "izfUsHZw9bs",
+    "uF87QRGGQLc"
+  ],
+  "daily_uploads_count": 6,
   "daily_upload_limit": 6,
   "upload_interval_seconds": 3600,
   "cooldown_until": null,
-  "disk_space_cleaned_mb": 0.0,
-  "last_cleaned_at": "2026-11-21T21:17:30.285403",
+  "disk_space_cleaned_mb": 405.35,
+  "last_cleaned_at": "2026-11-21T16:10:39.956515+00:00",
   "recent_logs": [
-    "[21:17:30] \ud83e\uddf9 Cleared all published video history and deduplication cache.",
-    "[21:17:30] \ud83d\udd04 Reset autopilot state, cooldown, and daily upload counter."
+    "[21:38:35] \u2705 Video preview ready for Short #5: gta6_short_55617b99_5.mp4",
+    "[21:38:35] \ud83c\udfa3 Hook created for Short #6: 'WAIT FOR WHAT HAPPENS NEXT...'",
+    "[21:38:35] \ud83c\udfb5 Text & Song set for Short #6: mrbeast_urgency | energetic_beat",
+    "[21:38:35] \ud83c\udfac Rendering Short 6/6 (threads=2): 'WAIT FOR WHAT HAPPENS NEXT...'",
+    "[21:38:45] \ud83d\uddbc\ufe0f Generated Full HD viral cover for Short #6: gta6_cover_55617b99_6.jpg",
+    "[21:38:45] \ud83c\udfaf Concat slapped cover as opening frame on Short #6",
+    "[21:38:45] \u2705 Video preview ready for Short #6: gta6_short_55617b99_6.mp4",
+    "[21:38:45] \ud83e\uddf9 Cleaned disk: deleted autopilot_src_uF87QRGGQLc.mp4 (freed 143.3 MB)",
+    "[21:38:45] \u2705 Batch 55617b99 ready: 6 GTA 6 Shorts prepared.",
+    "[21:38:45] \ud83d\ude80 Starting sequential auto-upload: uploading all 6 clips to YouTube one by one...",
+    "[21:38:45] \ud83d\udce4 Uploading Short #1/6: 'WAIT FOR WHAT HAPPENS NEXT...'",
+    "[21:38:45] \ud83d\ude80 Publishing Short #1/6 to YouTube: 'WAIT FOR WHAT HAPPENS NEXT...'",
+    "[21:38:59] \ud83c\udf89 Successfully uploaded Short #1! URL: https://www.youtube.com/shorts/HMbXuzkXWRc",
+    "[21:39:02] \ud83d\udce4 Uploading Short #2/6: 'NOBODY EXPECTED THIS PART'",
+    "[21:39:02] \ud83d\ude80 Publishing Short #2/6 to YouTube: 'NOBODY EXPECTED THIS PART'",
+    "[21:39:13] \ud83c\udf89 Successfully uploaded Short #2! URL: https://www.youtube.com/shorts/c3SdQ-RPmHk",
+    "[21:39:16] \ud83d\udce4 Uploading Short #3/6: 'THE MOST INTENSE 30 SECONDS'",
+    "[21:39:16] \ud83d\ude80 Publishing Short #3/6 to YouTube: 'THE MOST INTENSE 30 SECONDS'",
+    "[21:39:35] \ud83c\udf89 Successfully uploaded Short #3! URL: https://www.youtube.com/shorts/FK82OlDglFY",
+    "[21:39:38] \ud83d\udce4 Uploading Short #4/6: 'WATCH TILL THE VERY END'",
+    "[21:39:38] \ud83d\ude80 Publishing Short #4/6 to YouTube: 'WATCH TILL THE VERY END'",
+    "[21:39:57] \ud83c\udf89 Successfully uploaded Short #4! URL: https://www.youtube.com/shorts/x0Z65ffP4OQ",
+    "[21:40:00] \ud83d\udce4 Uploading Short #5/6: 'THE MOMENT EVERYTHING CHANGED'",
+    "[21:40:00] \ud83d\ude80 Publishing Short #5/6 to YouTube: 'THE MOMENT EVERYTHING CHANGED'",
+    "[21:40:18] \ud83c\udf89 Successfully uploaded Short #5! URL: https://www.youtube.com/shorts/2TUgWzX-9_Y",
+    "[21:40:21] \ud83d\udce4 Uploading Short #6/6: 'WAIT FOR WHAT HAPPENS NEXT...'",
+    "[21:40:21] \ud83d\ude80 Publishing Short #6/6 to YouTube: 'WAIT FOR WHAT HAPPENS NEXT...'",
+    "[21:40:36] \ud83c\udf89 Successfully uploaded Short #6! URL: https://www.youtube.com/shorts/lD-qB0eHpe4",
+    "[21:40:39] \ud83e\uddf9 Purged 104.9 MB temporary clip files from completed batch.",
+    "[21:40:39] \ud83c\udf89 Batch complete! All 6 clips published to YouTube one by one. Cleared active batch & purged temporary storage."
   ],
-  "all_published_videos": [],
-  "recent_errors": []
+  "all_published_videos": [
+    {
+      "id": "55617b99_6",
+      "clip_index": 6,
+      "title": "WAIT FOR WHAT HAPPENS NEXT...",
+      "youtube_url": "https://www.youtube.com/shorts/lD-qB0eHpe4",
+      "youtube_video_id": "lD-qB0eHpe4",
+      "published_at": "2026-11-21T16:10:36.949999+00:00",
+      "preview_url": "/api/file/gta6_short_55617b99_6.mp4",
+      "cover_url": "/api/file/gta6_cover_55617b99_6.jpg",
+      "duration": 25.0
+    },
+    {
+      "id": "55617b99_5",
+      "clip_index": 5,
+      "title": "THE MOMENT EVERYTHING CHANGED",
+      "youtube_url": "https://www.youtube.com/shorts/2TUgWzX-9_Y",
+      "youtube_video_id": "2TUgWzX-9_Y",
+      "published_at": "2026-11-21T16:10:18.510626+00:00",
+      "preview_url": "/api/file/gta6_short_55617b99_5.mp4",
+      "cover_url": "/api/file/gta6_cover_55617b99_5.jpg",
+      "duration": 25.0
+    },
+    {
+      "id": "55617b99_4",
+      "clip_index": 4,
+      "title": "WATCH TILL THE VERY END",
+      "youtube_url": "https://www.youtube.com/shorts/x0Z65ffP4OQ",
+      "youtube_video_id": "x0Z65ffP4OQ",
+      "published_at": "2026-11-21T16:09:57.625665+00:00",
+      "preview_url": "/api/file/gta6_short_55617b99_4.mp4",
+      "cover_url": "/api/file/gta6_cover_55617b99_4.jpg",
+      "duration": 25.0
+    },
+    {
+      "id": "55617b99_3",
+      "clip_index": 3,
+      "title": "THE MOST INTENSE 30 SECONDS",
+      "youtube_url": "https://www.youtube.com/shorts/FK82OlDglFY",
+      "youtube_video_id": "FK82OlDglFY",
+      "published_at": "2026-11-21T16:09:35.612955+00:00",
+      "preview_url": "/api/file/gta6_short_55617b99_3.mp4",
+      "cover_url": "/api/file/gta6_cover_55617b99_3.jpg",
+      "duration": 25.0
+    },
+    {
+      "id": "55617b99_2",
+      "clip_index": 2,
+      "title": "NOBODY EXPECTED THIS PART",
+      "youtube_url": "https://www.youtube.com/shorts/c3SdQ-RPmHk",
+      "youtube_video_id": "c3SdQ-RPmHk",
+      "published_at": "2026-11-21T16:09:13.798713+00:00",
+      "preview_url": "/api/file/gta6_short_55617b99_2.mp4",
+      "cover_url": "/api/file/gta6_cover_55617b99_2.jpg",
+      "duration": 25.0
+    },
+    {
+      "id": "55617b99_1",
+      "clip_index": 1,
+      "title": "WAIT FOR WHAT HAPPENS NEXT...",
+      "youtube_url": "https://www.youtube.com/shorts/HMbXuzkXWRc",
+      "youtube_video_id": "HMbXuzkXWRc",
+      "published_at": "2026-11-21T16:08:59.097457+00:00",
+      "preview_url": "/api/file/gta6_short_55617b99_1.mp4",
+      "cover_url": "/api/file/gta6_cover_55617b99_1.jpg",
+      "duration": 25.0
+    }
+  ],
+  "recent_errors": [
+    {
+      "clip_id": "2f2b20b4_1",
+      "title": "WAIT FOR THE DROP...",
+      "stage": "upload",
+      "error": "YouTube upload initiation failed (429): Quota exceeded for quota metric 'Video Uploads' and limit 'Video Uploads per day' of service 'youtube.googleapis.com' for consumer 'project_number:407408718192'.",
+      "timestamp": "2026-11-21T16:04:50.728963+00:00"
+    }
+  ]
 }

@@ -350,7 +350,7 @@ class ApiClient {
     return response.json();
   }
 
-  async setYouTubeToken(token: string, channelId?: string, channelTitle?: string): Promise<any> {
+  async setYouTubeToken(token: string, channelId?: string, channelTitle?: string, refreshToken?: string): Promise<any> {
     const response = await fetch(this.resolveUrl("/api/youtube/set-token"), {
       method: "POST",
       headers: {
@@ -361,6 +361,7 @@ class ApiClient {
         token,
         channel_id: channelId,
         channel_title: channelTitle,
+        refresh_token: refreshToken,
       }),
     });
     if (!response.ok) {

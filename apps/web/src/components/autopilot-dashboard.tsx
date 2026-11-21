@@ -374,11 +374,21 @@ export function AutopilotDashboard({ onOpenAuth }: AutopilotDashboardProps = {})
     setIsConnectingYt(true);
     setErrorMsg(null);
     try {
-      const token = manualToken.trim();
+      let token = manualToken.trim();
+      let refreshToken: string | undefined = undefined;
+      if (token.startsWith("{") && token.includes("access_token")) {
+        try {
+          const parsed = JSON.parse(token);
+          if (parsed.access_token) {
+            token = parsed.access_token;
+            refreshToken = parsed.refresh_token || undefined;
+          }
+        } catch {}
+      }
       const chId = manualChannelId.trim() || undefined;
       const chTitle = manualChannelTitle.trim() || undefined;
-      const res = (chId || chTitle)
-        ? await apiClient.setYouTubeToken(token, chId, chTitle)
+      const res = (chId || chTitle || refreshToken)
+        ? await apiClient.setYouTubeToken(token, chId, chTitle, refreshToken)
         : await apiClient.setYouTubeToken(token);
       if (res?.youtube_status) {
         setYtStatus(res.youtube_status);

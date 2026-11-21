@@ -1177,9 +1177,21 @@ async def youtube_disconnect_endpoint():
 @app.post("/api/youtube/set-token")
 async def youtube_set_token_endpoint(payload: dict, authorization: Optional[str] = Header(None)):
     """Directly save an access token manually as a connected channel."""
-    token = payload.get("token") or payload.get("access_token")
-    if not token or not str(token).strip():
+    tok_raw = str(payload.get("token") or payload.get("access_token") or "").strip()
+    refresh_tok = payload.get("refresh_token")
+    if tok_raw.startswith("{") and "access_token" in tok_raw:
+        try:
+            import json as _json
+            parsed = _json.loads(tok_raw)
+            if parsed.get("access_token"):
+                tok_raw = parsed["access_token"]
+                refresh_tok = refresh_tok or parsed.get("refresh_token")
+        except Exception:
+            pass
+
+    if not tok_raw:
         raise HTTPException(status_code=400, detail="Token is required.")
+    token = tok_raw
     user_id = None
     if authorization:
         try:
@@ -1208,7 +1220,7 @@ async def youtube_set_token_endpoint(payload: dict, authorization: Optional[str]
         "channel_title": chan_title,
         "thumbnail_url": payload.get("thumbnail_url") or chan_info.get("thumbnail_url"),
         "access_token": tok_str,
-        "refresh_token": payload.get("refresh_token"),
+        "refresh_token": refresh_tok or payload.get("refresh_token"),
         "is_default": payload.get("is_default", True),
     }, user_id=user_id)
 
