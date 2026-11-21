@@ -100,6 +100,7 @@ create table if not exists public.custom_audio_library (
 -- 7. Cross-Device Download History
 create table if not exists public.download_history (
     id uuid default gen_random_uuid() primary key,
+    user_id text,
     platform text not null,
     title text not null,
     thumbnail text,
@@ -109,7 +110,9 @@ create table if not exists public.download_history (
     downloaded_at timestamptz default now()
 );
 
+alter table public.download_history add column if not exists user_id text;
 create index if not exists idx_download_history_downloaded_at on public.download_history(downloaded_at desc);
+create index if not exists idx_download_history_user_id on public.download_history(user_id);
 
 -- ==============================================================================
 -- Row Level Security (RLS) & Policies
