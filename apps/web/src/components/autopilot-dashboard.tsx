@@ -194,23 +194,23 @@ export function AutopilotDashboard() {
   };
 
   const handleTriggerNow = async () => {
+    if (!customUrl.trim()) {
+      setErrorMsg("Please paste a valid YouTube video URL to begin clipping and auto-uploading.");
+      return;
+    }
     setIsActionLoading(true);
     setErrorMsg(null);
     try {
-      const urlParam = customUrl.trim() || undefined;
+      const urlParam = customUrl.trim();
       const res = activeChannelId
         ? await apiClient.triggerAutopilot(urlParam, activeChannelId)
         : await apiClient.triggerAutopilot(urlParam);
       setStatus(res);
-      setSuccessMsg(
-        customUrl.trim()
-          ? "Started clipping & auto-upload pipeline for your video URL!"
-          : "Started viral GTA 6 video discovery & clipping pipeline!"
-      );
+      setSuccessMsg("Started clipping & auto-upload pipeline for your YouTube URL!");
       setCustomUrl("");
       setTimeout(() => setSuccessMsg(null), 5000);
     } catch (e: any) {
-      setErrorMsg(e.message || "Failed to trigger autopilot cycle");
+      setErrorMsg(e.message || "Failed to trigger clipping and upload pipeline");
     } finally {
       setIsActionLoading(false);
     }
@@ -542,18 +542,18 @@ export function AutopilotDashboard() {
         </span>
       );
     }
-    if (status.is_running) {
+    if (status.is_running || status.state === "queued") {
       return (
         <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
           <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
-          Autopilot Running (1 Upload / Hour)
+          Processing 6 Shorts
         </span>
       );
     }
     return (
-      <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-zinc-800 text-zinc-400 border border-zinc-700">
-        <Pause className="w-3.5 h-3.5" />
-        Autopilot Paused
+      <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-zinc-800 text-zinc-300 border border-zinc-700">
+        <Film className="w-3.5 h-3.5 text-zinc-400" />
+        Ready for YouTube URL
       </span>
     );
   };
@@ -573,38 +573,15 @@ export function AutopilotDashboard() {
               {getStateBadge()}
             </div>
             <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-white">
-              GTA 6 Autonomous Viral Shorts Pipeline
+              GTA 6 Viral Shorts Clipper & YouTube Auto-Publisher
             </h1>
             <p className="text-sm text-zinc-400 max-w-2xl leading-relaxed">
-              Finds trending GTA 6 videos, extracts exactly 6 high-converting clips with randomized
-              hooks & custom audio, and publishes 1 Short every hour with zero CPU strain and automatic disk cleanup.
+              Paste any YouTube video or podcast URL. SaveIt slices the 6 most viral moments, generates Full HD GTA 6 hook covers, and automatically uploads each clip one by one directly to your connected YouTube channel.
             </p>
           </div>
 
-          {/* Action Buttons */}
+          {/* Quick Actions */}
           <div className="flex flex-wrap items-center gap-3 shrink-0">
-            {status?.is_running ? (
-              <button
-                type="button"
-                onClick={handlePause}
-                disabled={isActionLoading}
-                className="flex items-center gap-2 px-5 py-2.5 rounded-xl font-semibold text-sm bg-zinc-800 hover:bg-zinc-700 text-zinc-200 border border-zinc-700 transition-all shadow-md active:scale-95"
-              >
-                <Pause className="w-4 h-4 text-amber-400" />
-                <span>Pause</span>
-              </button>
-            ) : (
-              <button
-                type="button"
-                onClick={handleStart}
-                disabled={isActionLoading}
-                className="flex items-center gap-2 px-5 py-2.5 rounded-xl font-semibold text-sm bg-gradient-to-r from-red-600 to-rose-600 hover:from-red-500 hover:to-rose-500 text-white shadow-lg shadow-red-600/20 transition-all active:scale-95"
-              >
-                <Play className="w-4 h-4 fill-white" />
-                <span>Start Autopilot</span>
-              </button>
-            )}
-
             <button
               type="button"
               onClick={handleReset}
@@ -616,7 +593,7 @@ export function AutopilotDashboard() {
               <span>Reset Cooldown</span>
             </button>
 
-            {(status?.state === "rendering" || status?.current_step === "downloading" || status?.state === "error") && (
+            {(status?.state === "rendering" || status?.current_step === "downloading" || status?.state === "uploading" || status?.state === "error") && (
               <button
                 type="button"
                 onClick={handleStop}
@@ -631,24 +608,30 @@ export function AutopilotDashboard() {
           </div>
         </div>
 
-        {/* URL Ingestion & Quick Trigger Bar */}
-        <div className="mt-6 pt-6 border-t border-zinc-800/80 flex flex-col sm:flex-row gap-3">
-          <input
-            type="text"
-            value={customUrl}
-            onChange={(e) => setCustomUrl(e.target.value)}
-            placeholder="Paste YouTube video or podcast URL to auto-clip & upload (or leave blank to auto-discover GTA 6)..."
-            className="flex-1 px-4 py-2.5 rounded-xl bg-zinc-950/80 border border-zinc-800 text-sm text-zinc-200 placeholder:text-zinc-500 focus:outline-none focus:border-red-500/60 focus:ring-1 focus:ring-red-500/40 transition-all"
-          />
-          <button
-            type="button"
-            onClick={handleTriggerNow}
-            disabled={isActionLoading}
-            className="flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl font-semibold text-sm bg-zinc-900 hover:bg-zinc-800 text-yellow-400 border border-yellow-500/30 hover:border-yellow-500/50 transition-all shadow-md active:scale-95 shrink-0"
-          >
-            <Zap className="w-4 h-4 fill-yellow-400" />
-            <span>Queue Next Video Now</span>
-          </button>
+        {/* Primary URL Ingestion & Trigger Bar */}
+        <div className="mt-6 pt-6 border-t border-zinc-800/80 space-y-2">
+          <label htmlFor="autopilot-url-input" className="block text-xs font-semibold text-zinc-300">
+            Paste YouTube Video or Podcast URL:
+          </label>
+          <div className="flex flex-col sm:flex-row gap-3">
+            <input
+              id="autopilot-url-input"
+              type="text"
+              value={customUrl}
+              onChange={(e) => setCustomUrl(e.target.value)}
+              placeholder="Paste YouTube video or podcast URL (e.g. https://www.youtube.com/watch?v=...)..."
+              className="flex-1 px-4 py-2.5 rounded-xl bg-zinc-950/80 border border-zinc-800 text-sm text-zinc-200 placeholder:text-zinc-500 focus:outline-none focus:border-red-500/60 focus:ring-1 focus:ring-red-500/40 transition-all"
+            />
+            <button
+              type="button"
+              onClick={handleTriggerNow}
+              disabled={isActionLoading || status?.state === "rendering" || status?.state === "uploading"}
+              className="flex items-center justify-center gap-2 px-6 py-2.5 rounded-xl font-bold text-sm bg-gradient-to-r from-red-600 to-rose-600 hover:from-red-500 hover:to-rose-500 text-white shadow-lg shadow-red-600/25 transition-all active:scale-95 shrink-0"
+            >
+              <Sparkles className="w-4 h-4 fill-white" />
+              <span>Clip & Upload 6 Shorts</span>
+            </button>
+          </div>
         </div>
 
         {errorMsg && (

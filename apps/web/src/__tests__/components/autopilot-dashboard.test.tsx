@@ -95,14 +95,14 @@ describe("AutopilotDashboard", () => {
   });
 
   describe("render tests", () => {
-    test("should render the GTA 6 viral autopilot title and primary controls", async () => {
+    test("should render the GTA 6 viral shorts clipper title and primary URL controls", async () => {
       // Arrange
       renderWithProvider(<AutopilotDashboard />, store);
 
       // Act & Assert
-      expect(await screen.findByRole("heading", { name: /GTA 6 Autonomous Viral Shorts Pipeline/i })).toBeInTheDocument();
-      expect(screen.getByRole("button", { name: /Start Autopilot/i })).toBeInTheDocument();
-      expect(screen.getByRole("button", { name: /Queue Next Video Now/i })).toBeInTheDocument();
+      expect(await screen.findByRole("heading", { name: /GTA 6 Viral Shorts Clipper & YouTube Auto-Publisher/i })).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: /Clip & Upload 6 Shorts/i })).toBeInTheDocument();
+      expect(screen.getByPlaceholderText(/Paste YouTube video or podcast URL/i)).toBeInTheDocument();
       expect(screen.getByText(/Max 6 uploads\/day protects your 10,000 Google API quota limit/i)).toBeInTheDocument();
     });
 
@@ -226,71 +226,20 @@ describe("AutopilotDashboard", () => {
   });
 
   describe("user interaction tests", () => {
-    test("should start autopilot when Start button is clicked", async () => {
+    test("should show error when Clip & Upload is clicked with empty URL input", async () => {
       // Arrange
       const user = userEvent.setup();
-      mockStartAutopilot.mockResolvedValue({
-        ...defaultStatus,
-        is_running: true,
-        state: "idle",
-      });
-
       renderWithProvider(<AutopilotDashboard />, store);
-      const startBtn = await screen.findByRole("button", { name: /Start Autopilot/i });
+      const clipBtn = await screen.findByRole("button", { name: /Clip & Upload 6 Shorts/i });
 
       // Act
-      await user.click(startBtn);
+      await user.click(clipBtn);
 
       // Assert
-      expect(mockStartAutopilot).toHaveBeenCalledTimes(1);
-      expect(await screen.findByRole("button", { name: /Pause/i })).toBeInTheDocument();
+      expect(await screen.findByText(/Please paste a valid YouTube video URL/i)).toBeInTheDocument();
     });
 
-    test("should pause autopilot when Pause button is clicked", async () => {
-      // Arrange
-      const user = userEvent.setup();
-      mockGetAutopilotStatus.mockResolvedValue({
-        ...defaultStatus,
-        is_running: true,
-        state: "queued",
-      });
-      mockPauseAutopilot.mockResolvedValue({
-        ...defaultStatus,
-        is_running: false,
-        state: "paused",
-      });
-
-      renderWithProvider(<AutopilotDashboard />, store);
-      const pauseBtn = await screen.findByRole("button", { name: /Pause/i });
-
-      // Act
-      await user.click(pauseBtn);
-
-      // Assert
-      expect(mockPauseAutopilot).toHaveBeenCalledTimes(1);
-      expect(await screen.findByRole("button", { name: /Start Autopilot/i })).toBeInTheDocument();
-    });
-
-    test("should trigger instant video discovery when Queue Next Video Now is clicked", async () => {
-      // Arrange
-      const user = userEvent.setup();
-      mockTriggerAutopilot.mockResolvedValue({
-        ...defaultStatus,
-        is_running: true,
-        state: "searching",
-      });
-
-      renderWithProvider(<AutopilotDashboard />, store);
-      const queueBtn = await screen.findByRole("button", { name: /Queue Next Video Now/i });
-
-      // Act
-      await user.click(queueBtn);
-
-      // Assert
-      expect(mockTriggerAutopilot).toHaveBeenCalledTimes(1);
-    });
-
-    test("should allow typing custom video URL and submitting to pipeline", async () => {
+    test("should allow typing custom video URL and submitting to pipeline to clip and upload", async () => {
       // Arrange
       const user = userEvent.setup();
       mockTriggerAutopilot.mockResolvedValue({
@@ -301,11 +250,11 @@ describe("AutopilotDashboard", () => {
 
       renderWithProvider(<AutopilotDashboard />, store);
       const input = await screen.findByPlaceholderText(/Paste YouTube video or podcast URL/i);
-      const queueBtn = screen.getByRole("button", { name: /Queue Next Video Now/i });
+      const clipBtn = screen.getByRole("button", { name: /Clip & Upload 6 Shorts/i });
 
       // Act
       await user.type(input, "https://www.youtube.com/watch?v=custom_video_123");
-      await user.click(queueBtn);
+      await user.click(clipBtn);
 
       // Assert
       expect(mockTriggerAutopilot).toHaveBeenCalledWith("https://www.youtube.com/watch?v=custom_video_123");
@@ -474,7 +423,7 @@ describe("AutopilotDashboard", () => {
 
       // Assert: Real Redux store reflects state update
       expect(store.getState().video.currentUrl).toBe("https://www.youtube.com/watch?v=gta6_trailer_official");
-      expect(await screen.findByRole("heading", { name: /GTA 6 Autonomous Viral Shorts Pipeline/i })).toBeInTheDocument();
+      expect(await screen.findByRole("heading", { name: /GTA 6 Viral Shorts Clipper & YouTube Auto-Publisher/i })).toBeInTheDocument();
     });
   });
 });
