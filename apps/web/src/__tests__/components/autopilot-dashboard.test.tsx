@@ -260,6 +260,70 @@ describe("AutopilotDashboard", () => {
       expect(mockTriggerAutopilot).toHaveBeenCalledWith("https://www.youtube.com/watch?v=custom_video_123");
     });
 
+    test("should select clip for preview when clip card is clicked", async () => {
+      // Arrange
+      const user = userEvent.setup();
+      const batchStatus = {
+        ...defaultStatus,
+        is_running: true,
+        state: "queued",
+        current_batch: {
+          batch_id: "batch_gta_01",
+          source_video_id: "vid_123",
+          source_title: "GTA 6 Leaked Map Secrets",
+          source_url: "https://youtube.com/watch?v=vid_123",
+          created_at: "2026-11-20T12:00:00Z",
+          clips: [
+            {
+              id: "clip_1",
+              source_video_id: "vid_123",
+              source_title: "GTA 6 Leaked Map Secrets",
+              clip_index: 1,
+              start_time: 10.0,
+              end_time: 40.0,
+              duration: 30.0,
+              hook_title: "SECRET UNDERWATER LAB DISCOVERED",
+              hook_style: "hormozi_bold",
+              progress_bar_color: "yellow",
+              layout: "center_crop",
+              filename: "gta6_short_batch_gta_01_1.mp4",
+              preview_url: "/api/file/gta6_short_batch_gta_01_1.mp4",
+              scheduled_time: "2026-11-20T12:01:00Z",
+              status: "published",
+              youtube_video_id: "yt_001",
+              youtube_url: "https://youtube.com/shorts/yt_001",
+            },
+            {
+              id: "clip_2",
+              source_video_id: "vid_123",
+              source_title: "GTA 6 Leaked Map Secrets",
+              clip_index: 2,
+              start_time: 60.0,
+              end_time: 95.0,
+              duration: 35.0,
+              hook_title: "NEW VICE CITY POLICE CAR CHASE",
+              hook_style: "mrbeast_urgency",
+              progress_bar_color: "red",
+              layout: "blurred_background",
+              filename: "gta6_short_batch_gta_01_2.mp4",
+              preview_url: "/api/file/gta6_short_batch_gta_01_2.mp4",
+              scheduled_time: "2026-11-20T13:00:00Z",
+              status: "queued",
+            },
+          ],
+        },
+      };
+      mockGetAutopilotStatus.mockResolvedValue(batchStatus);
+      renderWithProvider(<AutopilotDashboard />, store);
+
+      // Act: Click on the second clip card
+      const card2 = await screen.findByRole("button", { name: /Select Short #2/i });
+      await user.click(card2);
+
+      // Assert: Second clip is now selected for preview
+      expect(screen.getByText(/Short #2 Preview/i)).toBeInTheDocument();
+    });
+
     test("should reset quota and cooldown when Reset button is clicked", async () => {
       // Arrange
       const user = userEvent.setup();

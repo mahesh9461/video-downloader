@@ -2,8 +2,6 @@
 
 import { useState, useEffect, useCallback, useMemo } from "react";
 import {
-  Play,
-  Pause,
   Zap,
   Sparkles,
   ShieldCheck,
@@ -22,7 +20,6 @@ import {
   Upload,
   RotateCcw,
   AlertTriangle,
-  Video,
   Eye,
   ArrowRight,
   Download,
@@ -587,7 +584,7 @@ export function AutopilotDashboard() {
               onClick={handleReset}
               disabled={isActionLoading}
               title="Reset daily upload quota & clear cooldown"
-              className="flex items-center gap-1.5 px-3.5 py-2.5 rounded-xl text-xs font-semibold bg-zinc-900 hover:bg-zinc-800 text-zinc-300 border border-zinc-800 transition-all hover:border-zinc-700 active:scale-95"
+              className="cursor-pointer flex items-center gap-1.5 px-3.5 py-2.5 rounded-xl text-xs font-semibold bg-zinc-900 hover:bg-zinc-800 text-zinc-300 border border-zinc-800 transition-all hover:border-zinc-700 active:scale-95 disabled:cursor-not-allowed"
             >
               <RotateCcw className="w-3.5 h-3.5 text-zinc-400" />
               <span>Reset Cooldown</span>
@@ -599,7 +596,7 @@ export function AutopilotDashboard() {
                 onClick={handleStop}
                 disabled={isActionLoading}
                 title="Immediately terminate download and free up disk space"
-                className="flex items-center gap-1.5 px-3.5 py-2.5 rounded-xl text-xs font-semibold bg-red-950/80 hover:bg-red-900 text-red-200 border border-red-500/50 transition-all shadow-md active:scale-95 hover:border-red-400"
+                className="cursor-pointer flex items-center gap-1.5 px-3.5 py-2.5 rounded-xl text-xs font-semibold bg-red-950/80 hover:bg-red-900 text-red-200 border border-red-500/50 transition-all shadow-md active:scale-95 hover:border-red-400 disabled:cursor-not-allowed"
               >
                 <X className="w-3.5 h-3.5 text-red-400" />
                 <span>Stop Download</span>
@@ -626,7 +623,7 @@ export function AutopilotDashboard() {
               type="button"
               onClick={handleTriggerNow}
               disabled={isActionLoading || status?.state === "rendering" || status?.state === "uploading"}
-              className="flex items-center justify-center gap-2 px-6 py-2.5 rounded-xl font-bold text-sm bg-gradient-to-r from-red-600 to-rose-600 hover:from-red-500 hover:to-rose-500 text-white shadow-lg shadow-red-600/25 transition-all active:scale-95 shrink-0"
+              className="cursor-pointer flex items-center justify-center gap-2 px-6 py-2.5 rounded-xl font-bold text-sm bg-gradient-to-r from-red-600 to-rose-600 hover:from-red-500 hover:to-rose-500 text-white shadow-lg shadow-red-600/25 transition-all active:scale-95 shrink-0 disabled:cursor-not-allowed disabled:opacity-50"
             >
               <Sparkles className="w-4 h-4 fill-white" />
               <span>Clip & Upload 6 Shorts</span>
@@ -643,7 +640,7 @@ export function AutopilotDashboard() {
             <button
               type="button"
               onClick={() => setErrorMsg(null)}
-              className="text-red-400 hover:text-red-200 text-xs px-2 py-0.5 rounded border border-red-500/30"
+              className="cursor-pointer text-red-400 hover:text-red-200 text-xs px-2 py-0.5 rounded border border-red-500/30"
             >
               Dismiss
             </button>
@@ -712,7 +709,7 @@ export function AutopilotDashboard() {
                 type="button"
                 onClick={handleDisconnectYouTube}
                 disabled={isActionLoading}
-                className="text-xs text-zinc-400 hover:text-red-400 underline font-medium px-3 py-1.5 transition-colors"
+                className="cursor-pointer text-xs text-zinc-400 hover:text-red-400 underline font-medium px-3 py-1.5 transition-colors disabled:cursor-not-allowed"
               >
                 Disconnect Channel
               </button>
@@ -721,7 +718,7 @@ export function AutopilotDashboard() {
             {ytStatus?.auth_url && !ytStatus?.connected ? (
               <a
                 href={ytStatus.auth_url}
-                className="flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold bg-white hover:bg-zinc-100 text-zinc-950 shadow-md shadow-white/10 transition-all active:scale-95"
+                className="cursor-pointer flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold bg-white hover:bg-zinc-100 text-zinc-950 shadow-md shadow-white/10 transition-all active:scale-95"
               >
                 <svg className="w-3.5 h-3.5" viewBox="0 0 24 24">
                   <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
@@ -736,7 +733,7 @@ export function AutopilotDashboard() {
             <button
               type="button"
               onClick={() => setShowOAuthModal(!showOAuthModal)}
-              className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-semibold bg-zinc-900 hover:bg-zinc-800 text-zinc-300 border border-zinc-800 transition-all active:scale-95"
+              className="cursor-pointer flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-semibold bg-zinc-900 hover:bg-zinc-800 text-zinc-300 border border-zinc-800 transition-all active:scale-95"
             >
               <Settings className="w-3.5 h-3.5 text-zinc-400" />
               <span>Setup Credentials / Token</span>
@@ -796,7 +793,7 @@ export function AutopilotDashboard() {
                           type="button"
                           onClick={() => handleSelectChannel(chan.channel_id)}
                           disabled={isActionLoading}
-                          className="px-2 py-1 rounded-lg text-[10px] font-semibold bg-zinc-800 hover:bg-zinc-700 text-zinc-200 transition-colors"
+                          className="cursor-pointer px-2 py-1 rounded-lg text-[10px] font-semibold bg-zinc-800 hover:bg-zinc-700 text-zinc-200 transition-colors disabled:cursor-not-allowed"
                         >
                           Select
                         </button>
@@ -807,7 +804,7 @@ export function AutopilotDashboard() {
                         disabled={isActionLoading}
                         title="Remove channel"
                         aria-label={`Remove channel ${chan.channel_title}`}
-                        className="p-1 text-zinc-500 hover:text-red-400 rounded transition-colors"
+                        className="cursor-pointer p-1 text-zinc-500 hover:text-red-400 rounded transition-colors disabled:cursor-not-allowed"
                       >
                         <Trash2 className="w-3.5 h-3.5" />
                       </button>
@@ -977,7 +974,7 @@ export function AutopilotDashboard() {
                   <button
                     type="button"
                     onClick={() => setPreviewMode("video")}
-                    className={`px-2.5 py-1 rounded-lg text-xs font-semibold transition-all ${
+                    className={`cursor-pointer px-2.5 py-1 rounded-lg text-xs font-semibold transition-all ${
                       previewMode === "video" ? "bg-zinc-800 text-white shadow-sm" : "text-zinc-400 hover:text-zinc-200"
                     }`}
                   >
@@ -986,7 +983,7 @@ export function AutopilotDashboard() {
                   <button
                     type="button"
                     onClick={() => setPreviewMode("cover")}
-                    className={`px-2.5 py-1 rounded-lg text-xs font-semibold transition-all flex items-center gap-1 ${
+                    className={`cursor-pointer px-2.5 py-1 rounded-lg text-xs font-semibold transition-all flex items-center gap-1 ${
                       previewMode === "cover" ? "bg-amber-500/20 text-amber-400 border border-amber-500/30" : "text-zinc-400 hover:text-zinc-200"
                     }`}
                   >
@@ -999,7 +996,7 @@ export function AutopilotDashboard() {
                 <a
                   href={apiClient.resolveUrl(activeClip.preview_url)}
                   download={activeClip.filename || `short_${activeClip.clip_index}.mp4`}
-                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold bg-zinc-900 hover:bg-zinc-800 text-zinc-200 border border-zinc-800 hover:border-zinc-700 transition-all active:scale-95"
+                  className="cursor-pointer flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold bg-zinc-900 hover:bg-zinc-800 text-zinc-200 border border-zinc-800 hover:border-zinc-700 transition-all active:scale-95"
                 >
                   <Download className="w-3.5 h-3.5 text-zinc-400" />
                   <span>Download MP4</span>
@@ -1009,7 +1006,7 @@ export function AutopilotDashboard() {
                 <a
                   href={apiClient.resolveUrl(activeClip.cover_url)}
                   download={activeClip.cover_filename || `cover_short_${activeClip.clip_index}.jpg`}
-                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold bg-zinc-900 hover:bg-zinc-800 text-amber-400 border border-amber-500/30 hover:border-amber-500/50 transition-all active:scale-95"
+                  className="cursor-pointer flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold bg-zinc-900 hover:bg-zinc-800 text-amber-400 border border-amber-500/30 hover:border-amber-500/50 transition-all active:scale-95"
                 >
                   <ImageIcon className="w-3.5 h-3.5 text-amber-400" />
                   <span>Download Full HD Cover</span>
@@ -1020,7 +1017,7 @@ export function AutopilotDashboard() {
                   href={activeClip.youtube_url}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl text-xs font-semibold bg-red-600 hover:bg-red-500 text-white shadow-md shadow-red-600/20 transition-all active:scale-95"
+                  className="cursor-pointer flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl text-xs font-semibold bg-red-600 hover:bg-red-500 text-white shadow-md shadow-red-600/20 transition-all active:scale-95"
                 >
                   <span>Watch on YouTube</span>
                   <ExternalLink className="w-3.5 h-3.5" />
@@ -1140,7 +1137,7 @@ export function AutopilotDashboard() {
                     <button
                       type="button"
                       onClick={() => handleCopyLink(video.youtube_url, video.id || String(idx))}
-                      className="flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-medium bg-zinc-900 hover:bg-zinc-800 text-zinc-300 border border-zinc-800 shrink-0 transition-all active:scale-95"
+                      className="cursor-pointer flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-medium bg-zinc-900 hover:bg-zinc-800 text-zinc-300 border border-zinc-800 shrink-0 transition-all active:scale-95"
                     >
                       {copiedId === (video.id || String(idx)) ? (
                         <>
@@ -1206,7 +1203,7 @@ export function AutopilotDashboard() {
                         if (targetClip) setConnectingTargetClip(targetClip);
                         setShowOAuthModal(true);
                       }}
-                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg font-bold bg-white text-zinc-950 hover:bg-zinc-200 transition-all shadow-sm active:scale-95"
+                      className="cursor-pointer flex items-center gap-1.5 px-3 py-1.5 rounded-lg font-bold bg-white text-zinc-950 hover:bg-zinc-200 transition-all shadow-sm active:scale-95"
                     >
                       <Link2 className="w-3.5 h-3.5" />
                       <span>Connect YouTube Channel</span>
@@ -1218,7 +1215,7 @@ export function AutopilotDashboard() {
                       type="button"
                       onClick={() => handleRetryClip(issue.id!)}
                       disabled={isActionLoading}
-                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg font-semibold bg-red-600/20 text-red-300 hover:bg-red-600/30 border border-red-500/40 transition-all"
+                      className="cursor-pointer flex items-center gap-1.5 px-3 py-1.5 rounded-lg font-semibold bg-red-600/20 text-red-300 hover:bg-red-600/30 border border-red-500/40 transition-all disabled:cursor-not-allowed"
                     >
                       <RotateCcw className="w-3 h-3" />
                       <span>Retry Upload</span>
@@ -1302,7 +1299,8 @@ export function AutopilotDashboard() {
               <button
                 type="button"
                 onClick={handleCleanup}
-                className="text-xs text-red-400 hover:text-red-300 font-medium underline flex items-center gap-1"
+                disabled={isActionLoading}
+                className="cursor-pointer text-xs text-red-400 hover:text-red-300 font-medium underline flex items-center gap-1 disabled:cursor-not-allowed"
               >
                 <Trash2 className="w-3 h-3" />
                 Purge
@@ -1354,10 +1352,20 @@ export function AutopilotDashboard() {
             {status.current_batch.clips.map((clip) => (
               <div
                 key={clip.id}
-                className={`rounded-2xl border p-4 space-y-3 flex flex-col justify-between transition-all ${
+                role="button"
+                tabIndex={0}
+                aria-label={`Select Short #${clip.clip_index}: ${clip.hook_title}`}
+                onClick={() => setSelectedPreviewClipId(clip.id)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" || e.key === " ") {
+                    e.preventDefault();
+                    setSelectedPreviewClipId(clip.id);
+                  }
+                }}
+                className={`rounded-2xl border p-4 space-y-3 flex flex-col justify-between transition-all cursor-pointer group ${
                   activeClip?.id === clip.id
-                    ? "border-red-500/60 bg-zinc-900/90 shadow-lg shadow-red-500/5 ring-1 ring-red-500/30"
-                    : "border-zinc-800/90 bg-zinc-900/50 hover:border-zinc-700"
+                    ? "border-red-500/60 bg-zinc-900/90 shadow-lg shadow-red-500/10 ring-1 ring-red-500/40"
+                    : "border-zinc-800/90 bg-zinc-900/50 hover:border-red-500/50 hover:bg-zinc-900/80 hover:shadow-md hover:shadow-red-500/5"
                 }`}
               >
                 <div className="space-y-2">
@@ -1413,7 +1421,8 @@ export function AutopilotDashboard() {
                       <a
                         href={apiClient.resolveUrl(clip.cover_url)}
                         download={clip.cover_filename || `cover_${clip.clip_index}.jpg`}
-                        className="absolute bottom-2 right-2 text-[10px] font-semibold px-2 py-1 rounded-lg bg-black/85 hover:bg-black text-amber-400 border border-amber-500/40 flex items-center gap-1 shadow-md transition-all active:scale-95"
+                        onClick={(e) => e.stopPropagation()}
+                        className="cursor-pointer absolute bottom-2 right-2 text-[10px] font-semibold px-2 py-1 rounded-lg bg-black/85 hover:bg-black text-amber-400 border border-amber-500/40 flex items-center gap-1 shadow-md transition-all active:scale-95"
                       >
                         <Download className="w-2.5 h-2.5" />
                         <span>Cover</span>
@@ -1433,7 +1442,8 @@ export function AutopilotDashboard() {
                             {ytStatus?.auth_url ? (
                               <a
                                 href={ytStatus.auth_url}
-                                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold bg-white hover:bg-zinc-100 text-zinc-950 shadow-sm transition-all active:scale-95"
+                                onClick={(e) => e.stopPropagation()}
+                                className="cursor-pointer inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold bg-white hover:bg-zinc-100 text-zinc-950 shadow-sm transition-all active:scale-95"
                               >
                                 <svg className="w-3.5 h-3.5" viewBox="0 0 24 24">
                                   <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
@@ -1447,11 +1457,12 @@ export function AutopilotDashboard() {
 
                             <button
                               type="button"
-                              onClick={() => {
+                              onClick={(e) => {
+                                e.stopPropagation();
                                 setConnectingTargetClip(clip);
                                 setShowOAuthModal(true);
                               }}
-                              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold bg-white text-zinc-950 hover:bg-zinc-200 shadow-sm transition-all active:scale-95"
+                              className="cursor-pointer inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold bg-white text-zinc-950 hover:bg-zinc-200 shadow-sm transition-all active:scale-95"
                             >
                               <Link2 className="w-3.5 h-3.5 text-red-600" />
                               <span>Connect YouTube Channel</span>
@@ -1466,6 +1477,7 @@ export function AutopilotDashboard() {
                                 type="password"
                                 placeholder="Paste Access Token (ya29...)"
                                 value={cardTokenInput[clip.id] || ""}
+                                onClick={(e) => e.stopPropagation()}
                                 onChange={(e) =>
                                   setCardTokenInput((prev) => ({ ...prev, [clip.id]: e.target.value }))
                                 }
@@ -1473,9 +1485,12 @@ export function AutopilotDashboard() {
                               />
                               <button
                                 type="button"
-                                onClick={() => handleInlineConnectAndRetry(clip.id)}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleInlineConnectAndRetry(clip.id);
+                                }}
                                 disabled={isActionLoading || isConnectingYt}
-                                className="px-2.5 py-1 rounded-lg text-[11px] font-bold bg-emerald-600 hover:bg-emerald-500 text-white shrink-0 active:scale-95 transition-all"
+                                className="cursor-pointer px-2.5 py-1 rounded-lg text-[11px] font-bold bg-emerald-600 hover:bg-emerald-500 text-white shrink-0 active:scale-95 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
                               >
                                 {isConnectingYt ? "Connecting..." : "Connect & Retry"}
                               </button>
@@ -1490,8 +1505,11 @@ export function AutopilotDashboard() {
                 <div className="pt-2 border-t border-zinc-800/60 flex items-center justify-between text-xs gap-2">
                   <button
                     type="button"
-                    onClick={() => setSelectedPreviewClipId(clip.id)}
-                    className="text-zinc-400 hover:text-zinc-200 font-medium flex items-center gap-1"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setSelectedPreviewClipId(clip.id);
+                    }}
+                    className="cursor-pointer text-zinc-400 hover:text-zinc-200 font-medium flex items-center gap-1 transition-colors"
                   >
                     <Eye className="w-3 h-3" />
                     <span>Preview</span>
@@ -1502,7 +1520,8 @@ export function AutopilotDashboard() {
                       href={clip.youtube_url}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="text-red-400 hover:text-red-300 font-medium flex items-center gap-1"
+                      onClick={(e) => e.stopPropagation()}
+                      className="cursor-pointer text-red-400 hover:text-red-300 font-medium flex items-center gap-1 transition-colors"
                     >
                       <span>View on YouTube</span>
                       <ExternalLink className="w-3 h-3" />
@@ -1512,11 +1531,12 @@ export function AutopilotDashboard() {
                       {(!ytStatus?.connected || clip.error?.toLowerCase().includes("token") || clip.error?.toLowerCase().includes("connect")) && (
                         <button
                           type="button"
-                          onClick={() => {
+                          onClick={(e) => {
+                            e.stopPropagation();
                             setConnectingTargetClip(clip);
                             setShowOAuthModal(true);
                           }}
-                          className="text-xs font-bold text-amber-400 hover:text-amber-300 underline flex items-center gap-1"
+                          className="cursor-pointer text-xs font-bold text-amber-400 hover:text-amber-300 underline flex items-center gap-1"
                         >
                           <Link2 className="w-3 h-3" />
                           <span>Connect</span>
@@ -1524,8 +1544,11 @@ export function AutopilotDashboard() {
                       )}
                       <button
                         type="button"
-                        onClick={() => handleRetryClip(clip.id)}
-                        className="text-amber-400 hover:text-amber-300 font-medium flex items-center gap-1"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleRetryClip(clip.id);
+                        }}
+                        className="cursor-pointer text-amber-400 hover:text-amber-300 font-medium flex items-center gap-1 transition-colors"
                       >
                         <RotateCcw className="w-3 h-3" />
                         <span>Retry</span>
@@ -1603,7 +1626,7 @@ export function AutopilotDashboard() {
                   setShowOAuthModal(false);
                   setConnectingTargetClip(null);
                 }}
-                className="w-8 h-8 rounded-full bg-zinc-900 hover:bg-zinc-800 text-zinc-400 hover:text-white flex items-center justify-center transition-colors"
+                className="cursor-pointer w-8 h-8 rounded-full bg-zinc-900 hover:bg-zinc-800 text-zinc-400 hover:text-white flex items-center justify-center transition-colors"
               >
                 <X className="w-4 h-4" />
               </button>
@@ -1614,7 +1637,7 @@ export function AutopilotDashboard() {
               <button
                 type="button"
                 onClick={() => setModalTab("token")}
-                className={`flex-1 py-1.5 rounded-lg text-xs font-semibold transition-all ${
+                className={`cursor-pointer flex-1 py-1.5 rounded-lg text-xs font-semibold transition-all ${
                   modalTab === "token"
                     ? "bg-zinc-800 text-white shadow"
                     : "text-zinc-400 hover:text-zinc-200"
@@ -1625,7 +1648,7 @@ export function AutopilotDashboard() {
               <button
                 type="button"
                 onClick={() => setModalTab("oauth")}
-                className={`flex-1 py-1.5 rounded-lg text-xs font-semibold transition-all ${
+                className={`cursor-pointer flex-1 py-1.5 rounded-lg text-xs font-semibold transition-all ${
                   modalTab === "oauth"
                     ? "bg-zinc-800 text-white shadow"
                     : "text-zinc-400 hover:text-zinc-200"
@@ -1656,7 +1679,7 @@ export function AutopilotDashboard() {
                 <button
                   type="submit"
                   disabled={isConnectingYt}
-                  className="w-full py-2.5 rounded-xl text-xs font-bold bg-emerald-600 hover:bg-emerald-500 text-white transition-all shadow-md active:scale-95 disabled:opacity-50"
+                  className="cursor-pointer w-full py-2.5 rounded-xl text-xs font-bold bg-emerald-600 hover:bg-emerald-500 text-white transition-all shadow-md active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   {isConnectingYt
                     ? "Verifying & Saving..."
@@ -1674,7 +1697,7 @@ export function AutopilotDashboard() {
                     </p>
                     <a
                       href={ytStatus.auth_url}
-                      className="w-full py-2.5 rounded-xl text-xs font-bold bg-white hover:bg-zinc-100 text-zinc-950 flex items-center justify-center gap-2 shadow-md transition-all active:scale-95"
+                      className="cursor-pointer w-full py-2.5 rounded-xl text-xs font-bold bg-white hover:bg-zinc-100 text-zinc-950 flex items-center justify-center gap-2 shadow-md transition-all active:scale-95"
                     >
                       <svg className="w-4 h-4" viewBox="0 0 24 24">
                         <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
@@ -1711,7 +1734,7 @@ export function AutopilotDashboard() {
                     <button
                       type="submit"
                       disabled={isConnectingYt}
-                      className="w-full py-2.5 rounded-xl text-xs font-bold bg-red-600 hover:bg-red-500 text-white transition-all shadow-md active:scale-95 disabled:opacity-50"
+                      className="cursor-pointer w-full py-2.5 rounded-xl text-xs font-bold bg-red-600 hover:bg-red-500 text-white transition-all shadow-md active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                       {isConnectingYt ? "Saving..." : "Save Credentials & Generate Link"}
                     </button>

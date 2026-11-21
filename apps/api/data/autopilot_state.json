@@ -16,7 +16,7 @@
   "upload_interval_seconds": 3600,
   "cooldown_until": null,
   "disk_space_cleaned_mb": 0.0,
-  "last_cleaned_at": "2026-11-21T13:59:41.480808",
+  "last_cleaned_at": "2026-11-21T14:15:56.060070",
   "recent_logs": [],
   "all_published_videos": [
     {
@@ -25,7 +25,7 @@
       "title": "GTA 6 Insane Detail",
       "youtube_url": "https://youtube.com/shorts/yt_short_123",
       "youtube_video_id": "yt_short_123",
-      "published_at": "2026-11-21T08:29:41.480744+00:00",
+      "published_at": "2026-11-21T08:45:56.059941+00:00",
       "preview_url": "/api/file/gta6_short_test_1.mp4",
       "cover_url": null,
       "duration": 30.0

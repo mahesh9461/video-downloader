@@ -595,10 +595,20 @@ export function ViralClips() {
               return (
                 <Card
                   key={clip.clip_id}
-                  className={`border transition-all overflow-hidden text-left hover:border-violet-500/50 flex flex-col justify-between ${
+                  role="button"
+                  tabIndex={0}
+                  aria-label={`Select clip: ${clip.hook_title}`}
+                  onClick={() => handleSelectClip(clip)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" || e.key === " ") {
+                      e.preventDefault();
+                      handleSelectClip(clip);
+                    }
+                  }}
+                  className={`border transition-all overflow-hidden text-left hover:border-violet-500/50 flex flex-col justify-between cursor-pointer group ${
                     isSelected
                       ? "border-violet-500 bg-violet-500/[0.08] shadow-xl shadow-violet-500/10 ring-1 ring-violet-500/30"
-                      : "border-zinc-800 bg-zinc-900/40 hover:bg-zinc-900/80"
+                      : "border-zinc-800 bg-zinc-900/40 hover:bg-zinc-900/80 hover:shadow-lg"
                   }`}
                 >
                   <div>
@@ -704,17 +714,23 @@ export function ViralClips() {
                   <div className="p-4 pt-0 grid grid-cols-2 gap-2">
                     <button
                       type="button"
-                      onClick={() => handleQuickRender(clip)}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleQuickRender(clip);
+                      }}
                       disabled={isRendering}
-                      className="py-2 px-3 rounded-xl text-xs font-bold bg-violet-600 hover:bg-violet-500 text-white flex items-center justify-center gap-1 shadow-md shadow-violet-600/30 transition-all disabled:opacity-50"
+                      className="cursor-pointer py-2 px-3 rounded-xl text-xs font-bold bg-violet-600 hover:bg-violet-500 text-white flex items-center justify-center gap-1 shadow-md shadow-violet-600/30 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                       <Download className="w-3.5 h-3.5" />
                       1-Click Short
                     </button>
                     <button
                       type="button"
-                      onClick={() => handleSelectClip(clip)}
-                      className={`py-2 px-3 rounded-xl text-xs font-semibold flex items-center justify-center gap-1 transition-all ${
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleSelectClip(clip);
+                      }}
+                      className={`cursor-pointer py-2 px-3 rounded-xl text-xs font-semibold flex items-center justify-center gap-1 transition-all ${
                         isSelected
                           ? "bg-zinc-800 border border-violet-500/60 text-violet-300"
                           : "bg-zinc-900 hover:bg-zinc-800 text-zinc-400 hover:text-white border border-zinc-800"
