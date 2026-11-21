@@ -249,6 +249,7 @@ async def save_user_channel_supabase(channel_data: Dict[str, Any], user_id: str 
         "thumbnail_url": channel_data.get("thumbnail_url"),
         "access_token": channel_data.get("access_token", ""),
         "refresh_token": channel_data.get("refresh_token"),
+        "expires_at": channel_data.get("expires_at"),
         "is_default": bool(channel_data.get("is_default", False)),
     }
 

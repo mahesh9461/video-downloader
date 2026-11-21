@@ -103,10 +103,26 @@ async def test_youtube_token_exchange():
         "token_type": "Bearer",
     }
 
+    mock_channel_response = MagicMock()
+    mock_channel_response.status_code = 200
+    mock_channel_response.json.return_value = {
+        "items": [
+            {
+                "id": "UC_test_exchange_channel",
+                "snippet": {
+                    "title": "Exchange Test Channel",
+                    "thumbnails": {"default": {"url": "https://example.com/ch.jpg"}},
+                },
+            }
+        ]
+    }
+
     with patch("app.youtube_publisher.GOOGLE_CLIENT_ID", "test-id"), \
          patch("app.youtube_publisher.GOOGLE_CLIENT_SECRET", "test-sec"), \
-         patch("httpx.AsyncClient.post", new_callable=AsyncMock) as mock_post:
+         patch("httpx.AsyncClient.post", new_callable=AsyncMock) as mock_post, \
+         patch("httpx.AsyncClient.get", new_callable=AsyncMock) as mock_get:
         mock_post.return_value = mock_response
+        mock_get.return_value = mock_channel_response
 
         res = client.post("/api/youtube/token", json={"code": "4/0A..."})
         assert res.status_code == 200

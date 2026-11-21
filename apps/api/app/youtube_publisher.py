@@ -42,11 +42,13 @@ DEFAULT_YOUTUBE_TAGS = [
 
 DEFAULT_YOUTUBE_CATEGORY_ID = "20"  # Gaming Category
 
-# In-memory store fallback
-_token_store: Dict[str, Any] = {}
-_creds_store: Dict[str, str] = {}
+# Multi-channel persistent cache file and store
 CHANNELS_CACHE_FILE = Path(__file__).resolve().parent.parent / "data" / "youtube_channels.json"
 _channels_store: Dict[str, Any] = {"channels": {}, "active_channel_id": None}
+
+# Legacy in-memory store maintained strictly for backward compatibility
+_token_store: Dict[str, Any] = {}
+_creds_store: Dict[str, str] = {}
 
 
 def _init_channels_store():
@@ -71,7 +73,7 @@ def _save_channels_store():
 
 
 def get_user_channels(user_id: Optional[str] = None) -> List[Dict[str, Any]]:
-    """Returns list of connected YouTube channels for user."""
+    """Returns list of connected YouTube channels for user, including token validity."""
     channels_map = _channels_store.get("channels", {})
     active_id = _channels_store.get("active_channel_id")
 
@@ -85,6 +87,7 @@ def get_user_channels(user_id: Optional[str] = None) -> List[Dict[str, Any]]:
             "thumbnail_url": _token_store.get("thumbnail_url"),
             "access_token": _token_store.get("access_token"),
             "refresh_token": _token_store.get("refresh_token"),
+            "expires_at": time.time() + 3600,
             "is_default": True,
             "user_id": user_id or "default",
         }
@@ -95,12 +98,21 @@ def get_user_channels(user_id: Optional[str] = None) -> List[Dict[str, Any]]:
         if user_id and ch.get("user_id") and ch.get("user_id") not in (user_id, "default"):
             continue
         is_def = (cid == active_id) or ch.get("is_default", False)
+
+        # Check token validity
+        exp = ch.get("expires_at")
+        has_ref = bool(ch.get("refresh_token"))
+        has_tok = bool(ch.get("access_token"))
+        token_valid = (exp is not None and time.time() < (float(exp) - 60)) or has_ref or has_tok
+
         results.append({
             "id": cid,
             "channel_id": ch.get("channel_id", cid),
             "channel_title": ch.get("channel_title", "YouTube Channel"),
             "thumbnail_url": ch.get("thumbnail_url"),
             "is_default": is_def,
+            "token_valid": token_valid,
+            "refresh_token": ch.get("refresh_token"),
             "user_id": ch.get("user_id", user_id),
             "connected_at": ch.get("connected_at"),
         })
@@ -108,44 +120,66 @@ def get_user_channels(user_id: Optional[str] = None) -> List[Dict[str, Any]]:
 
 
 def save_user_channel(channel_data: Dict[str, Any], user_id: Optional[str] = None) -> Dict[str, Any]:
-    cid = channel_data.get("channel_id")
+    """Saves or updates a channel in multi-channel storage with its own tokens and expires_at.
+    
+    Never replaces an existing channel's refresh_token with None or empty.
+    """
+    cid = channel_data.get("channel_id") or channel_data.get("id")
     if not cid:
-        cid = channel_data.get("id") or f"chan_{secrets.token_hex(4)}"
+        raise ValueError("channel_id is required to save a YouTube channel")
 
     channels_map = _channels_store.setdefault("channels", {})
+    existing = channels_map.get(cid)
+
+    # Never replace existing refresh_token with None/empty
+    refresh_tok = channel_data.get("refresh_token")
+    if not refresh_tok and existing and existing.get("refresh_token"):
+        refresh_tok = existing.get("refresh_token")
+
+    expires_at = channel_data.get("expires_at")
+    if not expires_at and existing and existing.get("expires_at"):
+        expires_at = existing.get("expires_at")
+    if not expires_at:
+        expires_at = time.time() + 3600
+
     if user_id and user_id != "default":
         user_channels = [c for c in channels_map.values() if c.get("user_id") == user_id]
     else:
         user_channels = [c for c in channels_map.values() if not c.get("user_id") or c.get("user_id") == "default"]
+
     is_first = len(user_channels) == 0
     is_def = channel_data.get("is_default")
     if is_def is None:
-        is_def = is_first
+        is_def = is_first or (existing.get("is_default", False) if existing else False)
 
     rec = {
         "id": cid,
         "channel_id": cid,
-        "channel_title": channel_data.get("channel_title", "YouTube Channel"),
-        "thumbnail_url": channel_data.get("thumbnail_url"),
+        "channel_title": channel_data.get("channel_title") or (existing.get("channel_title") if existing else "YouTube Channel"),
+        "thumbnail_url": channel_data.get("thumbnail_url") or (existing.get("thumbnail_url") if existing else None),
         "access_token": channel_data.get("access_token", ""),
-        "refresh_token": channel_data.get("refresh_token"),
-        "is_default": is_def,
-        "user_id": user_id or "default",
-        "connected_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+        "refresh_token": refresh_tok,
+        "expires_at": float(expires_at),
+        "is_default": bool(is_def),
+        "user_id": user_id or channel_data.get("user_id") or "default",
+        "connected_at": channel_data.get("connected_at") or (existing.get("connected_at") if existing else time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())),
     }
     channels_map[cid] = rec
+
     if is_def or not _channels_store.get("active_channel_id"):
         _channels_store["active_channel_id"] = cid
+
     _save_channels_store()
 
-    # Also keep legacy _token_store in sync for compatibility
-    _token_store["access_token"] = rec["access_token"]
-    if rec.get("refresh_token"):
-        _token_store["refresh_token"] = rec["refresh_token"]
-    _token_store["channel_id"] = cid
-    _token_store["channel_title"] = rec["channel_title"]
-    _token_store["thumbnail_url"] = rec["thumbnail_url"]
-    save_stored_token(_token_store)
+    # Only sync to legacy _token_store if this is the active channel
+    if _channels_store.get("active_channel_id") == cid:
+        _token_store["access_token"] = rec["access_token"]
+        if rec.get("refresh_token"):
+            _token_store["refresh_token"] = rec["refresh_token"]
+        _token_store["channel_id"] = cid
+        _token_store["channel_title"] = rec["channel_title"]
+        _token_store["thumbnail_url"] = rec["thumbnail_url"]
+        save_stored_token(_token_store)
 
     # Sync to Supabase table user_youtube_channels in background if configured
     try:
@@ -164,6 +198,7 @@ def save_user_channel(channel_data: Dict[str, Any], user_id: Optional[str] = Non
 
 
 def set_active_channel_id(channel_id: str, user_id: Optional[str] = None) -> bool:
+    """Sets a channel as active and default without modifying other channels' tokens."""
     channels_map = _channels_store.get("channels", {})
     if channel_id in channels_map:
         _channels_store["active_channel_id"] = channel_id
@@ -172,8 +207,9 @@ def set_active_channel_id(channel_id: str, user_id: Optional[str] = None) -> boo
         _save_channels_store()
 
         target = channels_map[channel_id]
-        _token_store["access_token"] = target["access_token"]
-        _token_store["refresh_token"] = target.get("refresh_token")
+        _token_store["access_token"] = target.get("access_token")
+        if target.get("refresh_token"):
+            _token_store["refresh_token"] = target["refresh_token"]
         _token_store["channel_id"] = channel_id
         _token_store["channel_title"] = target.get("channel_title")
         _token_store["thumbnail_url"] = target.get("thumbnail_url")
@@ -183,11 +219,25 @@ def set_active_channel_id(channel_id: str, user_id: Optional[str] = None) -> boo
 
 
 def delete_user_channel(channel_id: str, user_id: Optional[str] = None) -> bool:
+    """Deletes a channel connection. If active was deleted, promotes the next channel to active."""
     channels_map = _channels_store.get("channels", {})
     if channel_id in channels_map:
         del channels_map[channel_id]
         if _channels_store.get("active_channel_id") == channel_id:
-            _channels_store["active_channel_id"] = next(iter(channels_map.keys())) if channels_map else None
+            next_active = next(iter(channels_map.keys())) if channels_map else None
+            _channels_store["active_channel_id"] = next_active
+            if next_active and next_active in channels_map:
+                channels_map[next_active]["is_default"] = True
+                target = channels_map[next_active]
+                _token_store["access_token"] = target.get("access_token")
+                if target.get("refresh_token"):
+                    _token_store["refresh_token"] = target["refresh_token"]
+                _token_store["channel_id"] = next_active
+                _token_store["channel_title"] = target.get("channel_title")
+                _token_store["thumbnail_url"] = target.get("thumbnail_url")
+                save_stored_token(_token_store)
+            else:
+                _token_store.clear()
         _save_channels_store()
 
         try:
@@ -206,6 +256,7 @@ def delete_user_channel(channel_id: str, user_id: Optional[str] = None) -> bool:
 
 
 def get_channel_token(channel_id: Optional[str] = None, user_id: Optional[str] = None) -> Optional[str]:
+    """Retrieves access token for a specific channel or active channel."""
     channels_map = _channels_store.get("channels", {})
     target_id = channel_id or _channels_store.get("active_channel_id")
     if target_id and target_id in channels_map:
@@ -260,7 +311,6 @@ def save_stored_token(token_data: Dict[str, Any]) -> None:
         TOKEN_CACHE_FILE.write_text(json.dumps(_token_store), encoding="utf-8")
     except Exception as e:
         logger.warning("Failed to write token cache: %s", e)
-    # Sync to Supabase in background if configured
     try:
         from app.supabase_client import save_youtube_tokens_supabase, is_supabase_configured
         if is_supabase_configured():
@@ -275,9 +325,10 @@ def save_stored_token(token_data: Dict[str, Any]) -> None:
 
 
 def clear_stored_token() -> None:
-    global _channels_store
     _token_store.clear()
-    _channels_store = {"channels": {}, "active_channel_id": None}
+    _channels_store.clear()
+    _channels_store["channels"] = {}
+    _channels_store["active_channel_id"] = None
     if TOKEN_CACHE_FILE.exists():
         try:
             TOKEN_CACHE_FILE.unlink()
@@ -290,20 +341,34 @@ def clear_stored_token() -> None:
             pass
 
 
-async def refresh_access_token() -> Optional[str]:
-    """Refreshes the access token using the stored refresh_token if available."""
+async def refresh_access_token(channel_id: Optional[str] = None) -> Optional[str]:
+    """Refreshes the access token using THAT channel's refresh_token.
+    
+    Falls back to active channel when channel_id is None.
+    Updates only that channel's entry in _channels_store (access_token + expires_at).
+    """
     client_id, client_secret = get_google_credentials()
     if not client_id or not client_secret:
         return None
 
-    stored = {}
-    if TOKEN_CACHE_FILE.exists():
-        try:
-            stored = json.loads(TOKEN_CACHE_FILE.read_text(encoding="utf-8"))
-        except Exception:
-            pass
-    refresh_tok = _token_store.get("refresh_token") or stored.get("refresh_token")
+    target_id = channel_id or _channels_store.get("active_channel_id")
+    channels_map = _channels_store.get("channels", {})
+    channel_rec = channels_map.get(target_id) if target_id else None
+
+    refresh_tok = None
+    if channel_rec and channel_rec.get("refresh_token"):
+        refresh_tok = channel_rec.get("refresh_token")
+    elif not channels_map:
+        refresh_tok = _token_store.get("refresh_token")
+        if not refresh_tok and TOKEN_CACHE_FILE.exists():
+            try:
+                stored = json.loads(TOKEN_CACHE_FILE.read_text(encoding="utf-8"))
+                refresh_tok = stored.get("refresh_token")
+            except Exception:
+                pass
+
     if not refresh_tok:
+        logger.warning("No refresh_token available to refresh channel: %s", target_id)
         return None
 
     try:
@@ -321,15 +386,56 @@ async def refresh_access_token() -> Optional[str]:
                 data = res.json()
                 new_token = data.get("access_token")
                 if new_token:
-                    _token_store["access_token"] = new_token
-                    if "refresh_token" not in data:
-                        data["refresh_token"] = refresh_tok
-                    save_stored_token(data)
-                    logger.info("Successfully refreshed YouTube access token")
+                    expires_in = data.get("expires_in", 3600)
+                    try:
+                        expires_at = time.time() + float(expires_in)
+                    except Exception:
+                        expires_at = time.time() + 3600
+
+                    # Update only this channel's record in storage
+                    if channel_rec and target_id in channels_map:
+                        channel_rec["access_token"] = new_token
+                        channel_rec["expires_at"] = expires_at
+                        if data.get("refresh_token"):
+                            channel_rec["refresh_token"] = data["refresh_token"]
+                        _save_channels_store()
+
+                    # Keep legacy _token_store in sync only if this is the active channel
+                    if target_id == _channels_store.get("active_channel_id") or not channels_map:
+                        _token_store["access_token"] = new_token
+                        if data.get("refresh_token"):
+                            _token_store["refresh_token"] = data["refresh_token"]
+                        save_stored_token(_token_store)
+
+                    logger.info("Successfully refreshed YouTube access token for channel %s", target_id)
                     return new_token
+            else:
+                logger.warning("Google refresh token response (%d): %s", res.status_code, res.text)
     except Exception as e:
         logger.warning("Failed to refresh YouTube access token: %s", e)
     return None
+
+
+async def get_valid_channel_token(channel_id: Optional[str] = None) -> Optional[str]:
+    """Returns the channel's access token, automatically refreshing it if it expires within 60s."""
+    target_id = channel_id or _channels_store.get("active_channel_id")
+    channels_map = _channels_store.get("channels", {})
+    channel_rec = channels_map.get(target_id) if target_id else None
+
+    if channel_rec:
+        expires_at = channel_rec.get("expires_at")
+        access_token = channel_rec.get("access_token")
+
+        needs_refresh = (not access_token) or (expires_at is not None and time.time() >= (float(expires_at) - 60))
+        if needs_refresh and channel_rec.get("refresh_token"):
+            refreshed = await refresh_access_token(channel_id=target_id)
+            if refreshed:
+                return refreshed
+
+        if access_token:
+            return access_token
+
+    return get_channel_token(channel_id)
 
 
 def get_youtube_auth_url(state: Optional[str] = None) -> Optional[str]:
@@ -345,6 +451,7 @@ def get_youtube_auth_url(state: Optional[str] = None) -> Optional[str]:
         "scope": "https://www.googleapis.com/auth/youtube.upload https://www.googleapis.com/auth/youtube.readonly",
         "access_type": "offline",
         "prompt": "select_account consent",
+        "include_granted_scopes": "false",
     }
     if state:
         params["state"] = state
@@ -352,8 +459,61 @@ def get_youtube_auth_url(state: Optional[str] = None) -> Optional[str]:
     return f"https://accounts.google.com/o/oauth2/v2/auth?{urlencode(params)}"
 
 
+async def fetch_channel_info_live(access_token: str) -> Dict[str, Any]:
+    """Calls YouTube Data API channels endpoint directly with NO cache lookup.
+    
+    Raises RuntimeError on failure or if no YouTube channel is found.
+    Never invents fake IDs.
+    """
+    if not access_token:
+        raise ValueError("access_token is required to fetch channel info live")
+
+    url = "https://www.googleapis.com/youtube/v3/channels?part=snippet&mine=true"
+    headers = {"Authorization": f"Bearer {access_token}"}
+
+    async with httpx.AsyncClient(timeout=15.0) as client:
+        try:
+            res = await client.get(url, headers=headers)
+        except Exception as e:
+            raise RuntimeError(f"Failed to connect to YouTube Data API: {e}")
+
+        if res.status_code != 200:
+            err_msg = res.text
+            try:
+                err_msg = res.json().get("error", {}).get("message", res.text)
+            except Exception:
+                pass
+            raise RuntimeError(f"YouTube channel lookup failed ({res.status_code}): {err_msg}")
+
+        items = res.json().get("items", [])
+        if not items:
+            raise RuntimeError(
+                "No YouTube channel found for this Google account. "
+                "Please ensure you selected a valid YouTube channel or created one on YouTube."
+            )
+
+        item = items[0]
+        cid = item.get("id")
+        if not cid:
+            raise RuntimeError("YouTube API response did not contain a valid channel ID.")
+
+        snippet = item.get("snippet", {})
+        title = snippet.get("title") or "YouTube Channel"
+        thumbnail_url = snippet.get("thumbnails", {}).get("default", {}).get("url")
+
+        return {
+            "channel_id": cid,
+            "channel_title": title,
+            "thumbnail_url": thumbnail_url,
+        }
+
+
 async def exchange_code_for_token(code: str, user_id: Optional[str] = None) -> Dict[str, Any]:
-    """Exchanges an authorization code for access and refresh tokens, registering the specific YouTube channel."""
+    """Exchanges an authorization code for access and refresh tokens, registering the specific YouTube channel.
+    
+    Does NOT call save_stored_token first, preventing overwriting other channels' tokens.
+    Resolves real channel ID live from YouTube before saving.
+    """
     client_id, client_secret = get_google_credentials()
     if not client_id or not client_secret:
         raise ValueError("Google OAuth Client ID and Secret must be configured.")
@@ -378,33 +538,53 @@ async def exchange_code_for_token(code: str, user_id: Optional[str] = None) -> D
             raise RuntimeError(f"Google OAuth token exchange failed: {error_detail}")
 
         data = res.json()
-        save_stored_token(data)
 
-        # Automatically resolve and register this specific channel to multi-channel storage
-        tok = data.get("access_token")
-        if tok:
-            try:
-                chan_info = await get_channel_info(tok)
-                cid = chan_info.get("channel_id") or f"chan_{tok[:8]}"
-                title = chan_info.get("channel_title") or "YouTube Channel"
-                existing = get_user_channels(user_id=user_id)
-                save_user_channel({
-                    "channel_id": cid,
-                    "channel_title": title,
-                    "thumbnail_url": chan_info.get("thumbnail_url"),
-                    "access_token": tok,
-                    "refresh_token": data.get("refresh_token"),
-                    "is_default": len(existing) == 0,
-                }, user_id=user_id)
-            except Exception as chan_err:
-                logger.debug("Channel auto-registration skipped during code exchange: %s", chan_err)
+    tok = data.get("access_token")
+    if not tok:
+        raise RuntimeError("Google OAuth response missing access_token.")
 
-        return data
+    # Live call to YouTube Data API - no fallback to fake IDs
+    chan_info = await fetch_channel_info_live(tok)
+    cid = chan_info["channel_id"]
+    title = chan_info["channel_title"]
+    thumb = chan_info.get("thumbnail_url")
+
+    channels_map = _channels_store.get("channels", {})
+    existing = channels_map.get(cid)
+    already_connected = existing is not None
+
+    new_refresh = data.get("refresh_token")
+    refresh_token = new_refresh or (existing.get("refresh_token") if existing else None)
+
+    expires_in = data.get("expires_in", 3600)
+    try:
+        expires_at = time.time() + float(expires_in)
+    except Exception:
+        expires_at = time.time() + 3600
+
+    is_def = (len(channels_map) == 0) or (existing.get("is_default", False) if existing else False)
+
+    save_user_channel({
+        "channel_id": cid,
+        "channel_title": title,
+        "thumbnail_url": thumb,
+        "access_token": tok,
+        "refresh_token": refresh_token,
+        "expires_at": expires_at,
+        "is_default": is_def,
+    }, user_id=user_id)
+
+    return {
+        **data,
+        "channel_id": cid,
+        "channel_title": title,
+        "thumbnail_url": thumb,
+        "already_connected": already_connected,
+    }
 
 
 async def get_channel_info(access_token: str) -> Dict[str, Any]:
-    """Fetches the connected YouTube channel's title and ID with local caching and token auto-refresh."""
-    # First check multi-channel store for matching token
+    """Fetches YouTube channel info: checks local store first, then falls back to live API."""
     channels_map = _channels_store.get("channels", {})
     for cid, ch in channels_map.items():
         if ch.get("access_token") == access_token:
@@ -413,6 +593,11 @@ async def get_channel_info(access_token: str) -> Dict[str, Any]:
                 "channel_id": cid,
                 "thumbnail_url": ch.get("thumbnail_url"),
             }
+
+    try:
+        return await fetch_channel_info_live(access_token)
+    except Exception as e:
+        logger.debug("Live fetch in get_channel_info skipped: %s", e)
 
     cached_title = _token_store.get("channel_title")
     cached_id = _token_store.get("channel_id")
@@ -424,31 +609,6 @@ async def get_channel_info(access_token: str) -> Dict[str, Any]:
             "thumbnail_url": _token_store.get("thumbnail_url"),
         }
 
-    try:
-        async with httpx.AsyncClient(timeout=8.0) as client:
-            res = await client.get(
-                "https://www.googleapis.com/youtube/v3/channels?part=snippet&mine=true",
-                headers={"Authorization": f"Bearer {access_token}"},
-            )
-            if res.status_code == 200:
-                items = res.json().get("items", [])
-                if items:
-                    snippet = items[0].get("snippet", {})
-                    info = {
-                        "channel_title": snippet.get("title", "YouTube Channel"),
-                        "channel_id": items[0].get("id", "channel_id"),
-                        "thumbnail_url": snippet.get("thumbnails", {}).get("default", {}).get("url"),
-                    }
-                    return info
-            elif res.status_code == 401:
-                # Access token expired; refresh using refresh_token
-                new_tok = await refresh_access_token()
-                if new_tok and new_tok != access_token:
-                    return await get_channel_info(new_tok)
-    except Exception as e:
-        logger.debug("Could not fetch channel info online: %s", e)
-
-    # Return cached only if matching, or a distinct unique identifier based on token
     token_suffix = access_token[-8:] if len(access_token) >= 8 else secrets.token_hex(4)
     return {
         "channel_title": f"YouTube Channel ({token_suffix})",
@@ -461,7 +621,6 @@ async def get_youtube_status(user_id: Optional[str] = None) -> Dict[str, Any]:
     client_id, client_secret = get_google_credentials()
     configured = bool(client_id and client_secret)
 
-    # If local channels cache is empty, attempt to restore from Supabase user_youtube_channels
     if not _channels_store.get("channels"):
         try:
             from app.supabase_client import get_user_channels_supabase, is_supabase_configured
@@ -478,42 +637,18 @@ async def get_youtube_status(user_id: Optional[str] = None) -> Dict[str, Any]:
         except Exception as e:
             logger.debug("Failed to restore channels from Supabase: %s", e)
 
-    token = get_channel_token(user_id=user_id)
-
-    # If not in local cache, attempt to restore from Supabase cloud database
-    if not token:
-        try:
-            from app.supabase_client import get_youtube_tokens_supabase, is_supabase_configured
-            if is_supabase_configured():
-                cloud_tokens = await get_youtube_tokens_supabase()
-                if cloud_tokens and cloud_tokens.get("access_token"):
-                    save_stored_token(cloud_tokens)
-                    token = cloud_tokens["access_token"]
-        except Exception as e:
-            logger.debug("Failed to restore token from Supabase: %s", e)
-
     channels = get_user_channels(user_id=user_id)
     active_channel_id = _channels_store.get("active_channel_id")
-    connected = bool(token or channels)
-    channel_info = {}
-
-    if token:
-        try:
-            channel_info = await get_channel_info(token)
-        except Exception:
-            channel_info = {"channel_title": "YouTube Channel"}
-
-    if channels and not active_channel_id:
+    if not active_channel_id and channels:
         active_channel_id = channels[0].get("channel_id")
+        _channels_store["active_channel_id"] = active_channel_id
+
+    connected = len(channels) > 0 or bool(get_stored_token())
+
+    active_channel = next((c for c in channels if c.get("channel_id") == active_channel_id), None)
+    active_title = active_channel.get("channel_title") if active_channel else None
 
     auth_url = get_youtube_auth_url() if configured else None
-
-    active_title = channel_info.get("channel_title")
-    if active_channel_id and channels:
-        for ch in channels:
-            if ch.get("channel_id") == active_channel_id:
-                active_title = ch.get("channel_title")
-                break
 
     return {
         "configured": configured,
@@ -536,10 +671,10 @@ async def publish_short_video(
     channel_id: Optional[str] = None,
     user_id: Optional[str] = None,
 ) -> Dict[str, Any]:
-    """Uploads a vertical short video to YouTube via Data API v3 Resumable Upload."""
-    token = access_token or get_channel_token(channel_id, user_id)
+    """Uploads a vertical short video to YouTube via Data API v3 Resumable Upload with automatic token refresh."""
+    token = access_token or await get_valid_channel_token(channel_id)
     if not token:
-        token = await refresh_access_token()
+        token = await refresh_access_token(channel_id)
     if not token:
         raise ValueError("No YouTube access token available. Please connect your YouTube channel or provide an access token.")
 
@@ -547,19 +682,16 @@ async def publish_short_video(
     if not video_path.is_file():
         raise FileNotFoundError(f"Video file not found: {filename}")
 
-    # Ensure #Shorts tag in title for YouTube algorithm discovery
     if "#shorts" not in title.lower():
         title = f"{title.strip()} #Shorts"
 
     file_size = video_path.stat().st_size
-
-    # Step 1: Initiate resumable upload session
     init_url = "https://www.googleapis.com/upload/youtube/v3/videos?uploadType=resumable&part=snippet,status"
     snippet: Dict[str, Any] = {
-        "title": title[:100],  # YouTube title limit 100 chars
+        "title": title[:100],
         "description": description.strip() if description and description.strip() else DEFAULT_YOUTUBE_DESCRIPTION,
         "tags": tags if tags else DEFAULT_YOUTUBE_TAGS,
-        "categoryId": DEFAULT_YOUTUBE_CATEGORY_ID,  # 20 = Gaming
+        "categoryId": DEFAULT_YOUTUBE_CATEGORY_ID,
     }
 
     metadata = {
@@ -582,6 +714,22 @@ async def publish_short_video(
             json=metadata,
         )
 
+        # Retry once with refreshed token on 401
+        if init_res.status_code == 401:
+            refreshed = await refresh_access_token(channel_id)
+            if refreshed:
+                token = refreshed
+                init_res = await client.post(
+                    init_url,
+                    headers={
+                        "Authorization": f"Bearer {token}",
+                        "Content-Type": "application/json; charset=UTF-8",
+                        "X-Upload-Content-Type": "video/mp4",
+                        "X-Upload-Content-Length": str(file_size),
+                    },
+                    json=metadata,
+                )
+
         if init_res.status_code not in (200, 201):
             error_msg = init_res.text
             try:
@@ -594,7 +742,6 @@ async def publish_short_video(
         if not upload_location:
             raise RuntimeError("YouTube upload session missing Location header.")
 
-        # Step 2: Upload video payload
         with open(video_path, "rb") as vf:
             video_content = vf.read()
 
@@ -632,10 +779,10 @@ async def set_video_thumbnail(
     channel_id: Optional[str] = None,
     user_id: Optional[str] = None,
 ) -> bool:
-    """Sets/uploads a custom thumbnail for a YouTube video via Data API v3."""
-    token = access_token or get_channel_token(channel_id, user_id)
+    """Sets/uploads a custom thumbnail for a YouTube video with automatic token refresh."""
+    token = access_token or await get_valid_channel_token(channel_id)
     if not token:
-        token = await refresh_access_token()
+        token = await refresh_access_token(channel_id)
     if not token:
         logger.info("Cannot set thumbnail: No YouTube access token available.")
         return False
@@ -658,6 +805,22 @@ async def set_video_thumbnail(
                 },
                 content=content,
             )
+
+            # Retry once with refreshed token on 401
+            if resp.status_code == 401:
+                refreshed = await refresh_access_token(channel_id)
+                if refreshed:
+                    token = refreshed
+                    resp = await client.post(
+                        upload_url,
+                        headers={
+                            "Authorization": f"Bearer {token}",
+                            "Content-Type": "image/jpeg",
+                            "Content-Length": str(len(content)),
+                        },
+                        content=content,
+                    )
+
             if resp.status_code in (200, 201):
                 logger.info("Successfully uploaded custom thumbnail for YouTube video %s", video_id)
                 return True

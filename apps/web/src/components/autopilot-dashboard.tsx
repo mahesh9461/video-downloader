@@ -908,13 +908,23 @@ export function AutopilotDashboard({ onOpenAuth }: AutopilotDashboardProps = {})
             {/* Multi-Channel List & Target Selector */}
             {channels.length > 0 && (
               <div className="pt-3 border-t border-zinc-800/80 space-y-3">
-                <div className="flex items-center justify-between">
-                  <span className="text-xs font-semibold uppercase tracking-wider text-zinc-400">
-                    Connected YouTube Channels ({channels.length})
-                  </span>
-                  <span className="text-[11px] text-zinc-500">
-                    Select which channel to upload videos to
-                  </span>
+                <div className="flex items-center justify-between flex-wrap gap-2">
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-semibold uppercase tracking-wider text-zinc-400">
+                      Connected YouTube Channels ({channels.length})
+                    </span>
+                    <span className="text-[11px] text-zinc-500">
+                      Select which channel to upload videos to
+                    </span>
+                  </div>
+                  {authUrl && (
+                    <a
+                      href={authUrl}
+                      className="cursor-pointer inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-semibold bg-violet-600 hover:bg-violet-500 text-white transition-colors shadow-sm"
+                    >
+                      <span>+ Connect another channel</span>
+                    </a>
+                  )}
                 </div>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2.5">
@@ -959,7 +969,7 @@ export function AutopilotDashboard({ onOpenAuth }: AutopilotDashboardProps = {})
                               disabled={isActionLoading}
                               className="cursor-pointer px-2 py-1 rounded-lg text-[10px] font-semibold bg-zinc-800 hover:bg-zinc-700 text-zinc-200 transition-colors disabled:cursor-not-allowed"
                             >
-                              Select
+                              Make default
                             </button>
                           )}
                           <button
@@ -982,14 +992,14 @@ export function AutopilotDashboard({ onOpenAuth }: AutopilotDashboardProps = {})
                   <span className="text-base shrink-0">💡</span>
                   <div className="space-y-1.5 leading-relaxed">
                     <span className="font-bold text-white">How to connect 2 channels under 1 Google account:</span>
-                    <p className="text-[11px] text-zinc-300">
-                      Google handles YouTube Brand Accounts as distinct channel identities. Follow these simple steps:
+                    <p className="text-[11px] text-zinc-300 font-medium text-emerald-400">
+                      On the Google screen, choose the OTHER channel (brand account) to connect a second channel.
                     </p>
                     <ol className="list-decimal list-inside text-[11px] text-zinc-400 space-y-0.5">
                       <li>Click <strong className="text-white">&quot;+ Connect Another Channel&quot;</strong> above.</li>
                       <li>Select your account (<code className="text-zinc-200">harmonyskyco@gmail.com</code>).</li>
                       <li>On Google&apos;s channel picker screen, click your <strong className="text-emerald-400">second channel</strong>.</li>
-                      <li>Click <strong>Allow</strong> — both channels will now appear here side-by-side!</li>
+                      <li>Click <strong>Allow</strong> — both channels will now appear here side-by-side with separate tokens!</li>
                     </ol>
                     <p className="text-[10px] text-zinc-500 pt-0.5">
                       Or click <strong>Add Channel Manually</strong> above to link any channel using its token or Channel ID.
