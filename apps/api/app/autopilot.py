@@ -99,15 +99,21 @@ class AutopilotManager:
             self.recent_logs.pop(0)
         logger.info("[Autopilot] %s", message)
 
-    def reset_state(self):
-        """Resets cooldown, active errors, and daily uploads counter."""
+    def reset_state(self, clear_history: bool = False):
+        """Resets cooldown, active errors, and daily uploads counter. Optionally clears published history."""
+        self.is_running = False
         self.state = "idle"
+        self.current_batch = None
         self.daily_uploads_count = 0
         self.cooldown_until = None
         self.active_clip_id = None
         self.current_step = None
         self.current_step_label = None
         self.recent_errors = []
+        if clear_history:
+            self.all_published_videos = []
+            self.processed_video_ids = []
+            self._log("🧹 Cleared all published video history and deduplication cache.")
         self._log("🔄 Reset autopilot state, cooldown, and daily upload counter.")
         self._save_state()
 

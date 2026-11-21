@@ -14,6 +14,7 @@ const mockTriggerAutopilot = jest.fn();
 const mockCleanupAutopilotDisk = jest.fn();
 const mockGetAutopilotAudio = jest.fn();
 const mockResetAutopilot = jest.fn();
+const mockClearAutopilotHistory = jest.fn();
 const mockRetryAutopilotClip = jest.fn();
 const mockGetYouTubeStatus = jest.fn();
 const mockConfigureYouTubeOAuth = jest.fn();
@@ -30,6 +31,7 @@ jest.mock("@/lib/api", () => ({
     cleanupAutopilotDisk: (...args: any[]) => mockCleanupAutopilotDisk(...args),
     getAutopilotAudio: (...args: any[]) => mockGetAutopilotAudio(...args),
     resetAutopilot: (...args: any[]) => mockResetAutopilot(...args),
+    clearAutopilotHistory: (...args: any[]) => mockClearAutopilotHistory(...args),
     retryAutopilotClip: (...args: any[]) => mockRetryAutopilotClip(...args),
     getYouTubeStatus: (...args: any[]) => mockGetYouTubeStatus(...args),
     configureYouTubeOAuth: (...args: any[]) => mockConfigureYouTubeOAuth(...args),
@@ -74,6 +76,7 @@ describe("AutopilotDashboard", () => {
       count: 2,
     });
     mockResetAutopilot.mockResolvedValue(defaultStatus);
+    mockClearAutopilotHistory.mockResolvedValue(defaultStatus);
     mockStopAutopilot.mockResolvedValue(defaultStatus);
     mockRetryAutopilotClip.mockResolvedValue(defaultStatus);
     mockGetYouTubeStatus.mockResolvedValue({
@@ -341,6 +344,33 @@ describe("AutopilotDashboard", () => {
 
       // Assert
       expect(mockResetAutopilot).toHaveBeenCalledTimes(1);
+    });
+
+    test("should clear published history when Clear History button is clicked", async () => {
+      // Arrange
+      const user = userEvent.setup();
+      const statusWithPublished = {
+        ...defaultStatus,
+        all_published_videos: [
+          {
+            id: "vid_published_1",
+            clip_index: 1,
+            title: "SECRET GTA 6 EASTER EGG",
+            youtube_url: "https://youtube.com/shorts/easter_egg",
+            youtube_video_id: "easter_egg",
+            published_at: "2026-11-20T12:00:00Z",
+          },
+        ],
+      };
+      mockGetAutopilotStatus.mockResolvedValue(statusWithPublished);
+      renderWithProvider(<AutopilotDashboard />, store);
+
+      // Act
+      const clearBtn = await screen.findByRole("button", { name: /Clear History/i });
+      await user.click(clearBtn);
+
+      // Assert
+      expect(mockClearAutopilotHistory).toHaveBeenCalledTimes(1);
     });
 
     test("should terminate active download when Stop Download button is clicked", async () => {

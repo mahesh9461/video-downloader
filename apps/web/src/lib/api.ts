@@ -578,12 +578,23 @@ class ApiClient {
     return response.json();
   }
 
-  async resetAutopilot(): Promise<AutopilotStatus> {
-    const response = await fetch(this.resolveUrl("/api/autopilot/reset"), {
+  async resetAutopilot(clearHistory: boolean = false): Promise<AutopilotStatus> {
+    const url = clearHistory ? "/api/autopilot/reset?clear_history=true" : "/api/autopilot/reset";
+    const response = await fetch(this.resolveUrl(url), {
       method: "POST",
     });
     if (!response.ok) {
       throw new DownloadError("Failed to reset autopilot", "unknown");
+    }
+    return response.json();
+  }
+
+  async clearAutopilotHistory(): Promise<AutopilotStatus> {
+    const response = await fetch(this.resolveUrl("/api/autopilot/clear-history"), {
+      method: "POST",
+    });
+    if (!response.ok) {
+      throw new DownloadError("Failed to clear autopilot history", "unknown");
     }
     return response.json();
   }

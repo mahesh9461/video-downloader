@@ -228,6 +228,21 @@ export function AutopilotDashboard() {
     }
   };
 
+  const handleClearHistory = async () => {
+    setIsActionLoading(true);
+    setErrorMsg(null);
+    try {
+      const res = await apiClient.clearAutopilotHistory();
+      setStatus(res);
+      setSuccessMsg("Cleared published shorts history and started fresh.");
+      setTimeout(() => setSuccessMsg(null), 4000);
+    } catch (e: any) {
+      setErrorMsg(e.message || "Failed to clear history");
+    } finally {
+      setIsActionLoading(false);
+    }
+  };
+
   const handleStop = async () => {
     setIsActionLoading(true);
     setErrorMsg(null);
@@ -565,7 +580,7 @@ export function AutopilotDashboard() {
           <div className="space-y-2">
             <div className="flex flex-wrap items-center gap-2">
               <span className="px-2.5 py-0.5 rounded-md text-[11px] font-bold tracking-wider uppercase bg-red-600/20 text-red-400 border border-red-600/30">
-                ViceVerse Autopilot
+                GTA 6 Viral Autopilot
               </span>
               {getStateBadge()}
             </div>
@@ -1081,7 +1096,7 @@ export function AutopilotDashboard() {
       {/* Published YouTube Shorts Showcase ("and on done it will gi em ehte lin off off alal udpated video") */}
       {publishedVideos.length > 0 && (
         <div className="rounded-3xl border border-emerald-500/30 bg-zinc-950 p-6 sm:p-8 space-y-5 shadow-2xl animate-in fade-in">
-          <div className="flex items-center justify-between border-b border-zinc-800/80 pb-4">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-zinc-800/80 pb-4">
             <div className="space-y-1">
               <span className="px-2.5 py-0.5 rounded text-[11px] font-bold uppercase bg-emerald-600/20 text-emerald-400 border border-emerald-600/30">
                 Uploaded Videos
@@ -1091,7 +1106,17 @@ export function AutopilotDashboard() {
                 Published YouTube Shorts ({publishedVideos.length})
               </h2>
             </div>
-            <span className="text-xs text-zinc-400">All links ready & live on your channel</span>
+            <div className="flex items-center gap-3">
+              <span className="text-xs text-zinc-400">All links ready & live on your channel</span>
+              <button
+                type="button"
+                onClick={handleClearHistory}
+                disabled={isActionLoading}
+                className="cursor-pointer text-xs text-red-400 hover:text-red-300 font-semibold underline transition-colors disabled:cursor-not-allowed"
+              >
+                Clear History
+              </button>
+            </div>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -1341,7 +1366,7 @@ export function AutopilotDashboard() {
                   Source: <strong className="text-zinc-200">{status.current_batch.source_title}</strong> (Source video deleted immediately after clipping)
                 </span>
               ) : (
-                <span>No active batch queued. Click &quot;Queue Next Video Now&quot; or Start Autopilot to begin.</span>
+                <span>No active batch queued. Paste any YouTube video URL above and click &quot;Clip &amp; Upload 6 Shorts&quot; to begin.</span>
               )}
             </p>
           </div>
@@ -1564,12 +1589,30 @@ export function AutopilotDashboard() {
             ))}
           </div>
         ) : (
-          <div className="rounded-2xl border border-dashed border-zinc-800 bg-zinc-950/40 p-10 text-center space-y-3">
-            <Sparkles className="w-8 h-8 text-zinc-600 mx-auto" />
-            <p className="text-sm font-medium text-zinc-300">Autopilot Ready</p>
-            <p className="text-xs text-zinc-500 max-w-md mx-auto">
-              Start autopilot to autonomously search trending GTA 6 videos, cut 6 vertical clips with randomized overlay styles, and publish 1 clip every hour.
-            </p>
+          <div className="rounded-2xl border border-dashed border-zinc-800 bg-zinc-950/40 p-8 sm:p-10 text-center space-y-4">
+            <div className="w-12 h-12 rounded-2xl bg-red-600/10 border border-red-500/20 text-red-500 flex items-center justify-center mx-auto shadow-inner">
+              <Sparkles className="w-6 h-6" />
+            </div>
+            <div className="space-y-1.5 max-w-md mx-auto">
+              <h3 className="text-base font-bold text-white">Ready to Clip 6 Viral Shorts</h3>
+              <p className="text-xs text-zinc-400 leading-relaxed">
+                Paste any YouTube video or podcast link in the input bar above and click <strong className="text-zinc-200">&quot;Clip &amp; Upload 6 Shorts&quot;</strong>. SaveIt will detect the top 6 viral moments, attach Full HD hook covers, and automatically publish each clip directly to your connected YouTube channel.
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={() => {
+                const input = document.getElementById("autopilot-url-input");
+                if (input) {
+                  input.focus();
+                  input.scrollIntoView({ behavior: "smooth", block: "center" });
+                }
+              }}
+              className="cursor-pointer inline-flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold bg-zinc-900 hover:bg-zinc-800 text-zinc-200 border border-zinc-800 hover:border-zinc-700 transition-all active:scale-95"
+            >
+              <Sparkles className="w-3.5 h-3.5 text-red-400" />
+              <span>Paste YouTube URL Above</span>
+            </button>
           </div>
         )}
       </div>

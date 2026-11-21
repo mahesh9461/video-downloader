@@ -165,3 +165,15 @@ def test_trigger_custom_url_with_video_metadata(client):
         assert resp.status_code == 200
         # Background task runs
         assert autopilot_manager.daily_uploads_count == 0
+
+
+def test_clear_history_endpoint(client):
+    autopilot_manager.all_published_videos = [{"id": "vid_1", "title": "Old Clip", "youtube_url": "https://yt.com/1"}]
+    autopilot_manager.processed_video_ids = ["vid_1"]
+    
+    resp = client.post("/api/autopilot/clear-history")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert len(data["all_published_videos"]) == 0
+    assert len(autopilot_manager.all_published_videos) == 0
+    assert len(autopilot_manager.processed_video_ids) == 0

@@ -1541,9 +1541,16 @@ async def autopilot_trigger_endpoint(
 
 
 @app.post("/api/autopilot/reset", response_model=AutopilotStatus)
-async def autopilot_reset_endpoint():
-    """Resets daily upload limit, cooldown, and active batch state."""
-    autopilot_manager.reset_state()
+async def autopilot_reset_endpoint(clear_history: bool = False):
+    """Resets daily upload limit, cooldown, and active batch state. Optionally clears published history."""
+    autopilot_manager.reset_state(clear_history=clear_history)
+    return autopilot_manager.get_status()
+
+
+@app.post("/api/autopilot/clear-history", response_model=AutopilotStatus)
+async def autopilot_clear_history_endpoint():
+    """Clears all published shorts and resets to a clean slate."""
+    autopilot_manager.reset_state(clear_history=True)
     return autopilot_manager.get_status()
 
 

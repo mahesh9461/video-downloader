@@ -1,172 +1,21 @@
 {
   "is_running": false,
-  "state": "rendering",
+  "state": "idle",
   "current_batch": null,
-  "active_clip_id": "batch1_1",
-  "current_step": "downloading",
-  "current_step_label": "Extracting metadata for URL: https://www.youtube.com/watch?v=8-DRGbQ1IXc",
-  "processed_video_ids": [
-    "YDNs_sPEcJc",
-    "8-DRGbQ1IXc",
-    "4ggwTEKq9MA",
-    "DYDz_cIgoAw"
-  ],
+  "active_clip_id": null,
+  "current_step": null,
+  "current_step_label": null,
+  "processed_video_ids": [],
   "daily_uploads_count": 0,
   "daily_upload_limit": 6,
   "upload_interval_seconds": 3600,
   "cooldown_until": null,
   "disk_space_cleaned_mb": 0.0,
-  "last_cleaned_at": "2026-11-21T14:15:56.060070",
-  "recent_logs": [],
-  "all_published_videos": [
-    {
-      "id": "batch1_1",
-      "clip_index": 1,
-      "title": "GTA 6 Insane Detail",
-      "youtube_url": "https://youtube.com/shorts/yt_short_123",
-      "youtube_video_id": "yt_short_123",
-      "published_at": "2026-11-21T08:45:56.059941+00:00",
-      "preview_url": "/api/file/gta6_short_test_1.mp4",
-      "cover_url": null,
-      "duration": 30.0
-    },
-    {
-      "id": "a8c763c5_6",
-      "clip_index": 6,
-      "title": "WAIT FOR WHAT HAPPENS NEXT...",
-      "youtube_url": "https://www.youtube.com/shorts/TceFthJEk8g",
-      "youtube_video_id": "TceFthJEk8g",
-      "published_at": "2026-11-20T13:55:09.728669+00:00",
-      "preview_url": "/api/file/gta6_short_a8c763c5_6.mp4",
-      "cover_url": "/api/file/gta6_cover_a8c763c5_6.jpg",
-      "duration": 25.0
-    },
-    {
-      "id": "a8c763c5_5",
-      "clip_index": 5,
-      "title": "THE MOMENT EVERYTHING CHANGED",
-      "youtube_url": "https://www.youtube.com/shorts/s2lQH-foVPE",
-      "youtube_video_id": "s2lQH-foVPE",
-      "published_at": "2026-11-20T13:54:49.762641+00:00",
-      "preview_url": "/api/file/gta6_short_a8c763c5_5.mp4",
-      "cover_url": "/api/file/gta6_cover_a8c763c5_5.jpg",
-      "duration": 25.0
-    },
-    {
-      "id": "a8c763c5_4",
-      "clip_index": 4,
-      "title": "WATCH TILL THE VERY END",
-      "youtube_url": "https://www.youtube.com/shorts/0RKu86kzRHc",
-      "youtube_video_id": "0RKu86kzRHc",
-      "published_at": "2026-11-20T13:54:38.833673+00:00",
-      "preview_url": "/api/file/gta6_short_a8c763c5_4.mp4",
-      "cover_url": "/api/file/gta6_cover_a8c763c5_4.jpg",
-      "duration": 25.0
-    },
-    {
-      "id": "a8c763c5_3",
-      "clip_index": 3,
-      "title": "THE MOST INTENSE 30 SECONDS",
-      "youtube_url": "https://www.youtube.com/shorts/DaqEjGsupwQ",
-      "youtube_video_id": "DaqEjGsupwQ",
-      "published_at": "2026-11-20T13:54:19.891759+00:00",
-      "preview_url": "/api/file/gta6_short_a8c763c5_3.mp4",
-      "cover_url": "/api/file/gta6_cover_a8c763c5_3.jpg",
-      "duration": 25.0
-    },
-    {
-      "id": "a8c763c5_2",
-      "clip_index": 2,
-      "title": "NOBODY EXPECTED THIS PART",
-      "youtube_url": "https://www.youtube.com/shorts/c5JVXgFJMRs",
-      "youtube_video_id": "c5JVXgFJMRs",
-      "published_at": "2026-11-20T13:53:57.857548+00:00",
-      "preview_url": "/api/file/gta6_short_a8c763c5_2.mp4",
-      "cover_url": "/api/file/gta6_cover_a8c763c5_2.jpg",
-      "duration": 25.0
-    },
-    {
-      "id": "a8c763c5_1",
-      "clip_index": 1,
-      "title": "WAIT FOR WHAT HAPPENS NEXT...",
-      "youtube_url": "https://www.youtube.com/shorts/OY-m88qiIPw",
-      "youtube_video_id": "OY-m88qiIPw",
-      "published_at": "2026-11-20T13:53:37.573625+00:00",
-      "preview_url": "/api/file/gta6_short_a8c763c5_1.mp4",
-      "cover_url": "/api/file/gta6_cover_a8c763c5_1.jpg",
-      "duration": 25.0
-    },
-    {
-      "id": "8fa1db91_1",
-      "clip_index": 1,
-      "title": "WAIT FOR WHAT HAPPENS NEXT...",
-      "youtube_url": "https://www.youtube.com/shorts/Jl7ZpmLP5XY",
-      "youtube_video_id": "Jl7ZpmLP5XY",
-      "published_at": "2026-11-20T13:36:31.117323+00:00",
-      "preview_url": "/api/file/gta6_short_8fa1db91_1.mp4",
-      "cover_url": "/api/file/gta6_cover_8fa1db91_1.jpg",
-      "duration": 25.0
-    },
-    {
-      "id": "8efcf3a2_6",
-      "clip_index": 6,
-      "title": "WAIT FOR WHAT HAPPENS NEXT...",
-      "youtube_url": "https://www.youtube.com/shorts/G41Yb9k4yAc",
-      "youtube_video_id": "G41Yb9k4yAc",
-      "published_at": "2026-11-20T11:46:33.799170+00:00",
-      "preview_url": "/api/file/gta6_short_8efcf3a2_6.mp4",
-      "duration": 25.0
-    },
-    {
-      "id": "8efcf3a2_5",
-      "clip_index": 5,
-      "title": "THE MOMENT EVERYTHING CHANGED",
-      "youtube_url": "https://www.youtube.com/shorts/EmBQUOB3a5o",
-      "youtube_video_id": "EmBQUOB3a5o",
-      "published_at": "2026-11-20T11:46:16.045476+00:00",
-      "preview_url": "/api/file/gta6_short_8efcf3a2_5.mp4",
-      "duration": 25.0
-    },
-    {
-      "id": "8efcf3a2_4",
-      "clip_index": 4,
-      "title": "WATCH TILL THE VERY END",
-      "youtube_url": "https://www.youtube.com/shorts/mXCbknzK06s",
-      "youtube_video_id": "mXCbknzK06s",
-      "published_at": "2026-11-20T11:46:05.563102+00:00",
-      "preview_url": "/api/file/gta6_short_8efcf3a2_4.mp4",
-      "duration": 25.0
-    },
-    {
-      "id": "8efcf3a2_3",
-      "clip_index": 3,
-      "title": "THE MOST INTENSE 30 SECONDS",
-      "youtube_url": "https://www.youtube.com/shorts/kd2p4uUoBX0",
-      "youtube_video_id": "kd2p4uUoBX0",
-      "published_at": "2026-11-20T11:45:40.135706+00:00",
-      "preview_url": "/api/file/gta6_short_8efcf3a2_3.mp4",
-      "duration": 25.0
-    },
-    {
-      "id": "8efcf3a2_2",
-      "clip_index": 2,
-      "title": "NOBODY EXPECTED THIS PART",
-      "youtube_url": "https://www.youtube.com/shorts/P_nl3PuKMtI",
-      "youtube_video_id": "P_nl3PuKMtI",
-      "published_at": "2026-11-20T11:45:32.150515+00:00",
-      "preview_url": "/api/file/gta6_short_8efcf3a2_2.mp4",
-      "duration": 25.0
-    },
-    {
-      "id": "8efcf3a2_1",
-      "clip_index": 1,
-      "title": "WAIT FOR WHAT HAPPENS NEXT...",
-      "youtube_url": "https://www.youtube.com/shorts/Cr5Fqjpu88o",
-      "youtube_video_id": "Cr5Fqjpu88o",
-      "published_at": "2026-11-20T11:45:23.135706+00:00",
-      "preview_url": "/api/file/gta6_short_8efcf3a2_1.mp4",
-      "duration": 25.0
-    }
+  "last_cleaned_at": "2026-11-21T14:28:48.887234",
+  "recent_logs": [
+    "[14:28:48] \ud83e\uddf9 Cleared all published video history and deduplication cache.",
+    "[14:28:48] \ud83d\udd04 Reset autopilot state, cooldown, and daily upload counter."
   ],
+  "all_published_videos": [],
   "recent_errors": []
 }
