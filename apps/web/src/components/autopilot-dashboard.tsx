@@ -917,9 +917,9 @@ export function AutopilotDashboard({ onOpenAuth }: AutopilotDashboardProps = {})
                       Select which channel to upload videos to
                     </span>
                   </div>
-                  {authUrl && (
+                  {ytStatus?.auth_url && (
                     <a
-                      href={authUrl}
+                      href={ytStatus.auth_url}
                       className="cursor-pointer inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-semibold bg-violet-600 hover:bg-violet-500 text-white transition-colors shadow-sm"
                     >
                       <span>+ Connect another channel</span>
