@@ -21,10 +21,9 @@ import {
   RotateCcw,
   AlertTriangle,
   Eye,
-  ArrowRight,
+  Plus,
   Download,
   Settings,
-  Key,
   Link2,
   X,
   Image as ImageIcon,
@@ -78,6 +77,8 @@ export function AutopilotDashboard({ onOpenAuth }: AutopilotDashboardProps = {})
   const [ytClientId, setYtClientId] = useState("");
   const [ytClientSecret, setYtClientSecret] = useState("");
   const [manualToken, setManualToken] = useState("");
+  const [manualChannelTitle, setManualChannelTitle] = useState("");
+  const [manualChannelId, setManualChannelId] = useState("");
   const [isConnectingYt, setIsConnectingYt] = useState(false);
   const [cardTokenInput, setCardTokenInput] = useState<Record<string, string>>({});
   const [connectingTargetClip, setConnectingTargetClip] = useState<AutopilotClipItem | null>(null);
@@ -148,14 +149,14 @@ export function AutopilotDashboard({ onOpenAuth }: AutopilotDashboardProps = {})
       const params = new URLSearchParams(window.location.search);
       if (params.get("youtube_auth") === "success") {
         setSuccessMsg("🎉 YouTube channel connected successfully! Autopilot can now publish Shorts.");
-        fetchYtStatus();
+        Promise.all([fetchYtStatus(), fetchChannels(), fetchStatus()]);
         window.history.replaceState({}, document.title, window.location.pathname);
       } else if (params.get("youtube_auth") === "error") {
         setErrorMsg("Failed to authenticate with Google YouTube. Please verify credentials and try again.");
         window.history.replaceState({}, document.title, window.location.pathname);
       }
     }
-  }, [fetchYtStatus]);
+  }, [fetchYtStatus, fetchChannels, fetchStatus]);
 
   // Dynamic resilient polling interval (faster when active so UI stays live; slower when idle)
   useEffect(() => {
@@ -169,10 +170,11 @@ export function AutopilotDashboard({ onOpenAuth }: AutopilotDashboardProps = {})
     const interval = setInterval(() => {
       fetchStatus();
       fetchYtStatus();
+      fetchChannels();
     }, intervalMs);
 
     return () => clearInterval(interval);
-  }, [status?.state, status?.is_running, fetchStatus, fetchYtStatus]);
+  }, [status?.state, status?.is_running, fetchStatus, fetchYtStatus, fetchChannels]);
 
   // Ticking countdown effect
   useEffect(() => {
@@ -372,14 +374,21 @@ export function AutopilotDashboard({ onOpenAuth }: AutopilotDashboardProps = {})
     setIsConnectingYt(true);
     setErrorMsg(null);
     try {
-      const res = await apiClient.setYouTubeToken(manualToken.trim());
+      const token = manualToken.trim();
+      const chId = manualChannelId.trim() || undefined;
+      const chTitle = manualChannelTitle.trim() || undefined;
+      const res = (chId || chTitle)
+        ? await apiClient.setYouTubeToken(token, chId, chTitle)
+        : await apiClient.setYouTubeToken(token);
       if (res?.youtube_status) {
         setYtStatus(res.youtube_status);
       }
-      setSuccessMsg("YouTube Access Token saved and verified successfully!");
+      setSuccessMsg("YouTube Channel linked and verified successfully!");
       setManualToken("");
+      setManualChannelTitle("");
+      setManualChannelId("");
       setShowOAuthModal(false);
-      await fetchChannels();
+      await Promise.all([fetchChannels(), fetchStatus(), fetchYtStatus()]);
       if (connectingTargetClip?.id) {
         const targetId = connectingTargetClip.id;
         setConnectingTargetClip(null);
@@ -865,8 +874,20 @@ export function AutopilotDashboard({ onOpenAuth }: AutopilotDashboardProps = {})
 
                 <button
                   type="button"
+                  onClick={() => {
+                    setModalTab("token");
+                    setShowOAuthModal(true);
+                  }}
+                  className="cursor-pointer flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold bg-zinc-900 hover:bg-zinc-800 text-zinc-300 border border-zinc-800 transition-all active:scale-95"
+                >
+                  <Plus className="w-3.5 h-3.5 text-emerald-400" />
+                  <span>Add Channel Manually</span>
+                </button>
+
+                <button
+                  type="button"
                   onClick={() => setShowOAuthModal(!showOAuthModal)}
-                  className="cursor-pointer flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-semibold bg-zinc-900 hover:bg-zinc-800 text-zinc-300 border border-zinc-800 transition-all active:scale-95"
+                  className="cursor-pointer flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold bg-zinc-900 hover:bg-zinc-800 text-zinc-300 border border-zinc-800 transition-all active:scale-95"
                 >
                   <Settings className="w-3.5 h-3.5 text-zinc-400" />
                   <span>Setup Credentials / Token</span>
@@ -947,12 +968,21 @@ export function AutopilotDashboard({ onOpenAuth }: AutopilotDashboardProps = {})
                   })}
                 </div>
 
-                <div className="p-3 rounded-xl bg-zinc-900/40 border border-zinc-800/60 text-xs text-zinc-400 flex items-start gap-2.5">
-                  <span className="text-sm">💡</span>
-                  <div className="space-y-0.5 leading-relaxed">
-                    <span className="font-semibold text-zinc-300">Have multiple channels under the same Google account?</span>
-                    <p className="text-[11px] text-zinc-400">
-                      Google OAuth requires each channel (Brand Account) to be authorized individually. Click <strong className="text-white">&quot;+ Connect Another Channel&quot;</strong> above, select your account, and choose your 2nd channel from Google&apos;s channel picker to link both!
+                <div className="p-3.5 rounded-2xl bg-zinc-900/40 border border-zinc-800/60 text-xs text-zinc-300 flex items-start gap-3">
+                  <span className="text-base shrink-0">💡</span>
+                  <div className="space-y-1.5 leading-relaxed">
+                    <span className="font-bold text-white">How to connect 2 channels under 1 Google account:</span>
+                    <p className="text-[11px] text-zinc-300">
+                      Google handles YouTube Brand Accounts as distinct channel identities. Follow these simple steps:
+                    </p>
+                    <ol className="list-decimal list-inside text-[11px] text-zinc-400 space-y-0.5">
+                      <li>Click <strong className="text-white">&quot;+ Connect Another Channel&quot;</strong> above.</li>
+                      <li>Select your account (<code className="text-zinc-200">harmonyskyco@gmail.com</code>).</li>
+                      <li>On Google&apos;s channel picker screen, click your <strong className="text-emerald-400">second channel</strong>.</li>
+                      <li>Click <strong>Allow</strong> — both channels will now appear here side-by-side!</li>
+                    </ol>
+                    <p className="text-[10px] text-zinc-500 pt-0.5">
+                      Or click <strong>Add Channel Manually</strong> above to link any channel using its token or Channel ID.
                     </p>
                   </div>
                 </div>
@@ -1910,6 +1940,33 @@ export function AutopilotDashboard({ onOpenAuth }: AutopilotDashboardProps = {})
                     onChange={(e) => setManualToken(e.target.value)}
                     className="w-full px-3.5 py-2.5 rounded-xl bg-zinc-900 border border-zinc-800 text-xs text-white placeholder-zinc-500 focus:outline-none focus:border-emerald-500/60"
                   />
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div className="space-y-1">
+                    <label className="text-[11px] font-medium text-zinc-400">
+                      Channel Name (Optional)
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="e.g. My 2nd Channel"
+                      value={manualChannelTitle}
+                      onChange={(e) => setManualChannelTitle(e.target.value)}
+                      className="w-full px-3 py-2 rounded-xl bg-zinc-900 border border-zinc-800 text-xs text-white placeholder-zinc-500 focus:outline-none focus:border-zinc-700"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-[11px] font-medium text-zinc-400">
+                      Channel ID (Optional)
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="e.g. UCxxxxxxxxxxxxxx"
+                      value={manualChannelId}
+                      onChange={(e) => setManualChannelId(e.target.value)}
+                      className="w-full px-3 py-2 rounded-xl bg-zinc-900 border border-zinc-800 text-xs text-white placeholder-zinc-500 focus:outline-none focus:border-zinc-700"
+                    />
+                  </div>
                 </div>
                 <button
                   type="submit"

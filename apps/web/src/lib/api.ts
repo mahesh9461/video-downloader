@@ -305,7 +305,9 @@ class ApiClient {
   }
 
   async getYouTubeStatus(): Promise<YouTubeAuthStatus> {
-    const response = await fetch(this.resolveUrl("/api/youtube/status"));
+    const response = await fetch(this.resolveUrl("/api/youtube/status"), {
+      headers: { ...this.getAuthHeaders() },
+    });
     if (!response.ok) {
       throw new DownloadError("Failed to fetch YouTube auth status", "unknown");
     }

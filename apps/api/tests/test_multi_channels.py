@@ -116,3 +116,16 @@ def test_auth_and_channels_endpoints():
     hist_get = client.get("/api/history", headers=headers)
     assert hist_get.status_code == 200
     assert "history" in hist_get.json()
+
+
+import pytest
+
+@pytest.mark.anyio
+async def test_get_channel_info_offline_fallback_does_not_collide():
+    from app.youtube_publisher import get_channel_info
+    info1 = await get_channel_info("ya29.sample_token_one_11111111")
+    info2 = await get_channel_info("ya29.sample_token_two_22222222")
+
+    assert info1["channel_id"] != info2["channel_id"]
+    assert info1["channel_id"].endswith("11111111")
+    assert info2["channel_id"].endswith("22222222")

@@ -140,11 +140,25 @@ def save_user_channel(channel_data: Dict[str, Any], user_id: Optional[str] = Non
 
     # Also keep legacy _token_store in sync for compatibility
     _token_store["access_token"] = rec["access_token"]
-    _token_store["refresh_token"] = rec["refresh_token"]
+    if rec.get("refresh_token"):
+        _token_store["refresh_token"] = rec["refresh_token"]
     _token_store["channel_id"] = cid
     _token_store["channel_title"] = rec["channel_title"]
     _token_store["thumbnail_url"] = rec["thumbnail_url"]
     save_stored_token(_token_store)
+
+    # Sync to Supabase table user_youtube_channels in background if configured
+    try:
+        from app.supabase_client import save_user_channel_supabase, is_supabase_configured
+        if is_supabase_configured():
+            import asyncio
+            try:
+                loop = asyncio.get_running_loop()
+                loop.create_task(save_user_channel_supabase(rec, user_id=rec["user_id"]))
+            except RuntimeError:
+                pass
+    except Exception:
+        pass
 
     return rec
 
@@ -175,6 +189,18 @@ def delete_user_channel(channel_id: str, user_id: Optional[str] = None) -> bool:
         if _channels_store.get("active_channel_id") == channel_id:
             _channels_store["active_channel_id"] = next(iter(channels_map.keys())) if channels_map else None
         _save_channels_store()
+
+        try:
+            from app.supabase_client import delete_user_channel_supabase, is_supabase_configured
+            if is_supabase_configured():
+                import asyncio
+                try:
+                    loop = asyncio.get_running_loop()
+                    loop.create_task(delete_user_channel_supabase(channel_id, user_id=user_id or "default"))
+                except RuntimeError:
+                    pass
+        except Exception:
+            pass
         return True
     return False
 
@@ -319,7 +345,6 @@ def get_youtube_auth_url(state: Optional[str] = None) -> Optional[str]:
         "scope": "https://www.googleapis.com/auth/youtube.upload https://www.googleapis.com/auth/youtube.readonly",
         "access_type": "offline",
         "prompt": "select_account consent",
-        "include_granted_scopes": "true",
     }
     if state:
         params["state"] = state
@@ -379,6 +404,16 @@ async def exchange_code_for_token(code: str, user_id: Optional[str] = None) -> D
 
 async def get_channel_info(access_token: str) -> Dict[str, Any]:
     """Fetches the connected YouTube channel's title and ID with local caching and token auto-refresh."""
+    # First check multi-channel store for matching token
+    channels_map = _channels_store.get("channels", {})
+    for cid, ch in channels_map.items():
+        if ch.get("access_token") == access_token:
+            return {
+                "channel_title": ch.get("channel_title") or "YouTube Channel",
+                "channel_id": cid,
+                "thumbnail_url": ch.get("thumbnail_url"),
+            }
+
     cached_title = _token_store.get("channel_title")
     cached_id = _token_store.get("channel_id")
     cached_tok = _token_store.get("access_token")
@@ -404,22 +439,20 @@ async def get_channel_info(access_token: str) -> Dict[str, Any]:
                         "channel_id": items[0].get("id", "channel_id"),
                         "thumbnail_url": snippet.get("thumbnails", {}).get("default", {}).get("url"),
                     }
-                    _token_store["channel_title"] = info["channel_title"]
-                    _token_store["channel_id"] = info["channel_id"]
-                    save_stored_token(_token_store)
                     return info
             elif res.status_code == 401:
                 # Access token expired; refresh using refresh_token
                 new_tok = await refresh_access_token()
-                if new_tok:
+                if new_tok and new_tok != access_token:
                     return await get_channel_info(new_tok)
     except Exception as e:
         logger.debug("Could not fetch channel info online: %s", e)
 
-    # Return cached or default title so user stays persistently connected
+    # Return cached only if matching, or a distinct unique identifier based on token
+    token_suffix = access_token[-8:] if len(access_token) >= 8 else secrets.token_hex(4)
     return {
-        "channel_title": _token_store.get("channel_title") or "YouTube Channel",
-        "channel_id": _token_store.get("channel_id") or "connected_account",
+        "channel_title": f"YouTube Channel ({token_suffix})",
+        "channel_id": f"chan_{token_suffix}",
     }
 
 
@@ -427,6 +460,24 @@ async def get_youtube_status(user_id: Optional[str] = None) -> Dict[str, Any]:
     """Returns whether YouTube publishing is configured and connected, including all user channels."""
     client_id, client_secret = get_google_credentials()
     configured = bool(client_id and client_secret)
+
+    # If local channels cache is empty, attempt to restore from Supabase user_youtube_channels
+    if not _channels_store.get("channels"):
+        try:
+            from app.supabase_client import get_user_channels_supabase, is_supabase_configured
+            if is_supabase_configured():
+                supa_channels = await get_user_channels_supabase(user_id=user_id)
+                if supa_channels:
+                    for ch in supa_channels:
+                        cid = ch.get("channel_id") or ch.get("id")
+                        if cid:
+                            _channels_store.setdefault("channels", {})[cid] = ch
+                            if ch.get("is_default") or not _channels_store.get("active_channel_id"):
+                                _channels_store["active_channel_id"] = cid
+                    _save_channels_store()
+        except Exception as e:
+            logger.debug("Failed to restore channels from Supabase: %s", e)
+
     token = get_channel_token(user_id=user_id)
 
     # If not in local cache, attempt to restore from Supabase cloud database

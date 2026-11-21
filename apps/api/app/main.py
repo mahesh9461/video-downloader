@@ -1140,9 +1140,18 @@ async def generate_ai_hook_endpoint(req: ClipAiHookRequest, request: Request):
 
 
 @app.get("/api/youtube/status", response_model=YouTubeAuthStatus)
-async def youtube_status_endpoint():
+async def youtube_status_endpoint(authorization: Optional[str] = Header(None)):
     """Check YouTube OAuth configuration and channel connection status."""
-    status_data = await get_youtube_status()
+    user_id = None
+    if authorization:
+        try:
+            from app.auth import get_user_by_token
+            u = await get_user_by_token(authorization.replace("Bearer ", "").strip())
+            if u:
+                user_id = u.id
+        except Exception:
+            pass
+    status_data = await get_youtube_status(user_id=user_id)
     return YouTubeAuthStatus(**status_data)
 
 
@@ -1190,8 +1199,9 @@ async def youtube_set_token_endpoint(payload: dict, authorization: Optional[str]
             chan_info = await get_channel_info(tok_str)
         except Exception:
             pass
-    chan_id = explicit_id or chan_info.get("channel_id") or f"chan_{tok_str[:8]}"
-    chan_title = explicit_title or chan_info.get("channel_title") or "YouTube Channel"
+    token_suffix = tok_str[-8:] if len(tok_str) >= 8 else "custom"
+    chan_id = explicit_id or chan_info.get("channel_id") or f"chan_{token_suffix}"
+    chan_title = explicit_title or chan_info.get("channel_title") or f"YouTube Channel ({token_suffix})"
 
     save_user_channel({
         "channel_id": chan_id,
@@ -1199,7 +1209,7 @@ async def youtube_set_token_endpoint(payload: dict, authorization: Optional[str]
         "thumbnail_url": payload.get("thumbnail_url") or chan_info.get("thumbnail_url"),
         "access_token": tok_str,
         "refresh_token": payload.get("refresh_token"),
-        "is_default": True,
+        "is_default": payload.get("is_default", True),
     }, user_id=user_id)
 
     status_data = await get_youtube_status(user_id=user_id)
