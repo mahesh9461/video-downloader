@@ -664,11 +664,37 @@ class AutopilotManager:
 
                 remaining = [c for c in self.current_batch.clips if c.status in ("queued", "rendering", "uploading")]
                 if not remaining:
+                    # Clean up all rendered clip files and covers from disk to free storage
+                    freed_batch_mb = 0.0
+                    for c in self.current_batch.clips:
+                        if c.filename:
+                            p = DOWNLOAD_DIR / c.filename
+                            if p.is_file():
+                                try:
+                                    freed_batch_mb += p.stat().st_size / (1024 * 1024)
+                                    p.unlink()
+                                except Exception:
+                                    pass
+                        if c.cover_filename:
+                            cp = DOWNLOAD_DIR / c.cover_filename
+                            if cp.is_file():
+                                try:
+                                    freed_batch_mb += cp.stat().st_size / (1024 * 1024)
+                                    cp.unlink()
+                                except Exception:
+                                    pass
+                    if freed_batch_mb > 0:
+                        self.disk_space_cleaned_mb += freed_batch_mb
+                        self.last_cleaned_at = datetime.now(timezone.utc).isoformat()
+                        self._log(f"🧹 Purged {freed_batch_mb:.1f} MB temporary clip files from completed batch.")
+
                     self.current_batch.status = "completed"
+                    self.current_batch = None
+                    self.active_clip_id = None
                     self.state = "idle"
                     self.current_step = "completed"
                     self.current_step_label = "All 6 clips successfully uploaded to YouTube!"
-                    self._log("🎉 Batch complete! All 6 clips published to YouTube one by one.")
+                    self._log("🎉 Batch complete! All 6 clips published to YouTube one by one. Cleared active batch & purged temporary storage.")
                     self._save_state()
             else:
                 # Guest user or manual download mode: all 6 clips rendered and ready for free download

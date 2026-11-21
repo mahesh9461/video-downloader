@@ -70,6 +70,7 @@ export function AutopilotDashboard({ onOpenAuth }: AutopilotDashboardProps = {})
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [selectedPreviewClipId, setSelectedPreviewClipId] = useState<string | null>(null);
   const [previewMode, setPreviewMode] = useState<"video" | "cover">("video");
+  const [historyTab, setHistoryTab] = useState<"recent" | "all">("recent");
 
   // YouTube OAuth & Token Management State
   const [showOAuthModal, setShowOAuthModal] = useState(false);
@@ -446,9 +447,21 @@ export function AutopilotDashboard({ onOpenAuth }: AutopilotDashboardProps = {})
     return `${mins}m ${secs < 10 ? "0" : ""}${secs}s`;
   };
 
+  // A batch is considered actively running/queued if it has clips that are not yet published
+  const isBatchActive = useMemo(() => {
+    if (!status?.current_batch || !status.current_batch.clips || status.current_batch.clips.length === 0) {
+      return false;
+    }
+    if (status.current_batch.status === "completed") {
+      return false;
+    }
+    // If all clips in the batch have been published, the batch is complete and no longer active
+    return !status.current_batch.clips.every((c) => c.status === "published");
+  }, [status?.current_batch]);
+
   // Find active or featured clip for the video preview player
   const activeClip: AutopilotClipItem | null = useMemo(() => {
-    if (!status?.current_batch?.clips || status.current_batch.clips.length === 0) {
+    if (!isBatchActive || !status?.current_batch?.clips || status.current_batch.clips.length === 0) {
       return null;
     }
     const clips = status.current_batch.clips;
@@ -463,9 +476,9 @@ export function AutopilotDashboard({ onOpenAuth }: AutopilotDashboardProps = {})
     const ready = clips.find((c) => c.preview_url || c.filename);
     if (ready) return ready;
     return clips[0];
-  }, [status?.current_batch?.clips, selectedPreviewClipId]);
+  }, [isBatchActive, status?.current_batch?.clips, selectedPreviewClipId]);
 
-  // List of all published videos (from status.all_published_videos or batch)
+  // List of all published videos (strictly filtered to valid YouTube URLs)
   const publishedVideos = useMemo(() => {
     const list: Array<{
       id: string;
@@ -478,9 +491,15 @@ export function AutopilotDashboard({ onOpenAuth }: AutopilotDashboardProps = {})
     }> = [];
     const seen = new Set<string>();
 
+    const isValidYouTubeUrl = (url?: string | null): url is string => {
+      if (!url || typeof url !== "string") return false;
+      const trimmed = url.trim();
+      return trimmed.length > 0 && (trimmed.includes("youtube.com") || trimmed.includes("youtu.be"));
+    };
+
     if (status?.all_published_videos && status.all_published_videos.length > 0) {
       for (const p of status.all_published_videos) {
-        if (!seen.has(p.youtube_url)) {
+        if (isValidYouTubeUrl(p.youtube_url) && !seen.has(p.youtube_url)) {
           seen.add(p.youtube_url);
           list.push(p);
         }
@@ -489,7 +508,7 @@ export function AutopilotDashboard({ onOpenAuth }: AutopilotDashboardProps = {})
 
     if (status?.current_batch?.clips) {
       for (const c of status.current_batch.clips) {
-        if (c.status === "published" && c.youtube_url && !seen.has(c.youtube_url)) {
+        if (c.status === "published" && isValidYouTubeUrl(c.youtube_url) && !seen.has(c.youtube_url)) {
           seen.add(c.youtube_url);
           list.push({
             id: c.id,
@@ -504,6 +523,13 @@ export function AutopilotDashboard({ onOpenAuth }: AutopilotDashboardProps = {})
     }
     return list;
   }, [status?.all_published_videos, status?.current_batch?.clips]);
+
+  const displayedPublishedVideos = useMemo(() => {
+    if (historyTab === "recent") {
+      return publishedVideos.slice(0, 5);
+    }
+    return publishedVideos;
+  }, [publishedVideos, historyTab]);
 
   // List of failed clips or active issues
   const activeIssues = useMemo(() => {
@@ -822,10 +848,10 @@ export function AutopilotDashboard({ onOpenAuth }: AutopilotDashboardProps = {})
                   </button>
                 ) : null}
 
-                {ytStatus?.auth_url && !ytStatus?.connected ? (
+                {ytStatus?.auth_url ? (
                   <a
                     href={ytStatus.auth_url}
-                    className="cursor-pointer flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold bg-white hover:bg-zinc-100 text-zinc-950 shadow-md shadow-white/10 transition-all active:scale-95"
+                    className="cursor-pointer flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-bold bg-white hover:bg-zinc-100 text-zinc-950 shadow-md shadow-white/10 transition-all active:scale-95"
                   >
                     <svg className="w-3.5 h-3.5" viewBox="0 0 24 24">
                       <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
@@ -833,7 +859,7 @@ export function AutopilotDashboard({ onOpenAuth }: AutopilotDashboardProps = {})
                       <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z"/>
                       <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"/>
                     </svg>
-                    <span>Sign In with Google</span>
+                    <span>{channels.length > 0 ? "+ Connect Another Channel" : "Sign In with Google"}</span>
                   </a>
                 ) : null}
 
@@ -920,6 +946,16 @@ export function AutopilotDashboard({ onOpenAuth }: AutopilotDashboardProps = {})
                     );
                   })}
                 </div>
+
+                <div className="p-3 rounded-xl bg-zinc-900/40 border border-zinc-800/60 text-xs text-zinc-400 flex items-start gap-2.5">
+                  <span className="text-sm">💡</span>
+                  <div className="space-y-0.5 leading-relaxed">
+                    <span className="font-semibold text-zinc-300">Have multiple channels under the same Google account?</span>
+                    <p className="text-[11px] text-zinc-400">
+                      Google OAuth requires each channel (Brand Account) to be authorized individually. Click <strong className="text-white">&quot;+ Connect Another Channel&quot;</strong> above, select your account, and choose your 2nd channel from Google&apos;s channel picker to link both!
+                    </p>
+                  </div>
+                </div>
               </div>
             )}
           </>
@@ -927,7 +963,7 @@ export function AutopilotDashboard({ onOpenAuth }: AutopilotDashboardProps = {})
       </div>
 
       {/* Real-time Dynamic Pipeline Phase Tracker */}
-      {status?.current_batch && (
+      {isBatchActive && status?.current_batch && (
         <div className="rounded-3xl border border-zinc-800 bg-zinc-950/90 p-6 space-y-5 shadow-xl backdrop-blur-xl animate-in fade-in duration-300">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-zinc-800/80 pb-4">
             <div>
@@ -1197,96 +1233,7 @@ export function AutopilotDashboard({ onOpenAuth }: AutopilotDashboardProps = {})
         </div>
       )}
 
-      {/* Published YouTube Shorts Showcase ("and on done it will gi em ehte lin off off alal udpated video") */}
-      {publishedVideos.length > 0 && (
-        <div className="rounded-3xl border border-emerald-500/30 bg-zinc-950 p-6 sm:p-8 space-y-5 shadow-2xl animate-in fade-in">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-zinc-800/80 pb-4">
-            <div className="space-y-1">
-              <span className="px-2.5 py-0.5 rounded text-[11px] font-bold uppercase bg-emerald-600/20 text-emerald-400 border border-emerald-600/30">
-                Uploaded Videos
-              </span>
-              <h2 className="text-xl font-bold text-white flex items-center gap-2">
-                <CheckCircle2 className="w-5 h-5 text-emerald-400" />
-                Published YouTube Shorts ({publishedVideos.length})
-              </h2>
-            </div>
-            <div className="flex items-center gap-3">
-              <span className="text-xs text-zinc-400">All links ready & live on your channel</span>
-              <button
-                type="button"
-                onClick={handleClearHistory}
-                disabled={isActionLoading}
-                className="cursor-pointer text-xs text-red-400 hover:text-red-300 font-semibold underline transition-colors disabled:cursor-not-allowed"
-              >
-                Clear History
-              </button>
-            </div>
-          </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {publishedVideos.map((video, idx) => (
-              <div
-                key={video.id || idx}
-                className="rounded-2xl border border-emerald-500/20 bg-emerald-950/10 hover:border-emerald-500/40 p-4 space-y-3 transition-all"
-              >
-                <div className="flex items-start justify-between gap-3">
-                  <div className="space-y-1 flex-1">
-                    <span className="text-[10px] font-bold text-emerald-400 uppercase tracking-wider">
-                      Short #{video.clip_index ?? idx + 1} • Live on YouTube
-                    </span>
-                    <h3 className="text-sm font-semibold text-white line-clamp-2">
-                      {video.title}
-                    </h3>
-                  </div>
-                  <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
-                </div>
-
-                <div className="pt-2 border-t border-zinc-800/60 flex items-center justify-between gap-2">
-                  <a
-                    href={video.youtube_url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-xs text-red-400 hover:text-red-300 font-semibold flex items-center gap-1.5 truncate"
-                  >
-                    <ExternalLink className="w-3.5 h-3.5 shrink-0" />
-                    <span className="truncate">{video.youtube_url}</span>
-                  </a>
-
-                  <div className="flex items-center gap-1.5 shrink-0">
-                    {video.cover_url && (
-                      <a
-                        href={apiClient.resolveUrl(video.cover_url)}
-                        download={`cover_${video.clip_index || 1}.jpg`}
-                        className="flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-semibold bg-zinc-900 hover:bg-zinc-800 text-amber-400 border border-amber-500/30 transition-all active:scale-95"
-                      >
-                        <ImageIcon className="w-3 h-3" />
-                        <span>Cover</span>
-                      </a>
-                    )}
-                    <button
-                      type="button"
-                      onClick={() => handleCopyLink(video.youtube_url, video.id || String(idx))}
-                      className="cursor-pointer flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-medium bg-zinc-900 hover:bg-zinc-800 text-zinc-300 border border-zinc-800 shrink-0 transition-all active:scale-95"
-                    >
-                      {copiedId === (video.id || String(idx)) ? (
-                        <>
-                          <Check className="w-3 h-3 text-emerald-400" />
-                          <span className="text-emerald-400 font-semibold">Copied!</span>
-                        </>
-                      ) : (
-                        <>
-                          <Copy className="w-3 h-3 text-zinc-400" />
-                          <span>Copy Link</span>
-                        </>
-                      )}
-                    </button>
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
 
       {/* Issues & Errors Center ("and not then tiwillshow me the all the issue fornte d") */}
       {activeIssues.length > 0 && (
@@ -1465,7 +1412,7 @@ export function AutopilotDashboard({ onOpenAuth }: AutopilotDashboardProps = {})
               Active Daily Batch (6 Scheduled Shorts)
             </h2>
             <p className="text-xs text-zinc-400">
-              {status?.current_batch ? (
+              {isBatchActive && status?.current_batch ? (
                 <span>
                   Source: <strong className="text-zinc-200">{status.current_batch.source_title}</strong> (Source video deleted immediately after clipping)
                 </span>
@@ -1476,7 +1423,7 @@ export function AutopilotDashboard({ onOpenAuth }: AutopilotDashboardProps = {})
           </div>
         </div>
 
-        {status?.current_batch && status.current_batch.clips.length > 0 ? (
+        {isBatchActive && status?.current_batch && status.current_batch.clips.length > 0 ? (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             {status.current_batch.clips.map((clip) => (
               <div
@@ -1758,6 +1705,130 @@ export function AutopilotDashboard({ onOpenAuth }: AutopilotDashboardProps = {})
           )}
         </div>
       </div>
+
+      {/* Published YouTube Shorts Showcase (History) */}
+      {publishedVideos.length > 0 && (
+        <div className="rounded-3xl border border-emerald-500/30 bg-zinc-950 p-6 sm:p-8 space-y-5 shadow-2xl animate-in fade-in">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-zinc-800/80 pb-4">
+            <div className="space-y-1">
+              <div className="flex items-center gap-2">
+                <span className="px-2.5 py-0.5 rounded text-[11px] font-bold uppercase bg-emerald-600/20 text-emerald-400 border border-emerald-600/30">
+                  Uploaded Videos
+                </span>
+                <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-zinc-800 text-zinc-300 border border-zinc-700">
+                  {publishedVideos.length} Live on YouTube
+                </span>
+              </div>
+              <h2 className="text-xl font-bold text-white flex items-center gap-2">
+                <CheckCircle2 className="w-5 h-5 text-emerald-400" />
+                Published YouTube Shorts ({publishedVideos.length})
+              </h2>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-3">
+              {/* Tabs: Recent (5) vs All History */}
+              <div className="flex items-center p-1 bg-zinc-900 rounded-xl border border-zinc-800">
+                <button
+                  type="button"
+                  onClick={() => setHistoryTab("recent")}
+                  className={`cursor-pointer px-3 py-1 rounded-lg text-xs font-semibold transition-all ${
+                    historyTab === "recent"
+                      ? "bg-emerald-600 text-white shadow-sm"
+                      : "text-zinc-400 hover:text-zinc-200"
+                  }`}
+                >
+                  Recent ({Math.min(5, publishedVideos.length)})
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setHistoryTab("all")}
+                  className={`cursor-pointer px-3 py-1 rounded-lg text-xs font-semibold transition-all ${
+                    historyTab === "all"
+                      ? "bg-emerald-600 text-white shadow-sm"
+                      : "text-zinc-400 hover:text-zinc-200"
+                  }`}
+                >
+                  All History ({publishedVideos.length})
+                </button>
+              </div>
+
+              <button
+                type="button"
+                onClick={handleClearHistory}
+                disabled={isActionLoading}
+                className="cursor-pointer text-xs text-red-400 hover:text-red-300 font-semibold underline transition-colors disabled:cursor-not-allowed"
+              >
+                Clear History
+              </button>
+            </div>
+          </div>
+
+          {/* Scrollable Container with max height so it never overwhelms the screen */}
+          <div className="max-h-[500px] overflow-y-auto pr-1 space-y-3">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {displayedPublishedVideos.map((video, idx) => (
+                <div
+                  key={video.id || idx}
+                  className="rounded-2xl border border-emerald-500/20 bg-emerald-950/10 hover:border-emerald-500/40 p-4 space-y-3 transition-all"
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="space-y-1 flex-1 min-w-0">
+                      <span className="text-[10px] font-bold text-emerald-400 uppercase tracking-wider">
+                        Short #{video.clip_index ?? idx + 1} • Live on YouTube
+                      </span>
+                      <h3 className="text-sm font-semibold text-white line-clamp-2">
+                        {video.title}
+                      </h3>
+                    </div>
+                    <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
+                  </div>
+
+                  <div className="pt-2 border-t border-zinc-800/60 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                    <a
+                      href={video.youtube_url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-xs text-red-400 hover:text-red-300 font-semibold flex items-center gap-1.5 truncate max-w-full"
+                    >
+                      <ExternalLink className="w-3.5 h-3.5 shrink-0" />
+                      <span className="truncate">{video.youtube_url}</span>
+                    </a>
+
+                    <div className="flex items-center gap-1.5 shrink-0">
+                      <a
+                        href={video.youtube_url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="cursor-pointer flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-semibold bg-red-600 hover:bg-red-500 text-white shadow-sm transition-all active:scale-95"
+                      >
+                        <span>Watch</span>
+                        <ExternalLink className="w-3 h-3" />
+                      </a>
+                      <button
+                        type="button"
+                        onClick={() => handleCopyLink(video.youtube_url, video.id || String(idx))}
+                        className="cursor-pointer flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-medium bg-zinc-900 hover:bg-zinc-800 text-zinc-300 border border-zinc-800 shrink-0 transition-all active:scale-95"
+                      >
+                        {copiedId === (video.id || String(idx)) ? (
+                          <>
+                            <Check className="w-3 h-3 text-emerald-400" />
+                            <span className="text-emerald-400 font-semibold">Copied!</span>
+                          </>
+                        ) : (
+                          <>
+                            <Copy className="w-3 h-3 text-zinc-400" />
+                            <span>Copy Link</span>
+                          </>
+                        )}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Universal YouTube OAuth / Access Token Modal Dialog */}
       {showOAuthModal && (

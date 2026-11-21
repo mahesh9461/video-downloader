@@ -1219,13 +1219,22 @@ async def youtube_auth_url_endpoint():
 
 
 @app.post("/api/youtube/token")
-async def youtube_exchange_token_endpoint(payload: dict):
+async def youtube_exchange_token_endpoint(payload: dict, authorization: Optional[str] = Header(None)):
     """Exchange authorization code for YouTube access/refresh token."""
     code = payload.get("code")
     if not code:
         raise HTTPException(status_code=400, detail="Authorization code is required.")
+    user_id = None
+    if authorization and authorization.startswith("Bearer "):
+        try:
+            from app.auth import get_user_from_token
+            u = get_user_from_token(authorization.split("Bearer ")[1].strip())
+            if u:
+                user_id = u.id
+        except Exception:
+            pass
     try:
-        token_data = await exchange_code_for_token(code)
+        token_data = await exchange_code_for_token(code, user_id=user_id)
         return {"status": "ok", "token": token_data}
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))

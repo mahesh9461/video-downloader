@@ -113,7 +113,10 @@ def save_user_channel(channel_data: Dict[str, Any], user_id: Optional[str] = Non
         cid = channel_data.get("id") or f"chan_{secrets.token_hex(4)}"
 
     channels_map = _channels_store.setdefault("channels", {})
-    user_channels = [c for c in channels_map.values() if not user_id or c.get("user_id") in (user_id, "default")]
+    if user_id and user_id != "default":
+        user_channels = [c for c in channels_map.values() if c.get("user_id") == user_id]
+    else:
+        user_channels = [c for c in channels_map.values() if not c.get("user_id") or c.get("user_id") == "default"]
     is_first = len(user_channels) == 0
     is_def = channel_data.get("is_default")
     if is_def is None:
@@ -315,7 +318,7 @@ def get_youtube_auth_url(state: Optional[str] = None) -> Optional[str]:
         "response_type": "code",
         "scope": "https://www.googleapis.com/auth/youtube.upload https://www.googleapis.com/auth/youtube.readonly",
         "access_type": "offline",
-        "prompt": "consent",
+        "prompt": "select_account consent",
         "include_granted_scopes": "true",
     }
     if state:
@@ -324,8 +327,8 @@ def get_youtube_auth_url(state: Optional[str] = None) -> Optional[str]:
     return f"https://accounts.google.com/o/oauth2/v2/auth?{urlencode(params)}"
 
 
-async def exchange_code_for_token(code: str) -> Dict[str, Any]:
-    """Exchanges an authorization code for access and refresh tokens."""
+async def exchange_code_for_token(code: str, user_id: Optional[str] = None) -> Dict[str, Any]:
+    """Exchanges an authorization code for access and refresh tokens, registering the specific YouTube channel."""
     client_id, client_secret = get_google_credentials()
     if not client_id or not client_secret:
         raise ValueError("Google OAuth Client ID and Secret must be configured.")
@@ -351,6 +354,26 @@ async def exchange_code_for_token(code: str) -> Dict[str, Any]:
 
         data = res.json()
         save_stored_token(data)
+
+        # Automatically resolve and register this specific channel to multi-channel storage
+        tok = data.get("access_token")
+        if tok:
+            try:
+                chan_info = await get_channel_info(tok)
+                cid = chan_info.get("channel_id") or f"chan_{tok[:8]}"
+                title = chan_info.get("channel_title") or "YouTube Channel"
+                existing = get_user_channels(user_id=user_id)
+                save_user_channel({
+                    "channel_id": cid,
+                    "channel_title": title,
+                    "thumbnail_url": chan_info.get("thumbnail_url"),
+                    "access_token": tok,
+                    "refresh_token": data.get("refresh_token"),
+                    "is_default": len(existing) == 0,
+                }, user_id=user_id)
+            except Exception as chan_err:
+                logger.debug("Channel auto-registration skipped during code exchange: %s", chan_err)
+
         return data
 
 

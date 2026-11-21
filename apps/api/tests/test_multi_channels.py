@@ -10,12 +10,14 @@ from app.youtube_publisher import (
     set_active_channel_id,
     delete_user_channel,
     get_channel_token,
+    clear_stored_token,
 )
 
 client = TestClient(app)
 
 
 def test_multiple_channels_lifecycle():
+    clear_stored_token()
     user_id = "user_multichannel_test"
 
     # Add Channel 1
