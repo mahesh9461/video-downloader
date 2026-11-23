@@ -37,6 +37,7 @@ import { RootState } from "@/lib/store";
 import { apiClient } from "@/lib/api";
 import { AutopilotStatus, AutopilotClipItem, YouTubeAuthStatus, YouTubeChannelItem } from "@/lib/types";
 import { AuthModal } from "@/components/auth-modal";
+import { GlobalSettingsPanel } from "@/components/global-settings-panel";
 
 export interface AutopilotDashboardProps {
   onOpenAuth?: () => void;
@@ -747,6 +748,9 @@ export function AutopilotDashboard({ onOpenAuth }: AutopilotDashboardProps = {})
               </span>
             )}
           </p>
+
+          {/* Global Customization Settings Panel under URL Input */}
+          <GlobalSettingsPanel className="mt-3" />
         </div>
 
         {errorMsg && (
