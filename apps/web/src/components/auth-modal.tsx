@@ -81,15 +81,15 @@ export function AuthModal({ isOpen, onClose, onSuccess }: AuthModalProps) {
       role="dialog"
       aria-modal="true"
       aria-labelledby="auth-modal-title"
-      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in duration-200"
+      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-in fade-in duration-200"
     >
-      <div className="relative w-full max-w-md bg-zinc-900 border border-zinc-800 rounded-2xl shadow-2xl p-6 overflow-hidden">
+      <div className="relative w-full max-w-md bg-[#12151f] border border-white/10 rounded-2xl shadow-2xl p-6 overflow-hidden">
         {/* Close Button */}
         <button
           type="button"
           onClick={onClose}
           aria-label="Close"
-          className="absolute top-4 right-4 p-2 text-zinc-400 hover:text-white rounded-lg hover:bg-zinc-800 transition-colors"
+          className="absolute top-4 right-4 p-2 text-zinc-400 hover:text-white rounded-lg hover:bg-white/10 transition-colors"
         >
           <X className="w-5 h-5" />
         </button>
@@ -98,7 +98,7 @@ export function AuthModal({ isOpen, onClose, onSuccess }: AuthModalProps) {
           /* Logged In View */
           <div className="space-y-6 pt-2">
             <div className="flex items-center gap-4">
-              <div className="w-14 h-14 rounded-full bg-gradient-to-tr from-violet-600 to-indigo-500 flex items-center justify-center text-white text-xl font-bold shadow-lg shadow-violet-500/20">
+              <div className="w-14 h-14 rounded-full bg-gradient-to-tr from-cyan-500 to-violet-600 flex items-center justify-center text-zinc-950 text-xl font-extrabold shadow-lg shadow-cyan-500/20">
                 {auth.user.name ? auth.user.name[0].toUpperCase() : auth.user.email[0].toUpperCase()}
               </div>
               <div>
@@ -106,18 +106,18 @@ export function AuthModal({ isOpen, onClose, onSuccess }: AuthModalProps) {
                   {auth.user.name || "Logged In User"}
                   <ShieldCheck className="w-4 h-4 text-emerald-400" />
                 </h2>
-                <p className="text-sm text-zinc-400">{auth.user.email}</p>
+                <p className="text-sm text-zinc-300">{auth.user.email}</p>
               </div>
             </div>
 
-            <div className="p-4 rounded-xl bg-zinc-950/60 border border-zinc-800/80 space-y-2">
+            <div className="p-4 rounded-xl bg-zinc-950/80 border border-zinc-800 space-y-2">
               <div className="flex justify-between text-xs text-zinc-400">
                 <span>User ID:</span>
-                <span className="font-mono text-zinc-300">{auth.user.id}</span>
+                <span className="font-mono text-zinc-200 font-semibold">{auth.user.id}</span>
               </div>
               <div className="flex justify-between text-xs text-zinc-400">
                 <span>Account Status:</span>
-                <span className="text-emerald-400 font-medium">Active & Synchronized</span>
+                <span className="text-emerald-400 font-bold">Active & Synchronized</span>
               </div>
             </div>
 
@@ -126,7 +126,7 @@ export function AuthModal({ isOpen, onClose, onSuccess }: AuthModalProps) {
               variant="outline"
               onClick={handleLogout}
               disabled={loading}
-              className="w-full border-red-500/30 text-red-400 hover:bg-red-500/10 hover:text-red-300 gap-2"
+              className="w-full border-rose-500/40 text-rose-300 hover:bg-rose-500/10 hover:text-rose-200 gap-2 font-bold"
             >
               <LogOut className="w-4 h-4" />
               Sign Out
@@ -136,17 +136,17 @@ export function AuthModal({ isOpen, onClose, onSuccess }: AuthModalProps) {
           /* Sign In / Sign Up Forms */
           <div className="space-y-6 pt-2">
             <div>
-              <div className="flex items-center gap-2 text-violet-400 text-xs font-semibold tracking-wider uppercase mb-1">
+              <div className="flex items-center gap-2 text-cyan-400 text-xs font-bold tracking-wider uppercase mb-1">
                 <ShieldCheck className="w-4 h-4" />
                 SaveIt Account
               </div>
-              <h2 id="auth-modal-title" className="text-2xl font-bold text-white">
+              <h2 id="auth-modal-title" className="text-2xl font-extrabold text-white tracking-tight">
                 {mode === "login" ? "Sign In to SaveIt" : "Create Your Account"}
               </h2>
-              <p className="text-sm text-zinc-400 mt-1">
+              <p className="text-xs text-zinc-300 mt-1">
                 {mode === "login"
                   ? "Access your saved YouTube channels and isolated download history."
-                  : "Sync multi-channel YouTube uploads and personalised presets."}
+                  : "Sync multi-channel YouTube uploads and personalized presets."}
               </p>
             </div>
 
@@ -160,9 +160,9 @@ export function AuthModal({ isOpen, onClose, onSuccess }: AuthModalProps) {
                   setMode("login");
                   setError(null);
                 }}
-                className={`flex-1 flex items-center justify-center gap-2 py-2 text-xs font-medium rounded-lg transition-all ${
+                className={`flex-1 flex items-center justify-center gap-2 py-2 text-xs font-bold rounded-lg transition-all min-h-[40px] ${
                   mode === "login"
-                    ? "bg-violet-600 text-white shadow-md shadow-violet-600/30"
+                    ? "bg-cyan-500 text-zinc-950 shadow-md shadow-cyan-500/30"
                     : "text-zinc-400 hover:text-white"
                 }`}
               >
@@ -177,9 +177,9 @@ export function AuthModal({ isOpen, onClose, onSuccess }: AuthModalProps) {
                   setMode("signup");
                   setError(null);
                 }}
-                className={`flex-1 flex items-center justify-center gap-2 py-2 text-xs font-medium rounded-lg transition-all ${
+                className={`flex-1 flex items-center justify-center gap-2 py-2 text-xs font-bold rounded-lg transition-all min-h-[40px] ${
                   mode === "signup"
-                    ? "bg-violet-600 text-white shadow-md shadow-violet-600/30"
+                    ? "bg-cyan-500 text-zinc-950 shadow-md shadow-cyan-500/30"
                     : "text-zinc-400 hover:text-white"
                 }`}
               >
@@ -189,14 +189,17 @@ export function AuthModal({ isOpen, onClose, onSuccess }: AuthModalProps) {
             </div>
 
             {error && (
-              <div className="flex items-start gap-2 p-3 bg-red-500/10 border border-red-500/20 rounded-xl text-xs text-red-400">
+              <div
+                role="alert"
+                className="flex items-start gap-2 p-3 bg-rose-500/10 border border-rose-500/20 rounded-xl text-xs text-rose-300 font-medium"
+              >
                 <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
                 <span>{error}</span>
               </div>
             )}
 
             {successMsg && (
-              <div className="flex items-center gap-2 p-3 bg-emerald-500/10 border border-emerald-500/20 rounded-xl text-xs text-emerald-400">
+              <div className="flex items-center gap-2 p-3 bg-emerald-500/10 border border-emerald-500/20 rounded-xl text-xs text-emerald-300 font-medium">
                 <CheckCircle2 className="w-4 h-4 shrink-0" />
                 <span>{successMsg}</span>
               </div>
@@ -206,47 +209,43 @@ export function AuthModal({ isOpen, onClose, onSuccess }: AuthModalProps) {
               {mode === "signup" && (
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div>
-                    <label htmlFor="auth-name" className="block text-xs font-medium text-zinc-300 mb-1.5">
+                    <label htmlFor="auth-name" className="block text-xs font-bold text-zinc-300 mb-1.5">
                       Name
                     </label>
                     <div className="relative">
-                      <User className="absolute left-3 top-3 w-4 h-4 text-zinc-500" />
+                      <User className="absolute left-3 top-3 w-4 h-4 text-zinc-400" />
                       <input
                         id="auth-name"
                         type="text"
                         placeholder="e.g. Alex Vance"
                         value={name}
                         onChange={(e) => setName(e.target.value)}
-                        className="w-full pl-9 pr-3 py-2.5 bg-zinc-950 border border-zinc-800 rounded-xl text-sm text-white placeholder-zinc-500 focus:outline-none focus:border-violet-500 focus:ring-1 focus:ring-violet-500"
+                        className="w-full pl-9 pr-3 py-2.5 bg-zinc-900/90 border border-zinc-700 rounded-xl text-sm text-white placeholder-zinc-500 focus:outline-none focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500 min-h-[44px]"
                       />
                     </div>
                   </div>
-
                   <div>
-                    <label htmlFor="auth-surname" className="block text-xs font-medium text-zinc-300 mb-1.5">
+                    <label htmlFor="auth-surname" className="block text-xs font-bold text-zinc-300 mb-1.5">
                       Surname
                     </label>
-                    <div className="relative">
-                      <User className="absolute left-3 top-3 w-4 h-4 text-zinc-500" />
-                      <input
-                        id="auth-surname"
-                        type="text"
-                        placeholder="e.g. Vance"
-                        value={surname}
-                        onChange={(e) => setSurname(e.target.value)}
-                        className="w-full pl-9 pr-3 py-2.5 bg-zinc-950 border border-zinc-800 rounded-xl text-sm text-white placeholder-zinc-500 focus:outline-none focus:border-violet-500 focus:ring-1 focus:ring-violet-500"
-                      />
-                    </div>
+                    <input
+                      id="auth-surname"
+                      type="text"
+                      placeholder="e.g. Vance"
+                      value={surname}
+                      onChange={(e) => setSurname(e.target.value)}
+                      className="w-full px-3 py-2.5 bg-zinc-900/90 border border-zinc-700 rounded-xl text-sm text-white placeholder-zinc-500 focus:outline-none focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500 min-h-[44px]"
+                    />
                   </div>
                 </div>
               )}
 
               <div>
-                <label htmlFor="auth-email" className="block text-xs font-medium text-zinc-300 mb-1.5">
+                <label htmlFor="auth-email" className="block text-xs font-bold text-zinc-300 mb-1.5">
                   Email Address
                 </label>
                 <div className="relative">
-                  <Mail className="absolute left-3 top-3 w-4 h-4 text-zinc-500" />
+                  <Mail className="absolute left-3 top-3.5 w-4 h-4 text-zinc-400" />
                   <input
                     id="auth-email"
                     type="email"
@@ -254,37 +253,36 @@ export function AuthModal({ isOpen, onClose, onSuccess }: AuthModalProps) {
                     placeholder="creator@example.com"
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
-                    className="w-full pl-9 pr-3 py-2.5 bg-zinc-950 border border-zinc-800 rounded-xl text-sm text-white placeholder-zinc-500 focus:outline-none focus:border-violet-500 focus:ring-1 focus:ring-violet-500"
+                    className="w-full pl-9 pr-3 py-2.5 bg-zinc-900/90 border border-zinc-700 rounded-xl text-sm text-white placeholder-zinc-500 focus:outline-none focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500 min-h-[44px]"
                   />
                 </div>
               </div>
 
               <div>
-                <label htmlFor="auth-password" className="block text-xs font-medium text-zinc-300 mb-1.5">
+                <label htmlFor="auth-password" className="block text-xs font-bold text-zinc-300 mb-1.5">
                   Password
                 </label>
                 <div className="relative">
-                  <Lock className="absolute left-3 top-3 w-4 h-4 text-zinc-500" />
+                  <Lock className="absolute left-3 top-3.5 w-4 h-4 text-zinc-400" />
                   <input
                     id="auth-password"
                     type="password"
                     required
-                    minLength={6}
                     placeholder="••••••••"
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
-                    className="w-full pl-9 pr-3 py-2.5 bg-zinc-950 border border-zinc-800 rounded-xl text-sm text-white placeholder-zinc-500 focus:outline-none focus:border-violet-500 focus:ring-1 focus:ring-violet-500"
+                    className="w-full pl-9 pr-3 py-2.5 bg-zinc-900/90 border border-zinc-700 rounded-xl text-sm text-white placeholder-zinc-500 focus:outline-none focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500 min-h-[44px]"
                   />
                 </div>
               </div>
 
               <Button
                 type="submit"
+                variant="primary"
                 disabled={loading}
-                aria-label={mode === "login" ? "Submit Sign In" : "Submit Create Account"}
-                className="w-full bg-violet-600 hover:bg-violet-700 text-white font-medium py-2.5 rounded-xl shadow-lg shadow-violet-600/25 transition-all mt-2"
+                className="w-full mt-2 font-bold min-h-[44px] shadow-lg shadow-cyan-500/20"
               >
-                {loading ? "Processing..." : mode === "login" ? "Sign In" : "Create Account"}
+                {loading ? "Processing..." : mode === "login" ? "Submit Sign In" : "Submit Create Account"}
               </Button>
             </form>
           </div>

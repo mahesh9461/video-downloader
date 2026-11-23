@@ -37,22 +37,25 @@ export function ErrorBanner({ message, type = "unknown", onDismiss, className }:
 
   return (
     <div
+      role="alert"
       className={cn(
-        "relative flex items-start gap-3 rounded-xl border border-red-500/20 bg-red-500/5 p-4 text-sm animate-in slide-in-from-top-2 duration-300",
+        "relative flex items-start gap-3 rounded-2xl border border-rose-500/30 bg-rose-950/20 p-4 text-sm animate-in slide-in-from-top-2 duration-300 shadow-lg shadow-rose-950/20",
         className
       )}
     >
-      <div className="flex items-center justify-center w-8 h-8 rounded-lg bg-red-500/10 shrink-0 mt-0.5">
-        <Icon className="w-4 h-4 text-red-400" />
+      <div className="flex items-center justify-center w-8 h-8 rounded-xl bg-rose-500/20 shrink-0 mt-0.5 border border-rose-500/30">
+        <Icon className="w-4 h-4 text-rose-300" />
       </div>
       <div className="flex-1 min-w-0">
-        <p className="font-semibold text-red-400">{title}</p>
-        <p className="text-red-300/80 mt-0.5 leading-relaxed">{message}</p>
+        <p className="font-bold text-rose-200 tracking-tight">{title}</p>
+        <p className="text-xs text-rose-100/90 mt-0.5 leading-relaxed font-medium">{message}</p>
       </div>
       {onDismiss && (
         <button
+          type="button"
           onClick={onDismiss}
-          className="shrink-0 text-red-400/60 hover:text-red-300 transition-colors"
+          aria-label="Dismiss error"
+          className="shrink-0 p-1.5 rounded-lg text-rose-300 hover:text-white hover:bg-rose-500/20 transition-colors"
         >
           <X className="w-4 h-4" />
         </button>
@@ -60,4 +63,3 @@ export function ErrorBanner({ message, type = "unknown", onDismiss, className }:
     </div>
   );
 }
-

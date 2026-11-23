@@ -20,7 +20,8 @@
   },
   "devDependencies": {
     "@types/react": "^19",
-    "@types/react-dom": "^19"
+    "@types/react-dom": "^19",
+    "lighthouse": "^13.6.0",
+    "playwright": "^1.65.1"
   }
 }
-

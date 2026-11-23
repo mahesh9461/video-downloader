@@ -6,7 +6,9 @@ import { Header } from "@/components/header";
 import { AuthModal } from "@/components/auth-modal";
 import { HistoryDrawer } from "@/components/history-drawer";
 import { FeatureNavigation, FeatureTab } from "@/components/feature-navigation";
+import { MobileNav } from "@/components/mobile-nav";
 import { Footer } from "@/components/footer";
+import { ToastContainer } from "@/components/ui/toast";
 import { useHistory } from "@/hooks/use-history";
 import { RootState, setAuthUser } from "@/lib/store";
 import { apiClient } from "@/lib/api";
@@ -43,7 +45,11 @@ export function PageShell({ activeTab, children }: PageShellProps) {
   }, [dispatch]);
 
   return (
-    <div className="min-h-screen flex flex-col selection:bg-violet-500/20 selection:text-violet-300">
+    <div className="min-h-screen flex flex-col selection:bg-cyan-500/20 selection:text-cyan-300 relative bg-[#08090c] text-white">
+      {/* Gaming Ambient Background & Grid */}
+      <div className="gaming-ambient-bg" />
+      <div className="gaming-grid" />
+
       <Header
         onOpenHistory={() => {
           trackHistoryAction("open", history.length);
@@ -53,11 +59,8 @@ export function PageShell({ activeTab, children }: PageShellProps) {
         onOpenAuth={() => setIsAuthOpen(true)}
       />
 
-      <main className="flex-1 flex flex-col items-center px-4 pt-8 sm:pt-12 pb-20">
-        {/* Ambient Top Glow */}
-        <div className="absolute top-12 left-1/2 -translate-x-1/2 w-96 h-96 bg-violet-600/10 rounded-full blur-3xl pointer-events-none -z-10" />
-
-        {/* Top Feature Switcher Tabs */}
+      <main className="flex-1 flex flex-col items-center px-4 pt-6 sm:pt-10 pb-28 sm:pb-20 w-full max-w-7xl mx-auto">
+        {/* Top Feature Switcher Tabs (Desktop/Tablet) */}
         <FeatureNavigation activeTab={activeTab} />
 
         {/* Page Content */}
@@ -68,6 +71,9 @@ export function PageShell({ activeTab, children }: PageShellProps) {
         {/* Footer */}
         <Footer />
       </main>
+
+      {/* Mobile Bottom Navigation Bar */}
+      <MobileNav />
 
       {/* History Drawer */}
       <HistoryDrawer
@@ -83,6 +89,9 @@ export function PageShell({ activeTab, children }: PageShellProps) {
         isOpen={isAuthOpen}
         onClose={() => setIsAuthOpen(false)}
       />
+
+      {/* Global Toast Notifications */}
+      <ToastContainer />
     </div>
   );
 }

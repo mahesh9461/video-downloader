@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback, useMemo } from "react";
+import Image from "next/image";
 import {
   Scissors,
   Sparkles,
@@ -16,6 +17,7 @@ import {
   AlertCircle,
   CheckCircle2,
   ChevronRight,
+  ChevronLeft,
   Music2,
   TrendingUp,
   Zap,
@@ -24,33 +26,60 @@ import {
   ExternalLink,
   Loader2,
   Settings,
+  Video as Youtube,
+  Copy,
+  Check,
+  Lightbulb,
+  Trash2,
+  Plus,
 } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
+import { Stepper, StepItem } from "@/components/ui/stepper";
+import { EmptyState } from "@/components/ui/empty-state";
+import { Modal } from "@/components/ui/modal";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import { ShortPreviewCard } from "@/components/short-preview-card";
+import { ChannelManagerModal } from "@/components/channel-manager-modal";
 import { apiClient } from "@/lib/api";
 import {
   ClipCandidate,
   ClipRenderResponse,
   YouTubeAuthStatus,
   YouTubePublishResponse,
+  YouTubeChannelItem,
 } from "@/lib/types";
 import { formatDuration, formatFileSize } from "@/lib/utils";
+import { useToast } from "@/hooks/use-toast";
 
 const DEFAULT_GTA_DESCRIPTION =
   "Welcome to GTA World: ViceVerse — your daily hub for GTA 6 Shorts, live gameplay streams, hidden Leonida secrets, Vice City map discoveries, crazy physics tests, and launch-week moments with Jason and Lucia.\n\nSubscribe and turn on notifications so you never miss a daily Short or live stream!\n\n#GTA6 #GTAVI #Shorts #GTA6Shorts #GTA6Live #GTA6LiveStream #ViceCity #Leonida #GTA6Gameplay #GTA6Launch #GamingShorts #LiveGaming";
 
+const STEPS: StepItem[] = [
+  { id: 1, label: "Add Video", description: "Paste link or select clip" },
+  { id: 2, label: "Edit Details", description: "Headline, tags & 9:16 layout" },
+  { id: 3, label: "Choose Channel", description: "Select YouTube channel" },
+  { id: 4, label: "Publish", description: "Upload or download Short" },
+];
+
 export function ViralClips() {
+  const { success, error: toastError, info } = useToast();
+
+  // Stepper state (1: Add Video, 2: Edit Details, 3: Choose Channel, 4: Publish)
+  const [currentStep, setCurrentStep] = useState<number>(1);
+
+  // Video URL & Analysis state
   const [url, setUrl] = useState("");
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [analysisError, setAnalysisError] = useState<string | null>(null);
   const [videoTitle, setVideoTitle] = useState<string>("");
   const [clips, setClips] = useState<ClipCandidate[]>([]);
-
-  // Selected clip for rendering
   const [selectedClip, setSelectedClip] = useState<ClipCandidate | null>(null);
+
+  // Customization & Rendering state
   const [layout, setLayout] = useState<string>("center_crop");
-  const [showOverlay, setShowOverlay] = useState<boolean>(false);
   const [hookTitle, setHookTitle] = useState<string>("");
   const [hookStyle, setHookStyle] = useState<string>("none");
   const [backgroundMusic, setBackgroundMusic] = useState<string>("none");
@@ -59,60 +88,88 @@ export function ViralClips() {
   const [progressBarColor, setProgressBarColor] = useState<string>("yellow");
   const [burnCaptions, setBurnCaptions] = useState<boolean>(false);
   const [captionStyle, setCaptionStyle] = useState<string>("viral_yellow");
-  const [isUploading, setIsUploading] = useState<boolean>(false);
 
-  // Inline previewing clip ID
-  const [previewingClipId, setPreviewingClipId] = useState<string | null>(null);
-
-  // Render status
+  // Render Execution & Progress state
   const [isRendering, setIsRendering] = useState(false);
+  const [renderProgress, setRenderProgress] = useState<number>(0);
   const [renderError, setRenderError] = useState<string | null>(null);
   const [renderedClip, setRenderedClip] = useState<ClipRenderResponse | null>(null);
 
-  // Free Open LLM & hook state
-  const [isGeneratingAiHook, setIsGeneratingAiHook] = useState(false);
-  const [aiTranscript, setAiTranscript] = useState<string | null>(null);
-  const [aiHookSource, setAiHookSource] = useState<string | null>(null);
-  const [aiProvider, setAiProvider] = useState<"deepseek" | "free_open_llm" | "ollama">("deepseek");
-
-  // YouTube Shorts Publishing state
-  const [showYouTubeModal, setShowYouTubeModal] = useState(false);
+  // YouTube Channels & Publishing State
+  const [channels, setChannels] = useState<YouTubeChannelItem[]>([]);
+  const [activeChannelId, setActiveChannelId] = useState<string | null>(null);
   const [ytAuthStatus, setYtAuthStatus] = useState<YouTubeAuthStatus | null>(null);
   const [ytTitle, setYtTitle] = useState("");
-  const [ytDescription, setYtDescription] = useState("");
+  const [ytDescription, setYtDescription] = useState(DEFAULT_GTA_DESCRIPTION);
   const [ytPrivacy, setYtPrivacy] = useState<"public" | "unlisted" | "private">("public");
   const [ytAccessToken, setYtAccessToken] = useState("");
   const [isPublishingYt, setIsPublishingYt] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState<number>(0);
   const [ytPublishResult, setYtPublishResult] = useState<YouTubePublishResponse | null>(null);
   const [ytError, setYtError] = useState<string | null>(null);
 
-  const [showCredsConfig, setShowCredsConfig] = useState(false);
-  const [ytClientId, setYtClientId] = useState("");
-  const [ytClientSecret, setYtClientSecret] = useState("");
-  const [isSavingCreds, setIsSavingCreds] = useState(false);
-  const [suggestedUrl, setSuggestedUrl] = useState<string | null>(null);
-  const [useDefaultDescription, setUseDefaultDescription] = useState<boolean>(true);
+  // Modals & Dialogs
+  const [showChannelModal, setShowChannelModal] = useState(false);
+  const [showYouTubeModal, setShowYouTubeModal] = useState(false);
+  const [copiedLink, setCopiedLink] = useState(false);
+
+  // Fetch YouTube connection status and channels
+  const refreshChannels = useCallback(async () => {
+    try {
+      if (typeof apiClient.getYouTubeChannels === "function") {
+        const res = await apiClient.getYouTubeChannels();
+        if (res?.channels) {
+          setChannels(res.channels);
+          if (res.active_channel_id) {
+            setActiveChannelId(res.active_channel_id);
+          } else if (res.channels.length > 0) {
+            setActiveChannelId(res.channels[0].channel_id);
+          }
+        }
+      }
+      const status = await apiClient.getYouTubeStatus();
+      if (status) setYtAuthStatus(status);
+    } catch {
+      // Ignored
+    }
+  }, []);
 
   useEffect(() => {
-    // 1. Fetch YouTube connection status immediately on load/refresh so connection persists
-    apiClient
-      .getYouTubeStatus()
-      .then((status) => {
-        if (status) setYtAuthStatus(status);
-      })
-      .catch(() => {});
+    let mounted = true;
+    (async () => {
+      try {
+        if (typeof apiClient.getYouTubeChannels === "function") {
+          const res = await apiClient.getYouTubeChannels();
+          if (mounted && res?.channels) {
+            setChannels(res.channels);
+            if (res.active_channel_id) {
+              setActiveChannelId(res.active_channel_id);
+            } else if (res.channels.length > 0) {
+              setActiveChannelId(res.channels[0].channel_id);
+            }
+          }
+        }
+        const status = await apiClient.getYouTubeStatus();
+        if (mounted && status) setYtAuthStatus(status);
+      } catch {
+        // Ignored
+      }
+    })();
 
-    // 2. Restore cached URL and analyzed clips from localStorage/sessionStorage
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    // Restore cached settings from localStorage
     if (typeof window !== "undefined") {
       try {
-        const lastViralUrl = localStorage.getItem("saveit_viral_url");
-        const lastUrl = localStorage.getItem("saveit_last_url");
-        const linkToUse = lastViralUrl || lastUrl;
-        if (linkToUse) {
-          setUrl(linkToUse);
-        } else if (lastUrl) {
-          setSuggestedUrl(lastUrl);
-        }
+        const savedPrivacy = localStorage.getItem("saveit_pref_privacy") as "public" | "unlisted" | "private";
+        if (savedPrivacy) setYtPrivacy(savedPrivacy);
+
+        const lastViralUrl = localStorage.getItem("saveit_viral_url") || localStorage.getItem("saveit_last_url");
+        if (lastViralUrl) setUrl(lastViralUrl);
 
         const cachedClips = sessionStorage.getItem("saveit_viral_clips");
         const cachedTitle = sessionStorage.getItem("saveit_viral_title");
@@ -122,20 +179,26 @@ export function ViralClips() {
             setClips(parsed);
             if (cachedTitle) setVideoTitle(cachedTitle);
             setSelectedClip(parsed[0]);
+            if (parsed[0]?.hook_title) setHookTitle(parsed[0].hook_title);
           }
         }
       } catch {}
 
-      // 3. Check if returning from Google OAuth callback
+      // Handle return from Google OAuth callback
       const params = new URLSearchParams(window.location.search);
       if (params.get("youtube_auth") === "success") {
-        setShowYouTubeModal(true);
+        showToast("YouTube channel connected successfully!", "success");
+        setShowChannelModal(true);
       } else if (params.get("youtube_auth") === "error") {
-        setYtError(params.get("error_detail") || "Failed to authenticate with Google.");
-        setShowYouTubeModal(true);
+        showToast(params.get("error_detail") || "Failed to authenticate with Google.", "error");
+        setShowChannelModal(true);
       }
     }
   }, []);
+
+  const activeChannel = useMemo(() => {
+    return channels.find((c) => c.channel_id === activeChannelId) || channels[0] || null;
+  }, [channels, activeChannelId]);
 
   const handleUrlChange = (newUrl: string) => {
     setUrl(newUrl);
@@ -147,130 +210,34 @@ export function ViralClips() {
     }
   };
 
-  const handleSaveCredentials = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!ytClientId.trim() || !ytClientSecret.trim()) {
-      setYtError("Both Client ID and Client Secret are required.");
-      return;
-    }
-    setIsSavingCreds(true);
-    setYtError(null);
-    try {
-      const res = await apiClient.configureYouTubeOAuth(ytClientId.trim(), ytClientSecret.trim());
-      if (res?.youtube_status) {
-        setYtAuthStatus(res.youtube_status);
-      }
-      setShowCredsConfig(false);
-    } catch (err: any) {
-      setYtError(err?.message || "Failed to save OAuth credentials.");
-    } finally {
-      setIsSavingCreds(false);
-    }
-  };
-
-  const handleDisconnectYouTube = async () => {
-    try {
-      await apiClient.disconnectYouTube();
-      const status = await apiClient.getYouTubeStatus();
-      setYtAuthStatus(status);
-    } catch (err: any) {
-      setYtError(err?.message || "Failed to disconnect channel.");
-    }
-  };
-
-  const handleOpenYouTubeModal = async () => {
-    setShowYouTubeModal(true);
-    setYtError(null);
-    setYtPublishResult(null);
-
-    // Automatically set title from the best AI hook
-    const bestAiHook =
-      renderedClip?.hook_title?.trim() ||
-      selectedClip?.hook_title?.trim() ||
-      (clips.length > 0 && clips[0]?.hook_title?.trim()) ||
-      videoTitle ||
-      "Viral Short";
-    const initialTitle = bestAiHook.toLowerCase().includes("#shorts") ? bestAiHook : `${bestAiHook} #Shorts`;
-    setYtTitle(initialTitle);
-
-    // Set ViceVerse channel default description
-    setUseDefaultDescription(true);
-    setYtDescription(DEFAULT_GTA_DESCRIPTION);
-
-    try {
-      const status = await apiClient.getYouTubeStatus();
-      setYtAuthStatus(status);
-    } catch {
-      // Ignored if offline
-    }
-  };
-
-  const handlePublishToYouTube = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!renderedClip) return;
-    if (!ytTitle.trim()) {
-      setYtError("Video title is required.");
-      return;
-    }
-
-    setIsPublishingYt(true);
-    setYtError(null);
-    setYtPublishResult(null);
-
-    try {
-      const res = await apiClient.publishToYouTube({
-        filename: renderedClip.filename,
-        title: ytTitle.trim(),
-        description: ytDescription.trim(),
-        privacy: ytPrivacy,
-        access_token: ytAccessToken.trim() || undefined,
-      });
-      setYtPublishResult(res);
-    } catch (err: any) {
-      setYtError(err?.message || "Failed to publish video to YouTube Shorts.");
-    } finally {
-      setIsPublishingYt(false);
-    }
-  };
-
   const validateVideoUrl = (inputUrl: string): string | null => {
     try {
       const parsed = new URL(inputUrl);
       const host = parsed.hostname.replace(/^www\./, "").replace(/^m\./, "");
-
-      // YouTube search results page
       if (host === "youtube.com" && parsed.pathname === "/results") {
-        return "That's a YouTube search results page, not a video. Please open a specific video and paste its URL (e.g. youtube.com/watch?v=...).";
+        return "That's a search results page. Please paste a direct video link.";
       }
-      // YouTube channel or playlist page
       if (
         host === "youtube.com" &&
         (parsed.pathname.startsWith("/@") ||
           parsed.pathname.startsWith("/channel/") ||
-          parsed.pathname.startsWith("/playlist") ||
-          parsed.pathname.startsWith("/c/") ||
-          parsed.pathname === "/")
+          parsed.pathname.startsWith("/playlist"))
       ) {
-        return "Please paste a direct video URL (e.g. youtube.com/watch?v=... or youtu.be/...), not a channel or playlist page.";
-      }
-      // YouTube watch URL without video ID
-      if (host === "youtube.com" && parsed.pathname === "/watch" && !parsed.searchParams.get("v")) {
-        return "Invalid YouTube URL — the video ID (v=) is missing.";
+        return "Please paste a specific video URL, not a channel or playlist.";
       }
     } catch {
-      return "Please enter a valid URL.";
+      return "Please enter a valid video URL.";
     }
     return null;
   };
 
-  const handleAnalyze = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleAnalyze = async (e?: React.FormEvent) => {
+    e?.preventDefault();
     if (!url.trim()) return;
 
-    // Client-side URL validation before hitting the API
-    const urlError = validateVideoUrl(url.trim());
-    if (urlError) {
-      setAnalysisError(urlError);
+    const validationError = validateVideoUrl(url.trim());
+    if (validationError) {
+      setAnalysisError(validationError);
       return;
     }
 
@@ -284,130 +251,50 @@ export function ViralClips() {
       const res = await apiClient.analyzeClips(url.trim(), 30, 60, 4);
       setVideoTitle(res.title || "Video Highlights");
       setClips(res.clips);
+
       if (typeof window !== "undefined") {
         try {
           sessionStorage.setItem("saveit_viral_clips", JSON.stringify(res.clips));
           sessionStorage.setItem("saveit_viral_title", res.title || "Video Highlights");
         } catch {}
       }
+
       if (res.clips.length > 0) {
         setSelectedClip(res.clips[0]);
-        setHookTitle("");
+        if (res.clips[0]?.hook_title) {
+          setHookTitle(res.clips[0].hook_title);
+          setYtTitle(`${res.clips[0].hook_title} #Shorts`.substring(0, 100));
+        } else {
+          setYtTitle(`${res.title || "Viral Short"} #Shorts`.substring(0, 100));
+        }
+        setCurrentStep(2); // Advance to Edit Details
+        success(`Discovered ${res.clips.length} viral hook moments!`);
       }
-    } catch (err: any) {
-      setAnalysisError(err?.message || "Failed to analyze video. Please check the URL and try again.");
+    } catch (err: unknown) {
+      const errorMsg = err instanceof Error ? err.message : "Failed to analyze video clips. Please check the URL.";
+      setAnalysisError(errorMsg);
+      toastError(errorMsg);
     } finally {
       setIsAnalyzing(false);
     }
   };
 
-  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
+  const handleRenderClip = async (targetClip?: ClipCandidate) => {
+    const clip = targetClip || selectedClip;
+    if (!clip || !url.trim()) return;
 
-    setIsUploading(true);
-    setAnalysisError(null);
-    setClips([]);
-    setSelectedClip(null);
-    setRenderedClip(null);
-
-    try {
-      const formData = new FormData();
-      formData.append("video", file);
-      const uploadRes = await apiClient.uploadClipVideo(formData);
-      setUrl(uploadRes.file_id);
-      setVideoTitle(uploadRes.filename);
-
-      setIsAnalyzing(true);
-      const res = await apiClient.analyzeClips(uploadRes.file_id, 30, 60, 4);
-      setClips(res.clips);
-      if (res.clips.length > 0) {
-        setSelectedClip(res.clips[0]);
-        setHookTitle("");
-      }
-    } catch (err: any) {
-      setAnalysisError(err?.message || "Failed to upload or analyze local video file.");
-    } finally {
-      setIsUploading(false);
-      setIsAnalyzing(false);
-    }
-  };
-
-  const handleSelectClip = (clip: ClipCandidate) => {
-    setSelectedClip(clip);
-    setHookTitle("");
-    setAiTranscript(null);
-    setAiHookSource(null);
-    setRenderedClip(null);
-  };
-
-  const handleQuickRender = async (clip: ClipCandidate) => {
-    setSelectedClip(clip);
     setIsRendering(true);
     setRenderError(null);
-    setRenderedClip(null);
+    setRenderProgress(50);
 
     try {
       const res = await apiClient.renderClip({
         url: url.trim(),
         start_time: clip.start_time,
         end_time: clip.end_time,
-        layout: "center_crop", // Edge-to-edge full screen 9:16 vertical
-        hook_title: "",
-        hook_style: "none", // Clean video without obstructing boxes
-        background_music: "none", // Preserve pure original soundtrack/audio
-        music_volume: 0.12,
-        progress_bar: true,
-        progress_bar_color: progressBarColor,
-      });
-      setRenderedClip(res);
-    } catch (err: any) {
-      setRenderError(err?.message || "Failed to render viral short. Please try again.");
-    } finally {
-      setIsRendering(false);
-    }
-  };
-
-  const handleGenerateAiHook = async () => {
-    if (!selectedClip) return;
-    setIsGeneratingAiHook(true);
-    try {
-      const res = await apiClient.generateClipAiHook({
-        url: url.trim(),
-        start_time: selectedClip.start_time,
-        end_time: selectedClip.end_time,
-        video_title: videoTitle,
-        clip_dialogue: selectedClip.summary,
-        provider: aiProvider,
-      });
-      setHookTitle(res.hook_title);
-      setAiTranscript(res.transcript);
-      setAiHookSource(res.source);
-      setShowOverlay(true);
-      if (hookStyle === "none") {
-        setHookStyle("hormozi_bold");
-      }
-    } catch (err: any) {
-      console.error("Failed to generate AI hook:", err);
-    } finally {
-      setIsGeneratingAiHook(false);
-    }
-  };
-
-  const handleRender = async () => {
-    if (!selectedClip) return;
-
-    setIsRendering(true);
-    setRenderError(null);
-
-    try {
-      const res = await apiClient.renderClip({
-        url: url.trim(),
-        start_time: selectedClip.start_time,
-        end_time: selectedClip.end_time,
         layout,
-        hook_title: showOverlay ? hookTitle.trim() : "",
-        hook_style: showOverlay ? hookStyle : "none",
+        hook_title: hookTitle.trim(),
+        hook_style: hookTitle.trim() ? "viral_yellow" : "none",
         background_music: backgroundMusic,
         music_volume: musicVolume,
         progress_bar: progressBar,
@@ -415,29 +302,153 @@ export function ViralClips() {
         burn_captions: burnCaptions,
         caption_style: captionStyle,
       });
+
+      setRenderProgress(100);
       setRenderedClip(res);
-    } catch (err: any) {
-      setRenderError(err?.message || "Failed to render viral short. Please try again.");
+      success("Viral Short ready in 9:16 vertical format!");
+    } catch (err: unknown) {
+      const errorMsg = err instanceof Error ? err.message : "Failed to render viral clip.";
+      setRenderError(errorMsg);
+      toastError(errorMsg);
     } finally {
       setIsRendering(false);
     }
   };
 
+  // 1-Click Fast Track: Render top clip immediately
+  const handleDownloadMostViral = async () => {
+    if (clips.length === 0) return;
+    const topClip = clips[0];
+    setSelectedClip(topClip);
+    if (topClip.hook_title) setHookTitle(topClip.hook_title);
+
+    setIsRendering(true);
+    setRenderError(null);
+    setRenderProgress(50);
+
+    try {
+      const res = await apiClient.renderClip({
+        url: url.trim(),
+        start_time: topClip.start_time,
+        end_time: topClip.end_time,
+        layout: "center_crop",
+        hook_style: "none",
+        background_music: "none",
+        music_volume: 0,
+        progress_bar: true,
+        progress_bar_color: "yellow",
+        burn_captions: false,
+        caption_style: "viral_yellow",
+      });
+      setRenderProgress(100);
+      setRenderedClip(res);
+      setCurrentStep(2);
+      success("Most viral clip rendered!");
+    } catch (err: unknown) {
+      const errorMsg = err instanceof Error ? err.message : "Failed to render clip.";
+      setRenderError(errorMsg);
+      toastError(errorMsg);
+    } finally {
+      setIsRendering(false);
+    }
+  };
+
+  const handleOpenYouTubeModal = async () => {
+    setShowYouTubeModal(true);
+    setYtError(null);
+    setYtPublishResult(null);
+    await refreshChannels();
+  };
+
+  const handlePublishToYouTube = async (e?: React.FormEvent) => {
+    e?.preventDefault();
+    if (!renderedClip) {
+      toastError("Please render the Short first before uploading.");
+      return;
+    }
+    if (!ytTitle.trim()) {
+      setYtError("Video title is required.");
+      return;
+    }
+
+    setIsPublishingYt(true);
+    setYtError(null);
+    setUploadProgress(50);
+
+    try {
+      const res = await apiClient.publishToYouTube({
+        filename: renderedClip.filename,
+        title: ytTitle.trim(),
+        description: ytDescription.trim(),
+        privacy: ytPrivacy,
+        access_token: ytAccessToken.trim() || undefined,
+      });
+
+      setUploadProgress(100);
+      setYtPublishResult(res);
+      success("Short published to YouTube Shorts!");
+      if (typeof window !== "undefined") {
+        try {
+          localStorage.setItem("saveit_pref_privacy", ytPrivacy);
+        } catch {}
+      }
+    } catch (err: unknown) {
+      const errorMsg = err instanceof Error ? err.message : "Failed to publish video to YouTube Shorts.";
+      setYtError(errorMsg);
+      toastError(errorMsg);
+    } finally {
+      setIsPublishingYt(false);
+    }
+  };
+
+  const handleDisconnectYouTube = async () => {
+    try {
+      await apiClient.disconnectYouTube();
+      await refreshChannels();
+      success("Disconnected YouTube channel");
+    } catch (err: unknown) {
+      const errorMsg = err instanceof Error ? err.message : "Failed to disconnect.";
+      toastError(errorMsg);
+    }
+  };
+
+  const handleCopyLink = () => {
+    if (ytPublishResult?.youtube_url) {
+      navigator.clipboard.writeText(ytPublishResult.youtube_url);
+      setCopiedLink(true);
+      info("YouTube Shorts link copied to clipboard!");
+      setTimeout(() => setCopiedLink(false), 2000);
+    }
+  };
+
   return (
-    <div className="w-full max-w-3xl mx-auto space-y-8 animate-in fade-in-0 duration-300">
-      {/* Persistent YouTube Connected Status Banner */}
-      {ytAuthStatus?.connected && (
-        <div className="flex flex-wrap items-center justify-between gap-2 px-4 py-2.5 rounded-xl border border-red-500/30 bg-red-950/20 text-xs shadow-sm">
+    <div className="w-full max-w-5xl mx-auto space-y-8 animate-in fade-in-50 duration-300">
+      {/* 4-Step Interactive Stepper */}
+      <Stepper
+        steps={STEPS}
+        currentStep={currentStep}
+        onStepClick={(stepId) => {
+          if (stepId === 1 || clips.length > 0) {
+            setCurrentStep(stepId);
+          }
+        }}
+      />
+
+      {/* Connected Channel Quick Badge Header */}
+      {ytAuthStatus?.channel_title && (
+        <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-2.5 rounded-xl border border-red-500/30 bg-red-950/20 text-xs shadow-sm">
           <div className="flex items-center gap-2 text-red-300 font-medium">
             <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse" />
             <span className="text-zinc-400">YouTube Channel:</span>
-            <span className="text-white font-semibold">{ytAuthStatus.channel_title || "Connected YouTube Channel"}</span>
+            <span className="text-white font-semibold">
+              {ytAuthStatus.channel_title || "Connected YouTube Channel"}
+            </span>
           </div>
           <div className="flex items-center gap-3">
             <button
               type="button"
               onClick={handleOpenYouTubeModal}
-              className="text-red-400 hover:text-red-300 underline font-medium"
+              className="text-red-400 hover:text-red-300 underline font-semibold"
             >
               Shorts Settings
             </button>
@@ -452,1053 +463,894 @@ export function ViralClips() {
         </div>
       )}
 
-      {/* Search / Ingest Bar */}
-      <form onSubmit={handleAnalyze} className="relative space-y-2">
-        <div className="flex flex-col sm:flex-row items-center gap-2 p-1.5 rounded-2xl border border-zinc-800 bg-zinc-900/90 shadow-2xl backdrop-blur-xl">
-          <div className="flex items-center gap-2.5 px-3 w-full sm:flex-1">
-            <Scissors className="w-5 h-5 text-violet-400 shrink-0" />
-            <input
-              type="text"
-              value={url}
-              onChange={(e) => handleUrlChange(e.target.value)}
-              placeholder="Paste long YouTube video or podcast URL (e.g. youtube.com/watch?v=...)"
-              disabled={isAnalyzing}
-              className="w-full bg-transparent text-white placeholder-zinc-500 text-sm focus:outline-none py-2"
-            />
-          </div>
-          <label className="cursor-pointer inline-flex items-center gap-1.5 px-3 py-2 rounded-xl border border-zinc-700/80 bg-zinc-800/80 hover:bg-zinc-800 text-xs font-semibold text-zinc-200 shrink-0 transition-colors">
-            <Upload className="w-3.5 h-3.5 text-violet-400" />
-            <span>{isUploading ? "Uploading..." : "Upload Video"}</span>
-            <input
-              type="file"
-              accept="video/mp4,video/quicktime,video/webm"
-              onChange={handleFileUpload}
-              disabled={isUploading || isAnalyzing}
-              className="hidden"
-            />
-          </label>
-          <Button
-            type="submit"
-            variant="gradient"
-            size="default"
-            disabled={isAnalyzing || !url.trim()}
-            className="w-full sm:w-auto font-semibold shrink-0"
-          >
-            {isAnalyzing ? (
-              <span className="flex items-center gap-2">
-                <span className="w-4 h-4 border-2 border-white/20 border-t-white rounded-full animate-spin" />
-                Analyzing Virality...
-              </span>
-            ) : (
-              <span className="flex items-center gap-2">
-                <Sparkles className="w-4 h-4" />
-                Find Viral Moments
-              </span>
-            )}
-          </Button>
-        </div>
+      {/* =========================================================================
+          STEP 1: ADD VIDEO & DISCOVER MOMENTS
+         ========================================================================= */}
+      {currentStep <= 2 && (
+        <div className="space-y-8">
+          <Card className="border border-white/10 bg-[#12151f]/80 p-6 sm:p-8 rounded-2xl shadow-xl">
+            <form onSubmit={handleAnalyze} className="space-y-4">
+              <label htmlFor="viral-url-input" className="block text-sm font-bold text-white tracking-tight">
+                Video URL (YouTube or TikTok)
+              </label>
 
-        {/* Suggest previously used link if input is empty */}
-        {suggestedUrl && !url && (
-          <div className="flex items-center gap-2 text-xs text-zinc-400 px-2 py-1">
-            <span>💡 Recent link:</span>
-            <button
-              type="button"
-              onClick={() => handleUrlChange(suggestedUrl)}
-              className="text-violet-400 hover:text-violet-300 underline font-medium truncate max-w-xs sm:max-w-md text-left"
-            >
-              {suggestedUrl}
-            </button>
-            <button
-              type="button"
-              onClick={() => handleUrlChange(suggestedUrl)}
-              className="px-2 py-0.5 rounded-md bg-violet-500/20 text-violet-300 hover:bg-violet-500/30 font-semibold text-[11px]"
-            >
-              Use Link
-            </button>
-          </div>
-        )}
-      </form>
-
-      {/* Analysis Error */}
-      {analysisError && (
-        <div className="p-4 rounded-xl border border-red-500/20 bg-red-500/10 flex items-start gap-3 text-sm text-red-300">
-          <AlertCircle className="w-5 h-5 text-red-400 shrink-0 mt-0.5" />
-          <span>{analysisError}</span>
-        </div>
-      )}
-
-      {/* Clips Discovery Grid */}
-      {clips.length > 0 && (
-        <div className="space-y-6">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-            <div>
-              <h3 className="font-bold text-white text-lg tracking-tight flex items-center gap-2">
-                <span>Top Viral Moments</span>
-                <span className="text-xs text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-2.5 py-0.5 rounded-full font-medium flex items-center gap-1">
-                  <TrendingUp className="w-3 h-3" />
-                  100M+ Virality Model
-                </span>
-              </h3>
-              <p className="text-xs text-zinc-400 truncate max-w-md">{videoTitle}</p>
-            </div>
-            <span className="text-xs text-violet-400 bg-violet-500/10 border border-violet-500/20 px-3 py-1 rounded-full font-medium w-fit">
-              {clips.length} High-Retention Slices Ready
-            </span>
-          </div>
-
-          {/* ⚡ Instant 1-Click Hero Card for #1 Most Viral Moment */}
-          {clips[0] && (
-            <div className="p-5 sm:p-6 rounded-2xl bg-gradient-to-r from-violet-950/60 via-zinc-900/90 to-amber-950/40 border border-amber-500/30 shadow-2xl flex flex-col sm:flex-row items-center justify-between gap-5">
-              <div className="space-y-2 text-left w-full sm:w-auto">
-                <div className="flex flex-wrap items-center gap-2">
-                  <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-amber-500 text-black shadow-md">
-                    <Flame className="w-3.5 h-3.5 fill-black" />
-                    #1 HIGHEST VIRAL MOMENT ({clips[0].viral_score}/100)
-                  </span>
-                  <span className="text-xs font-semibold px-2.5 py-0.5 rounded-full bg-emerald-500/20 border border-emerald-500/40 text-emerald-300">
-                    {clips[0].retention_rate || "96% Retention"}
-                  </span>
-                </div>
-                <h3 className="text-white font-bold text-base sm:text-lg line-clamp-1">{clips[0].hook_title}</h3>
-                <p className="text-xs text-zinc-400 max-w-xl">
-                  {formatDuration(clips[0].start_time)} → {formatDuration(clips[0].end_time)} • Full-Screen 9:16 Vertical • Kinetic Neon Timeline Bar
-                </p>
-              </div>
-              <Button
-                variant="gradient"
-                size="lg"
-                onClick={() => handleQuickRender(clips[0])}
-                disabled={isRendering}
-                className="w-full sm:w-auto font-bold shrink-0 shadow-lg shadow-violet-500/25 px-6"
-              >
-                {isRendering && selectedClip?.clip_id === clips[0].clip_id ? (
-                  <span className="flex items-center gap-2">
-                    <span className="w-4 h-4 border-2 border-white/20 border-t-white rounded-full animate-spin" />
-                    Generating Short...
-                  </span>
-                ) : (
-                  <span className="flex items-center gap-2">
-                    <Download className="w-4 h-4" />
-                    Download Most Viral Clip (MP4)
-                  </span>
-                )}
-              </Button>
-            </div>
-          )}
-
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-            {clips.map((clip) => {
-              const isSelected = selectedClip?.clip_id === clip.clip_id;
-              const isPreviewing = previewingClipId === clip.clip_id;
-
-              return (
-                <Card
-                  key={clip.clip_id}
-                  role="button"
-                  tabIndex={0}
-                  aria-label={`Select clip: ${clip.hook_title}`}
-                  onClick={() => handleSelectClip(clip)}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter" || e.key === " ") {
-                      e.preventDefault();
-                      handleSelectClip(clip);
-                    }
-                  }}
-                  className={`border transition-all overflow-hidden text-left hover:border-violet-500/50 flex flex-col justify-between cursor-pointer group ${
-                    isSelected
-                      ? "border-violet-500 bg-violet-500/[0.08] shadow-xl shadow-violet-500/10 ring-1 ring-violet-500/30"
-                      : "border-zinc-800 bg-zinc-900/40 hover:bg-zinc-900/80 hover:shadow-lg"
-                  }`}
-                >
-                  <div>
-                    {/* Visual Video Thumbnail & Preview Frame */}
-                    <div className="relative aspect-video w-full bg-zinc-950 overflow-hidden group">
-                      {clip.thumbnail_url ? (
-                        <img
-                          src={clip.thumbnail_url}
-                          alt={clip.hook_title}
-                          className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
-                          loading="lazy"
-                        />
-                      ) : (
-                        <div className="w-full h-full bg-gradient-to-br from-violet-950/40 via-zinc-900 to-black flex items-center justify-center">
-                          <Play className="w-10 h-10 text-violet-500/40" />
-                        </div>
-                      )}
-
-                      {/* Dark Vignette Overlay */}
-                      <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-black/60 pointer-events-none" />
-
-                      {/* Top Badges: Virality Score & Duration */}
-                      <div className="absolute top-2.5 left-2.5 right-2.5 flex items-center justify-between pointer-events-none">
-                        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold bg-amber-500/90 text-black shadow-md backdrop-blur-sm">
-                          <Flame className="w-3.5 h-3.5 fill-black text-black" />
-                          {clip.viral_score}/100 Virality
-                        </span>
-                        <span className="text-xs font-semibold px-2 py-0.5 rounded-md bg-black/80 text-white border border-white/10 backdrop-blur-sm flex items-center gap-1">
-                          <Clock className="w-3 h-3 text-zinc-400" />
-                          {formatDuration(clip.duration)}
-                        </span>
-                      </div>
-
-                      {/* Bottom Badges: Timestamps & Projected Retention */}
-                      <div className="absolute bottom-2.5 left-2.5 right-2.5 flex items-center justify-between text-[11px] pointer-events-none">
-                        <span className="px-2 py-0.5 rounded bg-black/80 text-zinc-300 border border-white/10 font-mono">
-                          {formatDuration(clip.start_time)} → {formatDuration(clip.end_time)}
-                        </span>
-                        <span className="px-2 py-0.5 rounded bg-emerald-500/90 text-black font-bold shadow-sm">
-                          {clip.retention_rate || "95% Retention"}
-                        </span>
-                      </div>
-
-                      {/* Center Play / Quick Preview Overlay */}
-                      <div className="absolute inset-0 flex items-center justify-center opacity-90 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity">
-                        <button
-                          type="button"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setPreviewingClipId(isPreviewing ? null : clip.clip_id);
-                          }}
-                          className="px-3.5 py-1.5 rounded-full bg-violet-600/90 hover:bg-violet-600 text-white font-semibold text-xs flex items-center gap-1.5 shadow-xl shadow-black/80 backdrop-blur-sm border border-violet-400/40"
-                        >
-                          <Play className="w-3.5 h-3.5 fill-white text-white" />
-                          {isPreviewing ? "Close Preview" : "Quick Preview"}
-                        </button>
-                      </div>
-                    </div>
-
-                    {/* Quick Preview Player if active */}
-                    {isPreviewing && (
-                      <div className="p-3 bg-zinc-950 border-b border-zinc-800 space-y-2 animate-in fade-in-0">
-                        <div className="flex items-center justify-between text-xs">
-                          <span className="text-violet-400 font-semibold flex items-center gap-1">
-                            <Zap className="w-3.5 h-3.5" />
-                            Live Clip Window Preview
-                          </span>
-                          <span className="text-[11px] text-zinc-400">
-                            {formatDuration(clip.start_time)} to {formatDuration(clip.end_time)}
-                          </span>
-                        </div>
-                        <div className="p-2.5 rounded-lg bg-zinc-900/90 border border-zinc-800 text-xs text-zinc-300">
-                          <p className="font-medium text-white mb-1">Snippet Dialogue / Audio:</p>
-                          <p className="italic text-zinc-400 leading-relaxed">&ldquo;{clip.summary}&rdquo;</p>
-                        </div>
-                      </div>
-                    )}
-
-                    {/* Card Content & Viral Attributes */}
-                    <div className="p-4 space-y-3">
-                      <div className="space-y-1">
-                        <div className="flex items-center justify-between gap-2">
-                          <h4 className="font-bold text-white text-sm line-clamp-1">
-                            {clip.hook_title}
-                          </h4>
-                          <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-violet-500/15 border border-violet-500/30 text-violet-300 shrink-0">
-                            {clip.hook_rating || "Top 1% Virality"}
-                          </span>
-                        </div>
-                        <p className="text-xs text-zinc-400 line-clamp-2 leading-relaxed">
-                          {clip.summary}
-                        </p>
-                      </div>
-
-                      <div className="text-[11px] text-zinc-500 flex items-center gap-1.5 pt-1">
-                        <Sparkles className="w-3.5 h-3.5 text-violet-400 shrink-0" />
-                        <span className="truncate">{clip.reason}</span>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Card Bottom Actions: 1-Click Short + Customize */}
-                  <div className="p-4 pt-0 grid grid-cols-2 gap-2">
+              <div className="flex flex-col sm:flex-row items-center gap-3">
+                <div className="relative w-full flex-1">
+                  <Input
+                    id="viral-url-input"
+                    type="url"
+                    value={url}
+                    onChange={(e) => handleUrlChange(e.target.value)}
+                    placeholder="Paste long YouTube video or TikTok link..."
+                    disabled={isAnalyzing}
+                    className="h-12 text-base pl-4 pr-10"
+                  />
+                  {url && (
                     <button
                       type="button"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleQuickRender(clip);
-                      }}
-                      disabled={isRendering}
-                      className="cursor-pointer py-2 px-3 rounded-xl text-xs font-bold bg-violet-600 hover:bg-violet-500 text-white flex items-center justify-center gap-1 shadow-md shadow-violet-600/30 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                      onClick={() => handleUrlChange("")}
+                      aria-label="Clear input"
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-400 hover:text-white p-1"
                     >
-                      <Download className="w-3.5 h-3.5" />
-                      1-Click Short
+                      ×
                     </button>
-                    <button
-                      type="button"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleSelectClip(clip);
+                  )}
+                </div>
+
+                <Button
+                  type="submit"
+                  variant="primary"
+                  size="lg"
+                  disabled={!url.trim() || isAnalyzing}
+                  className="w-full sm:w-auto h-12 px-6 shrink-0"
+                >
+                  {isAnalyzing ? (
+                    <>
+                      <Loader2 className="w-5 h-5 animate-spin mr-2" />
+                      Analyzing Hooks...
+                    </>
+                  ) : (
+                    <>
+                      <Scissors className="w-5 h-5 mr-2" />
+                      Find Viral Moments
+                    </>
+                  )}
+                </Button>
+              </div>
+
+              {analysisError && (
+                <div
+                  role="alert"
+                  className="flex items-center gap-2 p-3 rounded-xl bg-rose-500/10 border border-rose-500/20 text-rose-300 text-xs font-medium"
+                >
+                  <AlertCircle className="w-4 h-4 shrink-0" />
+                  <span>{analysisError}</span>
+                </div>
+              )}
+            </form>
+          </Card>
+
+          {/* Discovered Clips Grid */}
+          {clips.length > 0 ? (
+            <div className="space-y-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h3 className="text-xl font-bold text-white tracking-tight">
+                    Discovered Viral Moments ({clips.length})
+                  </h3>
+                  <p className="text-xs text-zinc-300">
+                    High-retention segments ranked by curiosity, emotion, and pace.
+                  </p>
+                </div>
+
+                <Button
+                  type="button"
+                  variant="primary"
+                  onClick={handleDownloadMostViral}
+                  className="inline-flex items-center shadow-md shadow-cyan-500/20"
+                >
+                  <Zap className="w-4 h-4 mr-1.5" />
+                  Download Most Viral Clip
+                </Button>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {clips.map((clip, idx) => {
+                  const isSelected = selectedClip?.id === clip.id;
+                  const viralScore = clip.hook_score || (clip as any).viral_score || 90;
+
+                  return (
+                    <Card
+                      key={clip.id || idx}
+                      onClick={() => {
+                        setSelectedClip(clip);
+                        if (clip.hook_title) setHookTitle(clip.hook_title);
+                        setCurrentStep(2);
                       }}
-                      className={`cursor-pointer py-2 px-3 rounded-xl text-xs font-semibold flex items-center justify-center gap-1 transition-all ${
+                      className={`p-5 rounded-2xl border cursor-pointer transition-all hover:scale-[1.01] ${
                         isSelected
-                          ? "bg-zinc-800 border border-violet-500/60 text-violet-300"
-                          : "bg-zinc-900 hover:bg-zinc-800 text-zinc-400 hover:text-white border border-zinc-800"
+                          ? "border-cyan-500/60 bg-cyan-950/20 shadow-lg shadow-cyan-500/10"
+                          : "border-white/10 bg-[#12151f]/80 hover:border-zinc-600"
                       }`}
                     >
-                      Customize
-                      <ChevronRight className="w-3.5 h-3.5" />
-                    </button>
-                  </div>
-                </Card>
-              );
-            })}
-          </div>
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="space-y-1.5 flex-1 min-w-0">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <span className="px-2 py-0.5 rounded-full bg-cyan-500/20 text-cyan-300 font-bold text-xs border border-cyan-500/30">
+                              #{idx + 1} Best Moment
+                            </span>
+                            <span className="text-xs font-bold text-amber-300">
+                              {viralScore}/100 Virality
+                            </span>
+                            <span className="text-xs text-emerald-400 font-semibold">
+                              {(clip as any).retention_rate || "96% Retention"}
+                            </span>
+                            <span className="text-xs text-purple-300 font-semibold">
+                              {(clip as any).hook_rating || "Top 1% Virality"}
+                            </span>
+                          </div>
+
+                          <h4 className="text-base font-bold text-white line-clamp-2 mt-1">
+                            {clip.hook_title || "Untitled Viral Moment"}
+                          </h4>
+
+                          <p className="text-xs text-zinc-300 line-clamp-2 leading-relaxed">
+                            {clip.transcript_snippet || clip.reasoning || (clip as any).summary || "High retention hook identified."}
+                          </p>
+
+                          <div className="flex items-center gap-4 text-xs text-zinc-400 pt-2 font-mono">
+                            <span className="flex items-center gap-1">
+                              <Clock className="w-3.5 h-3.5" />
+                              {formatDuration(clip.start_time)} - {formatDuration(clip.end_time)} ({Math.round(clip.duration)}s)
+                            </span>
+                          </div>
+                        </div>
+
+                        <div className="shrink-0 pt-1">
+                          <Button
+                            type="button"
+                            variant={isSelected ? "primary" : "secondary"}
+                            size="sm"
+                            className="rounded-xl"
+                          >
+                            Customize <ChevronRight className="w-4 h-4 ml-1" />
+                          </Button>
+                        </div>
+                      </div>
+                    </Card>
+                  );
+                })}
+              </div>
+            </div>
+          ) : (
+            <EmptyState
+              icon={<Scissors className="w-8 h-8" />}
+              title="Transform Long Videos into 9:16 Shorts"
+              description="Paste any YouTube or TikTok link above. We'll automatically identify peak moments, reframe them vertically, and prepare them for 1-click publishing."
+            />
+          )}
         </div>
       )}
 
-      {/* Customization & Render Panel */}
-      {selectedClip && !renderedClip && (
-        <Card className="border-zinc-800 bg-zinc-900/70 overflow-hidden shadow-2xl">
-          <CardContent className="p-6 sm:p-8 space-y-6">
-            <div className="flex items-center justify-between pb-4 border-b border-zinc-800">
+      {/* =========================================================================
+          STEP 2: EDIT DETAILS (WITH LIVE 9:16 PREVIEW)
+         ========================================================================= */}
+      {currentStep === 2 && (
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
+          {/* Left Column: Customization Controls */}
+          <div className="lg:col-span-7 space-y-6">
+            <Card className="border border-white/10 bg-[#12151f]/90 p-6 rounded-2xl shadow-xl space-y-5">
               <div>
-                <span className="text-xs font-semibold uppercase tracking-wider text-violet-400">
-                  Step 2 • Customization
-                </span>
-                <h3 className="text-lg font-bold text-white mt-0.5">Render 9:16 Vertical Short</h3>
-              </div>
-              <Badge variant="outline" className="text-xs border-violet-500/30 text-violet-300">
-                {formatDuration(selectedClip.start_time)} → {formatDuration(selectedClip.end_time)}
-              </Badge>
-            </div>
-
-            {/* Layout Options */}
-            <div className="space-y-3">
-              <label className="text-xs font-semibold text-zinc-400 uppercase tracking-wider flex items-center gap-1.5">
-                <Layers className="w-3.5 h-3.5 text-violet-400" />
-                Vertical 9:16 Layout
-              </label>
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
-                <button
-                  type="button"
-                  onClick={() => setLayout("center_crop")}
-                  className={`p-3 rounded-xl border text-left transition-all ${
-                    layout === "center_crop"
-                      ? "border-violet-500 bg-violet-500/10 text-white shadow-sm shadow-violet-500/10"
-                      : "border-zinc-800 bg-zinc-950/40 text-zinc-400 hover:border-zinc-700 hover:text-zinc-200"
-                  }`}
-                >
-                  <div className="font-medium text-xs sm:text-sm text-white">Full Screen</div>
-                  <div className="text-[10px] text-zinc-400 mt-0.5">Smart 9:16 Action</div>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => setLayout("split_screen")}
-                  className={`p-3 rounded-xl border text-left transition-all ${
-                    layout === "split_screen"
-                      ? "border-violet-500 bg-violet-500/10 text-white shadow-sm shadow-violet-500/10"
-                      : "border-zinc-800 bg-zinc-950/40 text-zinc-400 hover:border-zinc-700 hover:text-zinc-200"
-                  }`}
-                >
-                  <div className="font-medium text-xs sm:text-sm text-white">Split Screen</div>
-                  <div className="text-[10px] text-zinc-400 mt-0.5">Ssemble Viral Stack</div>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => setLayout("blurred_background")}
-                  className={`p-3 rounded-xl border text-left transition-all ${
-                    layout === "blurred_background"
-                      ? "border-violet-500 bg-violet-500/10 text-white shadow-sm shadow-violet-500/10"
-                      : "border-zinc-800 bg-zinc-950/40 text-zinc-400 hover:border-zinc-700 hover:text-zinc-200"
-                  }`}
-                >
-                  <div className="font-medium text-xs sm:text-sm text-white">Blurred Backdrop</div>
-                  <div className="text-[10px] text-zinc-400 mt-0.5">Opus / Ssemble Canvas</div>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => setLayout("fit_black")}
-                  className={`p-3 rounded-xl border text-left transition-all ${
-                    layout === "fit_black"
-                      ? "border-violet-500 bg-violet-500/10 text-white shadow-sm shadow-violet-500/10"
-                      : "border-zinc-800 bg-zinc-950/40 text-zinc-400 hover:border-zinc-700 hover:text-zinc-200"
-                  }`}
-                >
-                  <div className="font-medium text-xs sm:text-sm text-white">Letterbox</div>
-                  <div className="text-[10px] text-zinc-400 mt-0.5">Black Canvas Padding</div>
-                </button>
-              </div>
-            </div>
-
-            {/* Hook Headline Input & Styles */}
-            <div className="space-y-3">
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-                <label className="text-xs font-semibold text-zinc-400 uppercase tracking-wider flex items-center gap-1.5">
-                  <Type className="w-3.5 h-3.5 text-violet-400" />
-                  Top Headline Overlay
-                </label>
-                <div className="flex items-center gap-2">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      const next = !showOverlay;
-                      setShowOverlay(next);
-                      if (next && hookStyle === "none") {
-                        setHookStyle("yellow_box");
-                      }
-                    }}
-                    className={`text-xs px-2.5 py-1 rounded-full font-medium transition-colors ${
-                      showOverlay
-                        ? "bg-violet-600 text-white"
-                        : "bg-zinc-800 text-zinc-400 hover:text-white"
+                <div className="flex items-center justify-between mb-1.5">
+                  <label htmlFor="short-title-input" className="text-sm font-bold text-white flex items-center gap-1.5">
+                    <Type className="w-4 h-4 text-cyan-400" />
+                    Short Title
+                  </label>
+                  <span
+                    className={`text-xs font-mono font-bold ${
+                      ytTitle.length > 100
+                        ? "text-rose-400"
+                        : ytTitle.length > 85
+                        ? "text-amber-400"
+                        : "text-zinc-400"
                     }`}
                   >
-                    {showOverlay ? "Overlay Enabled" : "No Overlay (Clean Video)"}
-                  </button>
+                    {ytTitle.length} / 100
+                  </span>
                 </div>
+                <Input
+                  id="short-title-input"
+                  value={ytTitle}
+                  maxLength={110}
+                  onChange={(e) => setYtTitle(e.target.value)}
+                  placeholder="Enter a catchy title with #Shorts..."
+                  className="h-11"
+                />
+                {ytTitle.length > 100 && (
+                  <p className="text-xs text-rose-400 mt-1 font-medium">
+                    YouTube titles cannot exceed 100 characters. Please shorten it.
+                  </p>
+                )}
               </div>
 
-              {/* Free Open AI Hook Generator Action */}
-              <div className="p-3.5 rounded-xl bg-violet-950/20 border border-violet-500/25 space-y-3">
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                  <div className="space-y-0.5">
-                    <span className="text-xs font-semibold text-violet-200 flex items-center gap-1.5">
-                      <Sparkles className="w-3.5 h-3.5 text-violet-400" />
-                      Free Open-Source AI Hook Generator
-                    </span>
-                    <p className="text-[11px] text-zinc-400">
-                      Extracts spoken dialogue & uses 100% free open models (Mistral / Llama) to craft viral headlines. Zero keys or subscriptions required!
-                    </p>
-                  </div>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    onClick={handleGenerateAiHook}
-                    disabled={isGeneratingAiHook}
-                    className="border-violet-500/40 text-violet-300 hover:bg-violet-600/20 text-xs font-semibold"
-                  >
-                    {isGeneratingAiHook ? (
-                      <span className="flex items-center gap-1.5">
-                        <span className="w-3 h-3 border-2 border-violet-400 border-t-transparent rounded-full animate-spin" />
-                        Generating Hook...
-                      </span>
-                    ) : (
-                      <span className="flex items-center gap-1.5">
-                        <Sparkles className="w-3.5 h-3.5 text-violet-400" />
-                        Generate Free AI Hook
-                      </span>
-                    )}
-                  </Button>
-                </div>
+              {/* Hook Title Banner Text */}
+              <div>
+                <label htmlFor="hook-banner-input" className="block text-sm font-bold text-white mb-1.5">
+                  Overlay Hook Headline (shown at top of video)
+                </label>
+                <Input
+                  id="hook-banner-input"
+                  value={hookTitle}
+                  onChange={(e) => setHookTitle(e.target.value)}
+                  placeholder="e.g. WAIT FOR THE END!"
+                  className="h-11"
+                />
+              </div>
 
-                {/* Model selection pills */}
-                <div className="flex flex-wrap items-center gap-1.5 pt-1 border-t border-violet-500/15 text-[11px]">
-                  <span className="text-zinc-500 text-[10px] uppercase font-semibold mr-1">Free Model Engine:</span>
+              {/* Layout Mode Selector */}
+              <div>
+                <label className="block text-sm font-bold text-white mb-2">
+                  Vertical 9:16 Layout
+                </label>
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5">
                   {[
-                    { id: "deepseek", label: "DeepSeek (Free AI)" },
-                    { id: "free_open_llm", label: "Mistral / Llama" },
-                    { id: "ollama", label: "Local Ollama" },
-                  ].map((p) => (
+                    { id: "center_crop", label: "Center Crop", desc: "Full-screen action" },
+                    { id: "blurred_background", label: "Blurred Canvas", desc: "Soft border glow" },
+                    { id: "stacked", label: "Split Stack", desc: "Two camera angles" },
+                  ].map((l) => (
                     <button
-                      key={p.id}
+                      key={l.id}
                       type="button"
-                      onClick={() => setAiProvider(p.id as any)}
-                      className={`px-2.5 py-0.5 rounded-md font-medium transition-colors ${
-                        aiProvider === p.id
-                          ? "bg-violet-600/40 border border-violet-500/60 text-white"
-                          : "text-zinc-400 hover:text-white"
+                      onClick={() => setLayout(l.id)}
+                      className={`p-3 rounded-xl border text-left transition-all ${
+                        layout === l.id
+                          ? "bg-cyan-500/15 border-cyan-500/50 text-white font-bold shadow-sm"
+                          : "bg-zinc-900/60 border-zinc-800 text-zinc-300 hover:border-zinc-700"
                       }`}
                     >
-                      {p.label}
+                      <span className="block text-xs font-bold">{l.label}</span>
+                      <span className="block text-[11px] text-zinc-400 mt-0.5">{l.desc}</span>
                     </button>
                   ))}
                 </div>
               </div>
 
-              {aiTranscript && (
-                <div className="p-3 rounded-xl bg-zinc-950/40 border border-zinc-800/80 space-y-1 text-xs">
-                  <span className="text-[11px] font-semibold text-zinc-400 uppercase tracking-wider flex items-center justify-between">
-                    <span>Detected Dialogue Transcript:</span>
-                    <Badge variant="outline" className="text-[10px] border-emerald-500/30 text-emerald-400">
-                      {aiHookSource === "deepseek"
-                        ? "DeepSeek AI (Free)"
-                        : aiHookSource === "free_open_llm"
-                        ? "Free Open LLM"
-                        : aiHookSource === "ollama"
-                        ? "Local Ollama"
-                        : "Local NLP Engine"}
-                    </Badge>
+              {/* Kinetic Progress Bar & Music Controls */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2 border-t border-white/5">
+                <div>
+                  <label htmlFor="bg-music-select" className="block text-xs font-bold text-zinc-300 mb-1.5">
+                    Background Music
+                  </label>
+                  <select
+                    id="bg-music-select"
+                    value={backgroundMusic}
+                    onChange={(e) => setBackgroundMusic(e.target.value)}
+                    className="w-full h-10 px-3 rounded-xl bg-zinc-900 border border-zinc-700 text-xs text-white focus:outline-none focus:ring-2 focus:ring-cyan-400"
+                  >
+                    <option value="none">Original Video Audio Only</option>
+                    <option value="vice_city_synth">Vice City Neon Synth</option>
+                    <option value="trap_beat">Viral Trap Hype Beat</option>
+                    <option value="suspense_lofi">Dark Suspense Lofi</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-zinc-300 mb-1.5">
+                    Kinetic Progress Bar
+                  </label>
+                  <div className="flex items-center gap-2 h-10">
+                    <button
+                      type="button"
+                      onClick={() => setProgressBar(!progressBar)}
+                      className={`px-3 py-1.5 rounded-lg border text-xs font-bold transition-colors ${
+                        progressBar
+                          ? "bg-amber-400/20 border-amber-400/40 text-amber-300"
+                          : "bg-zinc-900 border-zinc-800 text-zinc-400"
+                      }`}
+                    >
+                      {progressBar ? "Yellow Bar Active" : "No Progress Bar"}
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              {/* Rendering Action Button */}
+              <div className="pt-4 border-t border-white/5 space-y-3">
+                <Button
+                  type="button"
+                  variant="primary"
+                  size="lg"
+                  onClick={() => handleRenderClip()}
+                  disabled={isRendering || !selectedClip}
+                  className="w-full text-base font-bold shadow-lg shadow-cyan-500/20"
+                >
+                  {isRendering ? (
+                    <>
+                      <Loader2 className="w-5 h-5 animate-spin mr-2" />
+                      Generating 9:16 Short with FFmpeg...
+                    </>
+                  ) : (
+                    <>
+                      <Sparkles className="w-5 h-5 mr-2" />
+                      Generate 9:16 Viral Short
+                    </>
+                  )}
+                </Button>
+
+                {renderedClip && (
+                  <div className="p-4 rounded-xl bg-emerald-950/20 border border-emerald-500/30 flex items-center justify-between gap-3 animate-in fade-in">
+                    <div className="flex items-center gap-2 text-emerald-400 text-xs font-bold">
+                      <CheckCircle2 className="w-5 h-5" />
+                      <span>Viral Short Ready!</span>
+                    </div>
+
+                    <div className="flex flex-wrap items-center gap-2">
+                      <a
+                        href={renderedClip.download_url}
+                        download={renderedClip.filename}
+                        className="inline-flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-500 text-zinc-950 text-xs font-bold hover:bg-emerald-400 shadow-sm transition-colors"
+                      >
+                        <Download className="w-3.5 h-3.5" />
+                        Download 9:16 Short (MP4)
+                      </a>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        onClick={handleOpenYouTubeModal}
+                        className="border-red-500/50 text-red-400 hover:bg-red-500/10 hover:text-red-300 font-medium text-xs h-8"
+                      >
+                        <Share2 className="w-3.5 h-3.5 mr-1" />
+                        Post to YouTube Shorts
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="primary"
+                        size="sm"
+                        onClick={() => setCurrentStep(3)}
+                      >
+                        Next: Choose Channel <ChevronRight className="w-4 h-4 ml-1" />
+                      </Button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </Card>
+
+            <div className="flex items-center justify-between pt-2">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setCurrentStep(1)}
+              >
+                <ChevronLeft className="w-4 h-4 mr-1" /> Back to Moments
+              </Button>
+
+              <Button
+                type="button"
+                variant="primary"
+                onClick={() => setCurrentStep(3)}
+              >
+                Continue to Channels <ChevronRight className="w-4 h-4 ml-1" />
+              </Button>
+            </div>
+          </div>
+
+          {/* Right Column: Live 9:16 Phone Mockup */}
+          <div className="lg:col-span-5 flex flex-col items-center">
+            <div className="sticky top-24 space-y-3">
+              <span className="text-xs font-bold text-zinc-400 uppercase tracking-wider block text-center">
+                Live 9:16 Shorts Mockup
+              </span>
+              <ShortPreviewCard
+                thumbnailUrl={selectedClip?.thumbnail_url || (selectedClip as any)?.thumbnail || undefined}
+                videoUrl={renderedClip?.download_url}
+                title={ytTitle}
+                channelName={activeChannel?.channel_title || "Vice City Gaming"}
+                channelThumbnail={activeChannel?.thumbnail_url}
+                hookTitle={hookTitle}
+                layout={layout}
+                musicTrack={backgroundMusic === "none" ? "Original Audio" : backgroundMusic.replace("_", " ")}
+              />
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* =========================================================================
+          STEP 3: CHOOSE YOUTUBE CHANNEL
+         ========================================================================= */}
+      {currentStep === 3 && (
+        <div className="max-w-2xl mx-auto space-y-6">
+          <Card className="border border-white/10 bg-[#12151f]/90 p-6 sm:p-8 rounded-2xl shadow-xl space-y-6">
+            <div>
+              <h3 className="text-xl font-bold text-white tracking-tight flex items-center gap-2">
+                <Youtube className="w-6 h-6 text-red-500" />
+                Select Channel for Upload
+              </h3>
+              <p className="text-xs text-zinc-300 mt-1">
+                Choose the brand channel to publish this Short to.
+              </p>
+            </div>
+
+            {/* Crucial Multi-channel Tip Box */}
+            <div className="p-4 rounded-xl bg-amber-500/10 border border-amber-500/20 text-xs leading-relaxed space-y-1.5">
+              <div className="flex items-center gap-1.5 font-bold text-amber-300">
+                <Lightbulb className="w-4 h-4 shrink-0 text-amber-400" />
+                <span>Tip for Multiple Channels:</span>
+              </div>
+              <p className="text-zinc-200">
+                On the Google screen, pick the other channel to connect a second one. Both channels will stay connected so you can switch anytime!
+              </p>
+            </div>
+
+            {/* Channels Grid */}
+            <div className="space-y-3">
+              {channels.length === 0 ? (
+                <div className="text-center py-8 p-4 rounded-xl border border-dashed border-zinc-800 bg-zinc-900/40">
+                  <Youtube className="w-10 h-10 text-zinc-600 mx-auto mb-2" />
+                  <p className="text-sm font-semibold text-zinc-200">No YouTube channels connected yet</p>
+                  <p className="text-xs text-zinc-400 mt-1 mb-4">
+                    Connect your YouTube account to upload Shorts in one click.
+                  </p>
+                  <Button
+                    type="button"
+                    variant="primary"
+                    onClick={() => setShowChannelModal(true)}
+                  >
+                    <Plus className="w-4 h-4 mr-1.5" />
+                    Connect YouTube Channel
+                  </Button>
+                </div>
+              ) : (
+                channels.map((ch) => {
+                  const isActive = ch.channel_id === (activeChannel?.channel_id || activeChannelId);
+
+                  return (
+                    <div
+                      key={ch.channel_id}
+                      onClick={async () => {
+                        try {
+                          await apiClient.selectYouTubeChannel(ch.channel_id);
+                          setActiveChannelId(ch.channel_id);
+                          success(`Switched active channel to ${ch.channel_title}`);
+                        } catch {}
+                      }}
+                      className={`flex items-center justify-between gap-3 p-4 rounded-xl border cursor-pointer transition-all ${
+                        isActive
+                          ? "bg-cyan-950/20 border-cyan-500/50 shadow-md shadow-cyan-500/10"
+                          : "bg-zinc-900/50 border-zinc-800 hover:border-zinc-700"
+                      }`}
+                    >
+                      <div className="flex items-center gap-3.5 min-w-0">
+                        <div className="relative w-12 h-12 rounded-full overflow-hidden bg-zinc-800 border-2 border-zinc-700 shrink-0">
+                          {ch.thumbnail_url ? (
+                            <Image
+                              src={ch.thumbnail_url}
+                              alt={ch.channel_title}
+                              fill
+                              className="object-cover"
+                              unoptimized
+                            />
+                          ) : (
+                            <div className="w-full h-full flex items-center justify-center font-bold text-white bg-red-600">
+                              {ch.channel_title.substring(0, 1).toUpperCase()}
+                            </div>
+                          )}
+                        </div>
+
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-2">
+                            <h4 className="text-sm font-bold text-white truncate">
+                              {ch.channel_title}
+                            </h4>
+                            {isActive && (
+                              <Badge variant="active" className="text-[10px] py-0 px-2">
+                                Active
+                              </Badge>
+                            )}
+                          </div>
+                          <p className="text-xs text-zinc-300 truncate">
+                            {ch.email || "Google Account"}
+                          </p>
+                          {ch.subscriber_count && (
+                            <p className="text-[11px] text-zinc-400">
+                              {ch.subscriber_count} subscribers
+                            </p>
+                          )}
+                        </div>
+                      </div>
+
+                      <div className="shrink-0">
+                        {isActive ? (
+                          <div className="w-6 h-6 rounded-full bg-cyan-500 text-zinc-950 flex items-center justify-center font-bold">
+                            <Check className="w-4 h-4 stroke-[3]" />
+                          </div>
+                        ) : (
+                          <span className="text-xs text-zinc-400 hover:text-white font-medium">
+                            Select
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })
+              )}
+            </div>
+
+            <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pt-3 border-t border-white/5">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setShowChannelModal(true)}
+              >
+                <Plus className="w-4 h-4 mr-1.5" />
+                Connect another channel
+              </Button>
+
+              <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => setCurrentStep(2)}
+                >
+                  <ChevronLeft className="w-4 h-4 mr-1" /> Back
+                </Button>
+
+                <Button
+                  type="button"
+                  variant="primary"
+                  onClick={() => setCurrentStep(4)}
+                  disabled={channels.length === 0}
+                >
+                  Continue to Publish <ChevronRight className="w-4 h-4 ml-1" />
+                </Button>
+              </div>
+            </div>
+          </Card>
+        </div>
+      )}
+
+      {/* =========================================================================
+          STEP 4: PUBLISH TO YOUTUBE SHORTS
+         ========================================================================= */}
+      {currentStep === 4 && (
+        <div className="max-w-2xl mx-auto space-y-6">
+          <Card className="border border-white/10 bg-[#12151f]/90 p-6 sm:p-8 rounded-2xl shadow-xl space-y-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <h3 className="text-xl font-bold text-white tracking-tight flex items-center gap-2">
+                  <Share2 className="w-5 h-5 text-cyan-400" />
+                  Publish Short to YouTube
+                </h3>
+                <p className="text-xs text-zinc-300 mt-1">
+                  Upload directly to YouTube Shorts with your chosen settings.
+                </p>
+              </div>
+
+              {activeChannel && (
+                <div className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-zinc-900 border border-zinc-800">
+                  <div className="relative w-5 h-5 rounded-full overflow-hidden bg-red-600 shrink-0">
+                    {activeChannel.thumbnail_url && (
+                      <Image
+                        src={activeChannel.thumbnail_url}
+                        alt={activeChannel.channel_title}
+                        fill
+                        className="object-cover"
+                        unoptimized
+                      />
+                    )}
+                  </div>
+                  <span className="text-xs font-bold text-white truncate max-w-[120px]">
+                    {activeChannel.channel_title}
                   </span>
-                  <p className="text-zinc-300 italic">&ldquo;{aiTranscript}&rdquo;</p>
                 </div>
               )}
+            </div>
 
-              {showOverlay ? (
-                <div className="space-y-3 pt-1 animate-in fade-in-0 duration-200">
-                  <input
-                    type="text"
-                    value={hookTitle}
-                    onChange={(e) => setHookTitle(e.target.value)}
-                    placeholder="Enter headline banner text..."
-                    className="w-full px-4 py-2.5 rounded-xl bg-zinc-950/60 border border-zinc-800 text-sm text-white placeholder-zinc-500 focus:outline-none focus:border-violet-500"
+            {/* Publishing Success Result */}
+            {ytPublishResult?.youtube_url ? (
+              <div className="p-6 rounded-2xl bg-emerald-950/20 border border-emerald-500/40 text-center space-y-4 animate-in zoom-in-95">
+                <div className="w-14 h-14 rounded-full bg-emerald-500/20 border border-emerald-500/30 flex items-center justify-center text-emerald-400 mx-auto">
+                  <CheckCircle2 className="w-8 h-8" />
+                </div>
+
+                <div className="space-y-1">
+                  <h4 className="text-lg font-bold text-white">Your Short is Live on YouTube!</h4>
+                  <p className="text-xs text-zinc-300 max-w-sm mx-auto">
+                    Video published successfully to {activeChannel?.channel_title || "your channel"}.
+                  </p>
+                </div>
+
+                <div className="flex flex-col sm:flex-row items-center justify-center gap-3 pt-2">
+                  <a
+                    href={ytPublishResult.youtube_url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl bg-red-600 text-white font-bold text-sm hover:bg-red-500 shadow-lg shadow-red-600/20 transition-all"
+                  >
+                    <Youtube className="w-4 h-4" />
+                    Watch on YouTube Shorts
+                    <ExternalLink className="w-3.5 h-3.5" />
+                  </a>
+
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={handleCopyLink}
+                    className="w-full sm:w-auto"
+                  >
+                    {copiedLink ? <Check className="w-4 h-4 mr-1 text-emerald-400" /> : <Copy className="w-4 h-4 mr-1" />}
+                    {copiedLink ? "Copied!" : "Copy Link"}
+                  </Button>
+                </div>
+
+                <div className="pt-4 border-t border-white/5">
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    onClick={() => {
+                      setYtPublishResult(null);
+                      setCurrentStep(1);
+                    }}
+                    className="text-xs text-zinc-400 hover:text-white"
+                  >
+                    Publish Another Short
+                  </Button>
+                </div>
+              </div>
+            ) : (
+              <form onSubmit={handlePublishToYouTube} className="space-y-5">
+                {/* Short Title */}
+                <div>
+                  <div className="flex justify-between items-center mb-1.5">
+                    <label className="text-xs font-bold text-white">
+                      Title
+                    </label>
+                    <span className="text-[11px] font-mono text-zinc-400">{ytTitle.length}/100</span>
+                  </div>
+                  <Input
+                    value={ytTitle}
+                    onChange={(e) => setYtTitle(e.target.value)}
+                    maxLength={100}
+                    placeholder="Short Title..."
+                    className="h-11"
                   />
+                </div>
 
-                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 pt-1">
+                {/* Privacy Visibility */}
+                <div>
+                  <label className="block text-xs font-bold text-white mb-2">
+                    Privacy Setting
+                  </label>
+                  <div className="grid grid-cols-3 gap-2.5">
                     {[
-                      { id: "hormozi_bold", label: "⚡ Hormozi Kinetic", desc: "Yellow Bold Stroke" },
-                      { id: "mrbeast_urgency", label: "🔥 MrBeast Alert", desc: "Red Pill Banner" },
-                      { id: "tiktok_trending", label: "📱 TikTok Trending", desc: "Frosted Glass Pill" },
-                      { id: "cinematic_glow", label: "✨ Cinematic Glow", desc: "Drop Shadow (No Box)" },
-                      { id: "yellow_box", label: "🟨 Classic Box", desc: "Contrast Box" },
-                    ].map((s) => (
+                      { id: "public", label: "Public", desc: "Visible to everyone" },
+                      { id: "unlisted", label: "Unlisted", desc: "Link holders only" },
+                      { id: "private", label: "Private", desc: "Only you" },
+                    ].map((p) => (
                       <button
-                        key={s.id}
+                        key={p.id}
                         type="button"
-                        onClick={() => setHookStyle(s.id)}
-                        className={`text-left p-2.5 rounded-xl border transition-all ${
-                          hookStyle === s.id
-                            ? "border-violet-500 bg-violet-500/20 text-white shadow-sm ring-1 ring-violet-500/50"
-                            : "border-zinc-800 bg-zinc-950/60 text-zinc-400 hover:text-white hover:border-zinc-700"
+                        onClick={() => setYtPrivacy(p.id as any)}
+                        className={`p-3 rounded-xl border text-left transition-all ${
+                          ytPrivacy === p.id
+                            ? "bg-cyan-500/15 border-cyan-500/50 text-white font-bold"
+                            : "bg-zinc-900/60 border-zinc-800 text-zinc-300 hover:border-zinc-700"
                         }`}
                       >
-                        <div className="text-xs font-semibold">{s.label}</div>
-                        <div className="text-[10px] text-zinc-400 mt-0.5">{s.desc}</div>
+                        <span className="block text-xs font-bold">{p.label}</span>
+                        <span className="block text-[10px] text-zinc-400">{p.desc}</span>
                       </button>
                     ))}
                   </div>
                 </div>
-              ) : (
-                <p className="text-xs text-zinc-400 bg-zinc-950/40 border border-zinc-800/80 rounded-xl px-3.5 py-2.5">
-                  Clean video mode active: No top headline banner or text box will be overlaid on your clip.
-                </p>
-              )}
-            </div>
 
-            {/* Kinetic Dynamic Progress Bar (100M+ Virality Driver) */}
-            <div className="space-y-3 p-4 rounded-xl border border-zinc-800 bg-zinc-950/50">
-              <div className="flex items-center justify-between">
+                {/* Description & Hashtags */}
                 <div>
-                  <label className="text-xs font-semibold text-white uppercase tracking-wider flex items-center gap-1.5">
-                    <Zap className="w-3.5 h-3.5 text-amber-400" />
-                    Kinetic Bottom Progress Bar
+                  <label className="block text-xs font-bold text-white mb-1.5">
+                    Description & Tags
                   </label>
-                  <p className="text-[11px] text-zinc-400 mt-0.5">
-                    Neon animated timeline line that drives TikTok/Reels completion rate.
-                  </p>
+                  <textarea
+                    rows={4}
+                    value={ytDescription}
+                    onChange={(e) => setYtDescription(e.target.value)}
+                    className="w-full p-3 rounded-xl bg-zinc-900/80 border border-zinc-700 text-xs text-white placeholder:text-zinc-500 focus:outline-none focus:ring-2 focus:ring-cyan-400 resize-none font-mono"
+                  />
                 </div>
-                <button
-                  type="button"
-                  onClick={() => setProgressBar(!progressBar)}
-                  className={`text-xs px-2.5 py-1 rounded-full font-medium transition-colors ${
-                    progressBar
-                      ? "bg-amber-500/20 border border-amber-500/40 text-amber-300"
-                      : "bg-zinc-800 text-zinc-400 hover:text-white"
-                  }`}
-                >
-                  {progressBar ? "Enabled" : "Disabled"}
-                </button>
-              </div>
 
-              {progressBar && (
-                <div className="pt-1 flex flex-wrap items-center gap-2">
-                  <span className="text-[11px] text-zinc-400 font-medium">Bar Color:</span>
-                  {[
-                    { id: "yellow", label: "Neon Yellow", color: "bg-[#FFE600]" },
-                    { id: "cyan", label: "Cyber Cyan", color: "bg-[#00F0FF]" },
-                    { id: "violet", label: "Electric Violet", color: "bg-[#BD00FF]" },
-                    { id: "red", label: "Fire Red", color: "bg-[#FF2A2A]" },
-                    { id: "white", label: "Crisp White", color: "bg-white" },
-                  ].map((c) => (
-                    <button
-                      key={c.id}
-                      type="button"
-                      onClick={() => setProgressBarColor(c.id)}
-                      className={`text-xs px-2.5 py-1 rounded-lg border flex items-center gap-1.5 transition-all ${
-                        progressBarColor === c.id
-                          ? "border-amber-400/80 bg-amber-500/10 text-white font-medium shadow-sm"
-                          : "border-zinc-800 bg-zinc-900 text-zinc-400 hover:text-zinc-200"
-                      }`}
-                    >
-                      <span className={`w-2.5 h-2.5 rounded-full ${c.color}`} />
-                      {c.label}
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
+                {/* Upload Progress Bar */}
+                {isPublishingYt && (
+                  <div className="space-y-2 p-4 rounded-xl bg-cyan-950/20 border border-cyan-500/30">
+                    <div className="flex justify-between text-xs font-bold">
+                      <span className="text-cyan-300 flex items-center gap-2">
+                        <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                        Uploading Short to YouTube...
+                      </span>
+                      <span className="text-cyan-400 font-mono">{uploadProgress}%</span>
+                    </div>
+                    <div className="w-full h-2 rounded-full bg-zinc-800 overflow-hidden">
+                      <div
+                        className="h-full bg-gradient-to-r from-cyan-500 to-red-500 transition-all duration-300 rounded-full"
+                        style={{ width: `${uploadProgress}%` }}
+                      />
+                    </div>
+                  </div>
+                )}
 
-            {/* Ssemble Viral Subtitles & Auto-Captions */}
-            <div className="space-y-3 p-4 rounded-xl border border-zinc-800 bg-zinc-950/50">
-              <div className="flex items-center justify-between">
-                <div>
-                  <label className="text-xs font-semibold text-white uppercase tracking-wider flex items-center gap-1.5">
-                    <Type className="w-3.5 h-3.5 text-amber-400" />
-                    Ssemble-Style Viral Captions (Subtitles)
-                  </label>
-                  <p className="text-[11px] text-zinc-400 mt-0.5">
-                    Burn-in high-engagement animated captions in TikTok & Reels safe zone.
-                  </p>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => setBurnCaptions(!burnCaptions)}
-                  className={`text-xs px-2.5 py-1 rounded-full font-medium transition-colors ${
-                    burnCaptions
-                      ? "bg-amber-500/20 border border-amber-500/40 text-amber-300"
-                      : "bg-zinc-800 text-zinc-400 hover:text-white"
-                  }`}
-                >
-                  {burnCaptions ? "Captions ON" : "Captions OFF"}
-                </button>
-              </div>
+                {ytError && (
+                  <div
+                    role="alert"
+                    className="flex items-center gap-2 p-3 rounded-xl bg-rose-500/10 border border-rose-500/20 text-rose-300 text-xs font-medium"
+                  >
+                    <AlertCircle className="w-4 h-4 shrink-0" />
+                    <span>{ytError}</span>
+                  </div>
+                )}
 
-              {burnCaptions && (
-                <div className="pt-1 flex flex-wrap items-center gap-2">
-                  <span className="text-[11px] text-zinc-400 font-medium">Caption Style:</span>
-                  {[
-                    { id: "viral_yellow", label: "⚡ Viral Yellow (Ssemble / Hormozi)", desc: "Yellow Bold Stroke" },
-                    { id: "clean_white", label: "✨ Clean White", desc: "Crisp Drop Shadow" },
-                  ].map((c) => (
-                    <button
-                      key={c.id}
-                      type="button"
-                      onClick={() => setCaptionStyle(c.id)}
-                      className={`text-xs px-3 py-1.5 rounded-lg border flex items-center gap-1.5 transition-all ${
-                        captionStyle === c.id
-                          ? "border-amber-400/80 bg-amber-500/10 text-white font-medium shadow-sm ring-1 ring-amber-400/30"
-                          : "border-zinc-800 bg-zinc-900 text-zinc-400 hover:text-zinc-200"
-                      }`}
-                    >
-                      {c.label}
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
-
-            {/* Background Music & Volume */}
-            <div className="space-y-3">
-              <div className="flex items-center justify-between">
-                <label className="text-xs font-semibold text-zinc-400 uppercase tracking-wider flex items-center gap-1.5">
-                  <Music2 className="w-3.5 h-3.5 text-violet-400" />
-                  Background Music (Ducked)
-                </label>
-                <span className="text-xs text-zinc-400">{Math.round(musicVolume * 100)}% Volume</span>
-              </div>
-
-              <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
-                {[
-                  { id: "lofi_chill", label: "Lo-Fi Chill" },
-                  { id: "energetic_beat", label: "Energetic" },
-                  { id: "dramatic_suspense", label: "Suspense" },
-                  { id: "ambient_drone", label: "Ambient" },
-                  { id: "none", label: "None" },
-                ].map((m) => (
-                  <button
-                    key={m.id}
+                <div className="flex items-center justify-between gap-3 pt-3 border-t border-white/5">
+                  <Button
                     type="button"
-                    onClick={() => setBackgroundMusic(m.id)}
-                    className={`p-2.5 rounded-xl border text-center text-xs transition-all ${
-                      backgroundMusic === m.id
-                        ? "border-violet-500 bg-violet-500/20 text-white font-medium shadow-sm"
-                        : "border-zinc-800 bg-zinc-950/40 text-zinc-400 hover:text-white"
+                    variant="outline"
+                    onClick={() => setCurrentStep(3)}
+                    disabled={isPublishingYt}
+                  >
+                    <ChevronLeft className="w-4 h-4 mr-1" /> Back
+                  </Button>
+
+                  <Button
+                    type="submit"
+                    variant="primary"
+                    disabled={isPublishingYt || !renderedClip}
+                    className="bg-red-600 hover:bg-red-500 text-white font-bold px-6 shadow-lg shadow-red-600/25"
+                  >
+                    {isPublishingYt ? (
+                      <>
+                        <Loader2 className="w-4 h-4 animate-spin mr-2" />
+                        Publishing Short...
+                      </>
+                    ) : (
+                      <>
+                        <Share2 className="w-4 h-4 mr-2" />
+                        Post to YouTube Shorts
+                      </>
+                    )}
+                  </Button>
+                </div>
+              </form>
+            )}
+          </Card>
+        </div>
+      )}
+
+      {/* YouTube Channel Management Modal */}
+      <ChannelManagerModal
+        isOpen={showChannelModal}
+        onClose={() => setShowChannelModal(false)}
+        channels={channels}
+        activeChannelId={activeChannelId}
+        onChannelsUpdated={refreshChannels}
+      />
+
+      {/* Shorts Settings Modal (Preserved for backwards compatibility with legacy tests) */}
+      <Modal
+        isOpen={showYouTubeModal}
+        onClose={() => setShowYouTubeModal(false)}
+        maxWidth="md"
+        title="Post to YouTube Shorts"
+      >
+        <div className="space-y-4">
+          <div className="flex items-center justify-between p-3 rounded-xl bg-zinc-900 border border-zinc-800 text-xs">
+            <span className="text-zinc-400 font-medium">Channel Status:</span>
+            {ytAuthStatus?.connected ? (
+              <Badge className="bg-emerald-500/20 text-emerald-300 border-emerald-500/30 flex items-center gap-1">
+                <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
+                Connected: {ytAuthStatus.channel_title || "My Channel"}
+              </Badge>
+            ) : (
+              <Badge className="bg-amber-500/20 text-amber-300 border-amber-500/30">
+                {ytAuthStatus?.configured ? "Not Connected" : "Credentials Required"}
+              </Badge>
+            )}
+          </div>
+
+          <div className="p-3 rounded-xl bg-amber-500/10 border border-amber-500/20 text-xs text-amber-200">
+            <strong>Multiple Channels Tip:</strong> On the Google screen, pick the other channel to connect a second one.
+          </div>
+
+          <form onSubmit={handlePublishToYouTube} className="space-y-4">
+            <div>
+              <div className="flex items-center justify-between mb-1">
+                <label className="text-xs font-bold text-zinc-300">Video Title</label>
+                <span className="text-[11px] text-zinc-500">{ytTitle.length}/100</span>
+              </div>
+              <Input
+                value={ytTitle}
+                onChange={(e) => setYtTitle(e.target.value)}
+                placeholder="Shorts Title"
+                className="h-10"
+                required
+              />
+            </div>
+
+            <div className="space-y-1.5">
+              <label className="text-xs font-medium text-zinc-300">Privacy Status</label>
+              <div className="grid grid-cols-3 gap-2">
+                {(["public", "unlisted", "private"] as const).map((p) => (
+                  <button
+                    key={p}
+                    type="button"
+                    onClick={() => setYtPrivacy(p)}
+                    className={`px-3 py-2 rounded-lg text-xs font-medium capitalize border transition-all ${
+                      ytPrivacy === p
+                        ? "bg-red-600/20 border-red-500/60 text-red-300"
+                        : "bg-zinc-900 border-zinc-800 text-zinc-400 hover:border-zinc-700"
                     }`}
                   >
-                    {m.label}
+                    {p === "public" ? "Public (Shorts)" : p}
                   </button>
                 ))}
               </div>
-
-              {backgroundMusic !== "none" && (
-                <div className="pt-2">
-                  <input
-                    type="range"
-                    min="0.05"
-                    max="0.30"
-                    step="0.01"
-                    value={musicVolume}
-                    onChange={(e) => setMusicVolume(parseFloat(e.target.value))}
-                    className="w-full accent-violet-500 h-1.5 bg-zinc-800 rounded-lg cursor-pointer"
-                  />
-                </div>
-              )}
             </div>
 
-            {/* Render Error */}
-            {renderError && (
-              <div className="p-3.5 rounded-xl border border-red-500/20 bg-red-500/10 flex items-start gap-2.5 text-xs text-red-300">
-                <AlertCircle className="w-4 h-4 text-red-400 shrink-0 mt-0.5" />
-                <span>{renderError}</span>
+            {ytError && (
+              <div className="p-3 rounded-lg bg-red-500/10 border border-red-500/20 text-xs text-red-300">
+                {ytError}
               </div>
             )}
 
-            {/* Render Action Button */}
-            <Button
-              variant="gradient"
-              size="lg"
-              onClick={handleRender}
-              disabled={isRendering}
-              className="w-full font-semibold"
-            >
-              {isRendering ? (
-                <span className="flex items-center gap-2">
-                  <span className="w-4 h-4 border-2 border-white/20 border-t-white rounded-full animate-spin" />
-                  Generating 9:16 Short with FFmpeg...
-                </span>
-              ) : (
-                <span className="flex items-center gap-2">
-                  <Sparkles className="w-4 h-4" />
-                  Generate 9:16 Viral Short
-                </span>
-              )}
-            </Button>
-          </CardContent>
-        </Card>
-      )}
-
-      {/* Rendered Short Player & Download */}
-      {renderedClip && (
-        <Card className="border-emerald-500/30 bg-zinc-900/80 overflow-hidden shadow-2xl animate-in fade-in-0 duration-300">
-          <CardContent className="p-6 sm:p-8 space-y-6">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center text-emerald-400 shrink-0">
-                <CheckCircle2 className="w-5 h-5" />
-              </div>
-              <div>
-                <h3 className="font-semibold text-white text-base">Viral Short Ready!</h3>
-                <p className="text-xs text-zinc-400">
-                  9:16 Vertical MP4 • {formatDuration(renderedClip.duration)} • {formatFileSize(renderedClip.filesize)}
+            {ytPublishResult && (
+              <div className="p-4 rounded-xl bg-emerald-500/10 border border-emerald-500/30 space-y-2.5 animate-in fade-in-0 duration-200">
+                <div className="flex items-center gap-2 text-emerald-300 font-medium text-sm">
+                  <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+                  <span>🎉 Published to YouTube Shorts!</span>
+                </div>
+                <p className="text-xs text-zinc-300">
+                  Your short is live at:{" "}
+                  <a
+                    href={ytPublishResult.youtube_url}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="text-red-400 hover:underline font-medium inline-flex items-center gap-1"
+                  >
+                    {ytPublishResult.youtube_url}
+                    <ExternalLink className="w-3 h-3" />
+                  </a>
                 </p>
               </div>
-            </div>
-
-            {/* Vertical Video Player */}
-            <div className="flex justify-center">
-              <div className="w-64 sm:w-72 aspect-[9/16] rounded-2xl overflow-hidden bg-black border border-zinc-800 shadow-2xl">
-                <video
-                  src={renderedClip.download_url}
-                  controls
-                  autoPlay
-                  className="w-full h-full object-contain"
-                />
-              </div>
-            </div>
-
-            {/* Actions */}
-            <div className="flex flex-col sm:flex-row items-center gap-3 pt-2">
-              <Button variant="gradient" className="w-full sm:flex-1" asChild>
-                <a
-                  href={renderedClip.download_url}
-                  download={renderedClip.filename.endsWith(".mp4") ? renderedClip.filename : `${renderedClip.filename}.mp4`}
-                >
-                  <Download className="w-4 h-4 mr-2" />
-                  Download 9:16 Short (MP4)
-                </a>
-              </Button>
-              <Button
-                variant="outline"
-                onClick={handleOpenYouTubeModal}
-                className="w-full sm:w-auto border-red-500/50 text-red-400 hover:bg-red-500/10 hover:text-red-300 font-medium"
-              >
-                <Share2 className="w-4 h-4 mr-2" />
-                Post to YouTube Shorts
-              </Button>
-              <Button
-                variant="outline"
-                onClick={() => setRenderedClip(null)}
-                className="w-full sm:w-auto"
-              >
-                <RotateCcw className="w-4 h-4 mr-2" />
-                Customize Another
-              </Button>
-            </div>
-
-            {/* YouTube Shorts Direct Publisher Panel */}
-            {showYouTubeModal && (
-              <div className="border border-red-500/30 bg-red-950/20 rounded-2xl p-5 sm:p-6 space-y-5 animate-in fade-in-0 slide-in-from-top-2 duration-300">
-                <div className="flex items-center justify-between pb-3 border-b border-red-500/20">
-                  <div className="flex items-center gap-2.5">
-                    <div className="w-8 h-8 rounded-lg bg-red-600 flex items-center justify-center text-white shadow-lg shadow-red-600/30">
-                      <Play className="w-4 h-4 fill-white" />
-                    </div>
-                    <div>
-                      <h4 className="font-semibold text-white text-sm">Post to YouTube Shorts</h4>
-                      <p className="text-xs text-zinc-400">Directly publish your 9:16 viral clip to your YouTube channel</p>
-                    </div>
-                  </div>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => setShowYouTubeModal(false)}
-                    className="text-zinc-400 hover:text-white"
-                  >
-                    Close
-                  </Button>
-                </div>
-
-                {/* Channel Auth Status */}
-                <div className="rounded-xl bg-zinc-900/90 border border-zinc-800 p-4 space-y-3 text-xs">
-                  <div className="flex items-center justify-between">
-                    <span className="text-zinc-400 font-medium">Channel Status:</span>
-                    {ytAuthStatus?.connected ? (
-                      <div className="flex items-center gap-2">
-                        <Badge className="bg-emerald-500/20 text-emerald-300 border-emerald-500/30 flex items-center gap-1">
-                          <CheckCircle2 className="w-3 h-3" />
-                          Connected: {ytAuthStatus.channel_title || "My Channel"}
-                        </Badge>
-                        <button
-                          type="button"
-                          onClick={handleDisconnectYouTube}
-                          className="text-[11px] text-zinc-500 hover:text-red-400 underline"
-                        >
-                          Disconnect
-                        </button>
-                      </div>
-                    ) : (
-                      <Badge className="bg-amber-500/20 text-amber-300 border-amber-500/30">
-                        {ytAuthStatus?.configured ? "Not Connected" : "Credentials Required"}
-                      </Badge>
-                    )}
-                  </div>
-
-                  {!ytAuthStatus?.connected && (
-                    <div className="space-y-3 pt-1">
-                      {ytAuthStatus?.configured && ytAuthStatus?.auth_url ? (
-                        <Button
-                          size="sm"
-                          className="w-full bg-white hover:bg-zinc-100 text-zinc-900 font-semibold text-xs h-9 shadow-md flex items-center justify-center gap-2"
-                          asChild
-                        >
-                          <a href={ytAuthStatus.auth_url}>
-                            <svg className="w-4 h-4" viewBox="0 0 24 24">
-                              <path
-                                fill="#4285F4"
-                                d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
-                              />
-                              <path
-                                fill="#34A853"
-                                d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"
-                              />
-                              <path
-                                fill="#FBBC05"
-                                d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z"
-                              />
-                              <path
-                                fill="#EA4335"
-                                d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"
-                              />
-                            </svg>
-                            Sign In with Google & Authorize YouTube
-                          </a>
-                        </Button>
-                      ) : null}
-
-                      {/* Google Credentials Setup Section */}
-                      <div className="pt-1">
-                        <button
-                          type="button"
-                          onClick={() => setShowCredsConfig(!showCredsConfig)}
-                          className="flex items-center gap-1.5 text-[11px] text-zinc-400 hover:text-white transition-colors"
-                        >
-                          <Settings className="w-3 h-3" />
-                          <span>{showCredsConfig ? "Hide" : "Setup"} Google OAuth Credentials (Client ID & Secret)</span>
-                        </button>
-
-                        {showCredsConfig && (
-                          <div className="mt-2 p-3 rounded-lg bg-zinc-950 border border-zinc-800 space-y-2.5">
-                            <p className="text-[11px] text-zinc-400">
-                              Create free credentials in Google Cloud Console &rarr; OAuth 2.0 Client ID (Web Application) with redirect URI: <code className="text-zinc-300">http://localhost:3000/api/youtube/callback</code>
-                            </p>
-                            <input
-                              type="text"
-                              placeholder="Google Client ID (.apps.googleusercontent.com)"
-                              value={ytClientId}
-                              onChange={(e) => setYtClientId(e.target.value)}
-                              className="w-full bg-zinc-900 border border-zinc-800 rounded px-2.5 py-1.5 text-xs text-white placeholder-zinc-600 focus:outline-none focus:border-red-500/50"
-                            />
-                            <input
-                              type="password"
-                              placeholder="Google Client Secret"
-                              value={ytClientSecret}
-                              onChange={(e) => setYtClientSecret(e.target.value)}
-                              className="w-full bg-zinc-900 border border-zinc-800 rounded px-2.5 py-1.5 text-xs text-white placeholder-zinc-600 focus:outline-none focus:border-red-500/50"
-                            />
-                            <Button
-                              type="button"
-                              size="sm"
-                              disabled={isSavingCreds}
-                              onClick={handleSaveCredentials}
-                              className="w-full bg-zinc-800 hover:bg-zinc-700 text-white text-xs h-7"
-                            >
-                              {isSavingCreds ? "Saving..." : "Save & Generate Google Auth Link"}
-                            </Button>
-                          </div>
-                        )}
-                      </div>
-
-                      {/* Manual token fallback */}
-                      <div className="pt-1 space-y-1">
-                        <label className="text-[11px] text-zinc-400">
-                          Or paste Access Token manually (optional):
-                        </label>
-                        <input
-                          type="password"
-                          placeholder="ya29.a0AfH..."
-                          value={ytAccessToken}
-                          onChange={(e) => setYtAccessToken(e.target.value)}
-                          className="w-full bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-1.5 text-xs text-white placeholder-zinc-600 focus:outline-none focus:border-red-500/50"
-                        />
-                      </div>
-                    </div>
-                  )}
-                </div>
-
-                {/* Form fields */}
-                <form onSubmit={handlePublishToYouTube} className="space-y-4">
-                  <div className="space-y-1.5">
-                    <div className="flex items-center justify-between">
-                      <label className="text-xs font-medium text-zinc-300 flex items-center gap-1.5">
-                        <Sparkles className="w-3.5 h-3.5 text-amber-400" />
-                        <span>Short Title (from AI Best Hook)</span>
-                      </label>
-                      <span className="text-[11px] text-zinc-500">{ytTitle.length}/100</span>
-                    </div>
-                    <input
-                      type="text"
-                      value={ytTitle}
-                      onChange={(e) => setYtTitle(e.target.value)}
-                      maxLength={100}
-                      className="w-full bg-zinc-950 border border-zinc-800 rounded-lg px-3.5 py-2 text-sm text-white placeholder-zinc-500 focus:outline-none focus:border-red-500/50"
-                      placeholder="My Viral Short #Shorts"
-                      required
-                    />
-                    <div className="flex justify-between text-[11px] text-zinc-500">
-                      <span>Auto-filled from top viral hook with #Shorts tag</span>
-                    </div>
-                  </div>
-
-                  <div className="space-y-2">
-                    <div className="flex items-center justify-between">
-                      <label className="text-xs font-medium text-zinc-300">Description & Gaming Preset</label>
-                      <label className="flex items-center gap-1.5 text-xs text-zinc-400 cursor-pointer select-none">
-                        <input
-                          type="checkbox"
-                          checked={useDefaultDescription}
-                          onChange={(e) => setUseDefaultDescription(e.target.checked)}
-                          className="rounded border-zinc-700 bg-zinc-800 text-red-600 focus:ring-0 w-3.5 h-3.5"
-                        />
-                        <span>ViceVerse GTA 6 Preset</span>
-                      </label>
-                    </div>
-
-                    {useDefaultDescription ? (
-                      <div className="rounded-xl border border-red-500/30 bg-zinc-950/70 p-3.5 text-xs space-y-2 text-zinc-300">
-                        <div className="flex items-center justify-between">
-                          <span className="font-semibold text-emerald-400 flex items-center gap-1.5">
-                            <CheckCircle2 className="w-3.5 h-3.5" />
-                            GTA World: ViceVerse Preset Active
-                          </span>
-                          <button
-                            type="button"
-                            onClick={() => setUseDefaultDescription(false)}
-                            className="text-xs text-red-400 hover:text-red-300 underline font-medium"
-                          >
-                            Customize
-                          </button>
-                        </div>
-                        <p className="text-[11px] text-zinc-400 line-clamp-2">
-                          {ytDescription}
-                        </p>
-                        <div className="flex flex-wrap gap-1.5 text-[10px] text-zinc-400 pt-1">
-                          <span className="px-2 py-0.5 rounded bg-zinc-900 border border-zinc-800 text-zinc-300">🎮 Category: Gaming (Grand Theft Auto VI)</span>
-                          <span className="px-2 py-0.5 rounded bg-zinc-900 border border-zinc-800 text-zinc-300">🏷️ 33 Default GTA 6 Tags Attached</span>
-                        </div>
-                      </div>
-                    ) : (
-                      <textarea
-                        rows={3}
-                        value={ytDescription}
-                        onChange={(e) => setYtDescription(e.target.value)}
-                        className="w-full bg-zinc-950 border border-zinc-800 rounded-lg px-3.5 py-2 text-xs text-white placeholder-zinc-500 focus:outline-none focus:border-red-500/50 resize-none font-mono"
-                        placeholder="Add custom description and hashtags..."
-                      />
-                    )}
-                  </div>
-
-                  <div className="space-y-1.5">
-                    <label className="text-xs font-medium text-zinc-300">Privacy Status</label>
-                    <div className="grid grid-cols-3 gap-2">
-                      {(["public", "unlisted", "private"] as const).map((p) => (
-                        <button
-                          key={p}
-                          type="button"
-                          onClick={() => setYtPrivacy(p)}
-                          className={`px-3 py-2 rounded-lg text-xs font-medium capitalize border transition-all ${
-                            ytPrivacy === p
-                              ? "bg-red-600/20 border-red-500/60 text-red-300"
-                              : "bg-zinc-900 border-zinc-800 text-zinc-400 hover:border-zinc-700"
-                          }`}
-                        >
-                          {p === "public" ? "Public (Shorts)" : p}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-
-                  {/* Error Notification */}
-                  {ytError && (
-                    <div className="p-3 rounded-lg bg-red-500/10 border border-red-500/20 flex items-start gap-2.5 text-xs text-red-300">
-                      <AlertCircle className="w-4 h-4 shrink-0 text-red-400 mt-0.5" />
-                      <div>
-                        <p className="font-medium">Publishing Error</p>
-                        <p className="text-red-400/90">{ytError}</p>
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Success Result */}
-                  {ytPublishResult && (
-                    <div className="p-4 rounded-xl bg-emerald-500/10 border border-emerald-500/30 space-y-2.5 animate-in fade-in-0 duration-200">
-                      <div className="flex items-center gap-2 text-emerald-300 font-medium text-sm">
-                        <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
-                        <span>🎉 Published to YouTube Shorts!</span>
-                      </div>
-                      <p className="text-xs text-zinc-300">
-                        Your short is live at:{" "}
-                        <a
-                          href={ytPublishResult.youtube_url}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="text-red-400 hover:underline font-medium inline-flex items-center gap-1"
-                        >
-                          {ytPublishResult.youtube_url}
-                          <ExternalLink className="w-3 h-3" />
-                        </a>
-                      </p>
-                    </div>
-                  )}
-
-                  {/* Submit Button */}
-                  <div className="pt-2">
-                    <Button
-                      type="submit"
-                      disabled={isPublishingYt}
-                      className="w-full bg-red-600 hover:bg-red-500 text-white font-medium shadow-lg shadow-red-600/25"
-                    >
-                      {isPublishingYt ? (
-                        <>
-                          <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                          Publishing to YouTube Shorts...
-                        </>
-                      ) : (
-                        <>
-                          <Share2 className="w-4 h-4 mr-2" />
-                          Publish to YouTube Shorts Now
-                        </>
-                      )}
-                    </Button>
-                  </div>
-                </form>
-              </div>
             )}
-          </CardContent>
-        </Card>
-      )}
+
+            <div className="flex items-center justify-end gap-2 pt-2 border-t border-white/5">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => setShowYouTubeModal(false)}
+              >
+                Close
+              </Button>
+              <Button
+                type="submit"
+                variant="primary"
+                size="sm"
+                disabled={isPublishingYt}
+                className="bg-red-600 hover:bg-red-500 text-white font-bold"
+              >
+                {isPublishingYt ? (
+                  <>
+                    <Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" />
+                    Publishing...
+                  </>
+                ) : (
+                  <>
+                    <Share2 className="w-3.5 h-3.5 mr-1.5" />
+                    Publish to YouTube Shorts Now
+                  </>
+                )}
+              </Button>
+            </div>
+          </form>
+        </div>
+      </Modal>
     </div>
   );
 }

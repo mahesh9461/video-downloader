@@ -30,6 +30,7 @@ import {
   Lock,
   LogIn,
   UserCheck,
+  Lightbulb,
 } from "lucide-react";
 import { useSelector } from "react-redux";
 import { RootState } from "@/lib/store";
@@ -58,7 +59,7 @@ export function AutopilotDashboard({ onOpenAuth }: AutopilotDashboardProps = {})
   const [ytStatus, setYtStatus] = useState<YouTubeAuthStatus | null>(null);
   const [channels, setChannels] = useState<YouTubeChannelItem[]>([]);
   const [activeChannelId, setActiveChannelId] = useState<string | null>(null);
-  const [isLoading, setIsLoading] = useState(false);
+  const [_isLoading, setIsLoading] = useState(false);
   const [isActionLoading, setIsActionLoading] = useState(false);
   const [customAudioCount, setCustomAudioCount] = useState(0);
   const [customAudioTracks, setCustomAudioTracks] = useState<string[]>([]);
@@ -908,6 +909,10 @@ export function AutopilotDashboard({ onOpenAuth }: AutopilotDashboardProps = {})
             {/* Multi-Channel List & Target Selector */}
             {channels.length > 0 && (
               <div className="pt-3 border-t border-zinc-800/80 space-y-3">
+                <div className="p-3 rounded-xl bg-amber-500/10 border border-amber-500/20 text-xs text-amber-200 flex items-start gap-2">
+                  <Lightbulb className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
+                  <span><strong>Tip for Multiple Channels:</strong> On the Google screen, pick the other channel to connect a second one.</span>
+                </div>
                 <div className="flex items-center justify-between flex-wrap gap-2">
                   <div className="flex items-center gap-2">
                     <span className="text-xs font-semibold uppercase tracking-wider text-zinc-400">

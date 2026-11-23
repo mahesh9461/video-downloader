@@ -3,17 +3,20 @@ import { cva, type VariantProps } from "class-variance-authority";
 import { cn } from "@/lib/utils";
 
 const badgeVariants = cva(
-  "inline-flex items-center rounded-md border px-2.5 py-0.5 text-xs font-semibold transition-colors focus:outline-none focus:ring-2 focus:ring-zinc-400 focus:ring-offset-2",
+  "inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-semibold tracking-wide transition-colors focus:outline-none focus:ring-2 focus:ring-cyan-400 focus:ring-offset-2",
   {
     variants: {
       variant: {
-        default: "border-transparent bg-violet-600 text-white",
-        secondary: "border-transparent bg-zinc-700 text-zinc-200",
-        destructive: "border-transparent bg-red-600 text-white",
-        outline: "border-zinc-700 text-zinc-300",
-        youtube: "border-transparent bg-red-600/20 text-red-400",
-        tiktok: "border-transparent bg-cyan-600/20 text-cyan-400",
-        instagram: "border-transparent bg-pink-600/20 text-pink-400",
+        default: "border-transparent bg-cyan-500/20 text-cyan-300 border-cyan-500/30",
+        secondary: "border-transparent bg-zinc-800 text-zinc-200 border-zinc-700/80",
+        destructive: "border-transparent bg-rose-500/20 text-rose-300 border-rose-500/40",
+        outline: "border-zinc-700 text-zinc-200 bg-zinc-900/60",
+        active: "border-emerald-500/40 bg-emerald-500/20 text-emerald-300 font-bold",
+        success: "border-emerald-500/40 bg-emerald-500/20 text-emerald-300",
+        warning: "border-amber-500/40 bg-amber-500/20 text-amber-300",
+        youtube: "border-red-500/30 bg-red-500/15 text-red-300",
+        tiktok: "border-cyan-500/30 bg-cyan-500/15 text-cyan-300",
+        instagram: "border-pink-500/30 bg-pink-500/15 text-pink-300",
       },
     },
     defaultVariants: {
@@ -31,4 +34,3 @@ function Badge({ className, variant, ...props }: BadgeProps) {
 }
 
 export { Badge, badgeVariants };
-

@@ -1,13 +1,12 @@
 "use client";
 
-import { useState, useRef, useEffect, useCallback } from "react";
+import { useState, useRef, useCallback } from "react";
 import { Search, Clipboard, Loader2, X, ArrowRight } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { detectPlatform, isValidUrl } from "@/lib/validators";
 import { cn } from "@/lib/utils";
-import { Platform } from "@/lib/types";
 
 interface UrlInputProps {
   onSubmit: (url: string) => void;
@@ -49,7 +48,7 @@ export function UrlInput({ onSubmit, isLoading, disabled }: UrlInputProps) {
         onSubmit(text.trim());
       }
     } catch {
-      // Clipboard access denied
+      // Clipboard access denied or not allowed
     }
   }, [onSubmit]);
 
@@ -64,16 +63,16 @@ export function UrlInput({ onSubmit, isLoading, disabled }: UrlInputProps) {
         className={cn(
           "relative flex items-center gap-2 p-2 rounded-2xl border transition-all duration-300",
           isFocused
-            ? "border-violet-500/50 bg-zinc-900/80 shadow-lg shadow-violet-500/5 ring-1 ring-violet-500/20"
-            : "border-zinc-800 bg-zinc-900/50",
+            ? "border-cyan-500/60 bg-[#12151f] shadow-lg shadow-cyan-500/10 ring-2 ring-cyan-500/30"
+            : "border-white/10 bg-[#10121a]/90 hover:border-zinc-700",
           disabled && "opacity-50 pointer-events-none"
         )}
       >
         <div className="flex items-center pl-3">
           {isLoading ? (
-            <Loader2 className="w-5 h-5 text-violet-400 animate-spin" />
+            <Loader2 className="w-5 h-5 text-cyan-400 animate-spin" />
           ) : (
-            <Search className="w-5 h-5 text-zinc-500" />
+            <Search className="w-5 h-5 text-zinc-400" />
           )}
         </div>
 
@@ -84,7 +83,8 @@ export function UrlInput({ onSubmit, isLoading, disabled }: UrlInputProps) {
           onFocus={() => setIsFocused(true)}
           onBlur={() => setIsFocused(false)}
           placeholder="Paste a YouTube or TikTok URL..."
-          className="border-0 bg-transparent focus-visible:ring-0 h-12 text-base placeholder:text-zinc-600"
+          aria-label="Paste video URL"
+          className="border-0 bg-transparent focus-visible:ring-0 h-12 text-base placeholder:text-zinc-400 text-white font-medium"
           disabled={isLoading || disabled}
           autoComplete="off"
           spellCheck={false}
@@ -92,7 +92,16 @@ export function UrlInput({ onSubmit, isLoading, disabled }: UrlInputProps) {
 
         <div className="flex items-center gap-2 pr-1">
           {platform && (
-            <Badge variant={platform === "youtube" ? "youtube" : platform === "instagram" ? "instagram" : "tiktok"}>
+            <Badge
+              variant={
+                platform === "youtube"
+                  ? "youtube"
+                  : platform === "instagram"
+                  ? "instagram"
+                  : "tiktok"
+              }
+              className="hidden sm:inline-flex"
+            >
               {platform === "youtube" ? "YouTube" : platform === "instagram" ? "Instagram" : "TikTok"}
             </Badge>
           )}
@@ -103,7 +112,8 @@ export function UrlInput({ onSubmit, isLoading, disabled }: UrlInputProps) {
               variant="ghost"
               size="icon"
               onClick={handleClear}
-              className="h-8 w-8 text-zinc-500 hover:text-zinc-300"
+              aria-label="Clear video URL input"
+              className="h-9 w-9 text-zinc-400 hover:text-white"
             >
               <X className="w-4 h-4" />
             </Button>
@@ -115,32 +125,33 @@ export function UrlInput({ onSubmit, isLoading, disabled }: UrlInputProps) {
             size="sm"
             onClick={handlePaste}
             disabled={isLoading}
-            className="text-zinc-400 hover:text-white gap-1.5"
+            aria-label="Paste from clipboard"
+            className="text-zinc-300 hover:text-white gap-1.5 min-h-[40px]"
           >
             <Clipboard className="w-3.5 h-3.5" />
-            <span className="hidden sm:inline">Paste</span>
+            <span className="hidden sm:inline font-semibold">Paste</span>
           </Button>
 
           <Button
             type="submit"
-            variant="gradient"
+            variant="primary"
             size="icon"
             disabled={!isValidUrl(url) || isLoading}
-            className="h-10 w-10 rounded-xl"
+            aria-label="Submit video URL to download"
+            className="h-10 w-10 rounded-xl bg-cyan-500 text-zinc-950 font-bold hover:bg-cyan-400 shadow-md shadow-cyan-500/20"
           >
             {isLoading ? (
               <Loader2 className="w-4 h-4 animate-spin" />
             ) : (
-              <ArrowRight className="w-4 h-4" />
+              <ArrowRight className="w-4 h-4 stroke-[2.5]" />
             )}
           </Button>
         </div>
       </div>
 
-      <p className="text-xs text-zinc-600 mt-2 text-center">
-        Supports YouTube videos, Shorts, and TikTok videos
+      <p className="text-xs text-zinc-400 mt-2 text-center font-medium">
+        Supports high-speed 4K & 1080p downloads, TikTok watermark removal, and MP3 audio.
       </p>
     </form>
   );
 }
-
