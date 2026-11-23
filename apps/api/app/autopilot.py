@@ -516,11 +516,33 @@ class AutopilotManager:
             self._save_state()
 
             # Step 3: Sequential Low-CPU Rendering of the 6 Clips
+            # Load user global settings if present to respect text overlay, audio mix, and cover image settings
+            global_settings = None
+            try:
+                from app.main import GLOBAL_SETTINGS_FILE
+                from app.schemas import GlobalSettings
+                if os.path.exists(GLOBAL_SETTINGS_FILE):
+                    with open(GLOBAL_SETTINGS_FILE, "r", encoding="utf-8") as f:
+                        global_settings = GlobalSettings(**json.load(f))
+            except Exception as e:
+                logger.debug("Failed reading global settings: %s", e)
+
             for idx, cand in enumerate(clip_candidates[:6]):
                 clip_index = idx + 1
                 clip = self.current_batch.clips[idx]
                 profile = STYLE_PROFILES[idx % len(STYLE_PROFILES)]
-                audio_choice = custom_audio_list[idx % len(custom_audio_list)] if custom_audio_list else PROCEDURAL_MUSIC_FALLBACKS[idx % len(PROCEDURAL_MUSIC_FALLBACKS)]
+                
+                # Check global audio mix setting
+                if global_settings and hasattr(global_settings, "audio_mix") and global_settings.audio_mix:
+                    if global_settings.audio_mix.background_music == "none":
+                        audio_choice = "none"
+                        music_vol = 0.0
+                    else:
+                        audio_choice = global_settings.audio_mix.background_music or "vice_city_synth"
+                        music_vol = global_settings.audio_mix.music_volume if global_settings.audio_mix.music_volume is not None else 0.12
+                else:
+                    audio_choice = custom_audio_list[idx % len(custom_audio_list)] if custom_audio_list else PROCEDURAL_MUSIC_FALLBACKS[idx % len(PROCEDURAL_MUSIC_FALLBACKS)]
+                    music_vol = 0.12
                 self.active_clip_id = clip.id
 
                 # Substep 1: Hook Creation ("that ok we have created the hook. this the hook")
@@ -533,24 +555,38 @@ class AutopilotManager:
                 except Exception:
                     pass
 
-                clip.hook_title = final_hook
+                # Check global text overlay setting
+                text_overlay_enabled = True
+                if global_settings and hasattr(global_settings, "text_overlay") and global_settings.text_overlay:
+                    text_overlay_enabled = global_settings.text_overlay.enabled
+
+                if not text_overlay_enabled:
+                    render_hook_title = ""
+                    render_hook_style = "none"
+                    clip.hook_title = ""
+                    clip.hook_style = "none"
+                else:
+                    render_hook_title = final_hook
+                    render_hook_style = (global_settings and global_settings.text_overlay and global_settings.text_overlay.hook_style) or profile["hook_style"]
+                    clip.hook_title = final_hook
+                    clip.hook_style = render_hook_style
+
                 clip.current_step = "hook_created"
-                clip.step_description = f"Hook created: '{final_hook}'"
+                clip.step_description = f"Hook created: '{clip.hook_title}'" if text_overlay_enabled else "Hook overlay disabled by global settings"
                 self.current_step = "hook_created"
-                self.current_step_label = f"Short #{clip_index}: Created viral hook '{final_hook}'"
-                self._log(f"🎣 Hook created for Short #{clip_index}: '{final_hook}'")
+                self.current_step_label = f"Short #{clip_index}: Created viral hook '{clip.hook_title}'" if text_overlay_enabled else f"Short #{clip_index}: Hook overlay off"
+                self._log(f"🎣 Hook for Short #{clip_index}: '{clip.hook_title}' (overlay_enabled={text_overlay_enabled})")
                 self._save_state()
 
                 # Substep 2: Text Styling & Song ("now this is the text thing song")
                 clip.current_step = "styling"
                 clip.background_music = audio_choice
-                clip.hook_style = profile["hook_style"]
                 clip.progress_bar_color = profile["progress_bar_color"]
-                clip.layout = profile["layout"]
-                clip.step_description = f"Overlay: {profile['hook_style']} ({profile['progress_bar_color']} bar) • Song: {audio_choice}"
+                clip.layout = (global_settings and global_settings.layout) or profile["layout"]
+                clip.step_description = f"Overlay: {clip.hook_style} ({profile['progress_bar_color']} bar) • Song: {audio_choice}"
                 self.current_step = "styling"
-                self.current_step_label = f"Short #{clip_index}: Styled text ({profile['hook_style']}) & song ({audio_choice})"
-                self._log(f"🎵 Text & Song set for Short #{clip_index}: {profile['hook_style']} | {audio_choice}")
+                self.current_step_label = f"Short #{clip_index}: Styled text ({clip.hook_style}) & song ({audio_choice})"
+                self._log(f"🎵 Text & Song set for Short #{clip_index}: {clip.hook_style} | {audio_choice}")
                 self._save_state()
 
                 # Substep 3: Low-CPU Video Rendering
@@ -561,22 +597,25 @@ class AutopilotManager:
                 clip.step_description = f"Rendering 9:16 vertical video with low CPU mode..."
                 self.current_step = "rendering"
                 self.current_step_label = f"Rendering Short #{clip_index}/6 (threads=2)..."
-                self._log(f"🎬 Rendering Short {clip_index}/6 (threads=2): '{final_hook}'")
+                self._log(f"🎬 Rendering Short {clip_index}/6 (threads=2): hook='{render_hook_title}' style='{render_hook_style}'")
                 self._save_state()
 
-                def _render(c=cand, h=final_hook, p=profile, a=audio_choice, out=output_path):
+                render_layout = clip.layout
+                render_pb_color = clip.progress_bar_color
+
+                def _render(c=cand, h=render_hook_title, s=render_hook_style, ly=render_layout, a=audio_choice, mv=music_vol, pb_col=render_pb_color, out=output_path):
                     return render_viral_clip(
                         input_path=source_path,
                         output_path=out,
                         start_time=c.start_time,
                         end_time=c.end_time,
-                        layout=p["layout"],
+                        layout=ly,
                         hook_title=h,
-                        hook_style=p["hook_style"],
+                        hook_style=s,
                         background_music=a,
-                        music_volume=0.12,
+                        music_volume=mv,
                         progress_bar=True,
-                        progress_bar_color=p["progress_bar_color"],
+                        progress_bar_color=pb_col,
                         threads=2,
                     )
 
@@ -587,41 +626,49 @@ class AutopilotManager:
                 clip.preview_url = f"/api/file/{output_filename}"
                 clip.download_url = f"/api/file/{output_filename}"
 
-                # Generate Full HD 1080x1920 viral cover image
-                cover_filename = f"gta6_cover_{batch_id}_{clip_index}.jpg"
-                cover_output_path = str(DOWNLOAD_DIR / cover_filename)
-                try:
-                    from app.cover_generator import generate_viral_cover_image, attach_cover_intro_to_video
-                    await asyncio.to_thread(
-                        generate_viral_cover_image,
-                        video_path=output_path,
-                        output_path=cover_output_path,
-                        hook_title=final_hook,
-                        hook_style=profile["hook_style"],
-                        badge_text="GTA 6 EXCLUSIVE",
-                        template_index=idx,
-                        use_gta_template=True,
-                    )
-                    if os.path.exists(cover_output_path):
-                        clip.cover_filename = cover_filename
-                        clip.cover_url = f"/api/file/{cover_filename}"
-                        self._log(f"🖼️ Generated Full HD viral cover for Short #{clip_index}: {cover_filename}")
+                # Check global cover image setting
+                cover_enabled = True
+                if global_settings and hasattr(global_settings, "cover_image") and global_settings.cover_image:
+                    cover_enabled = global_settings.cover_image.enabled
 
-                        # Concat / slap the cover image onto the video as the opening frame (0.35s)
-                        # so YouTube Shorts automatically uses this cover image on mobile feeds & Shorts player
-                        merged_temp_path = str(DOWNLOAD_DIR / f"merged_{output_filename}")
-                        merged_ok = await asyncio.to_thread(
-                            attach_cover_intro_to_video,
+                if cover_enabled:
+                    # Generate Full HD 1080x1920 viral cover image
+                    cover_filename = f"gta6_cover_{batch_id}_{clip_index}.jpg"
+                    cover_output_path = str(DOWNLOAD_DIR / cover_filename)
+                    try:
+                        from app.cover_generator import generate_viral_cover_image, attach_cover_intro_to_video
+                        await asyncio.to_thread(
+                            generate_viral_cover_image,
                             video_path=output_path,
-                            cover_path=cover_output_path,
-                            output_path=merged_temp_path,
-                            duration=0.35,
+                            output_path=cover_output_path,
+                            hook_title=final_hook,
+                            hook_style=profile["hook_style"],
+                            badge_text="GTA 6 EXCLUSIVE",
+                            template_index=idx,
+                            use_gta_template=True,
                         )
-                        if merged_ok and os.path.exists(merged_temp_path) and os.path.getsize(merged_temp_path) > 0:
-                            os.replace(merged_temp_path, output_path)
-                            self._log(f"🎯 Concat slapped cover as opening frame on Short #{clip_index}")
-                except Exception as cover_err:
-                    logger.debug("Cover image generation skipped: %s", cover_err)
+                        if os.path.exists(cover_output_path):
+                            clip.cover_filename = cover_filename
+                            clip.cover_url = f"/api/file/{cover_filename}"
+                            self._log(f"🖼️ Generated Full HD viral cover for Short #{clip_index}: {cover_filename}")
+
+                            # Concat / slap the cover image onto the video as the opening frame (0.35s)
+                            # so YouTube Shorts automatically uses this cover image on mobile feeds & Shorts player
+                            merged_temp_path = str(DOWNLOAD_DIR / f"merged_{output_filename}")
+                            merged_ok = await asyncio.to_thread(
+                                attach_cover_intro_to_video,
+                                video_path=output_path,
+                                cover_path=cover_output_path,
+                                output_path=merged_temp_path,
+                                duration=0.35,
+                            )
+                            if merged_ok and os.path.exists(merged_temp_path) and os.path.getsize(merged_temp_path) > 0:
+                                os.replace(merged_temp_path, output_path)
+                                self._log(f"🎯 Concat slapped cover as opening frame on Short #{clip_index}")
+                    except Exception as cover_err:
+                        logger.debug("Cover image generation skipped: %s", cover_err)
+                else:
+                    self._log(f"⏭️ Cover thumbnail generation skipped for Short #{clip_index} (disabled in global settings)")
 
                 clip.status = "preview_ready"
                 clip.current_step = "preview_ready"

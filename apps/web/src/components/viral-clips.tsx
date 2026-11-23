@@ -84,6 +84,7 @@ export function ViralClips() {
   const [layout, setLayout] = useState<string>("center_crop");
   const [hookTitle, setHookTitle] = useState<string>("");
   const [hookStyle, setHookStyle] = useState<string>("none");
+  const [textOverlayEnabled, setTextOverlayEnabled] = useState<boolean>(true);
   const [backgroundMusic, setBackgroundMusic] = useState<string>("none");
   const [musicVolume, setMusicVolume] = useState<number>(0.12);
   const [progressBar, setProgressBar] = useState<boolean>(true);
@@ -219,7 +220,15 @@ export function ViralClips() {
     if (typeof newSettings.progress_bar === "boolean") setProgressBar(newSettings.progress_bar);
     if (newSettings.progress_bar_color) setProgressBarColor(newSettings.progress_bar_color);
     if (newSettings.default_privacy) setYtPrivacy(newSettings.default_privacy);
-    if (newSettings.text_overlay?.default_hook) setHookTitle(newSettings.text_overlay.default_hook);
+    if (typeof newSettings.text_overlay?.enabled === "boolean") {
+      setTextOverlayEnabled(newSettings.text_overlay.enabled);
+      if (!newSettings.text_overlay.enabled) {
+        setHookTitle("");
+      }
+    }
+    if (newSettings.text_overlay?.default_hook && newSettings.text_overlay?.enabled !== false) {
+      setHookTitle(newSettings.text_overlay.default_hook);
+    }
     if (typeof newSettings.text_overlay?.burn_captions === "boolean") setBurnCaptions(newSettings.text_overlay.burn_captions);
     if (newSettings.text_overlay?.caption_style) setCaptionStyle(newSettings.text_overlay.caption_style);
   }, []);
@@ -275,10 +284,13 @@ export function ViralClips() {
 
       if (res.clips.length > 0) {
         setSelectedClip(res.clips[0]);
-        if (res.clips[0]?.hook_title) {
+        if (textOverlayEnabled && res.clips[0]?.hook_title) {
           setHookTitle(res.clips[0].hook_title);
           setYtTitle(`${res.clips[0].hook_title} #Shorts`.substring(0, 100));
         } else {
+          if (!textOverlayEnabled) {
+            setHookTitle("");
+          }
           setYtTitle(`${res.title || "Viral Short"} #Shorts`.substring(0, 100));
         }
         setCurrentStep(2); // Advance to Edit Details
@@ -302,13 +314,16 @@ export function ViralClips() {
     setRenderProgress(50);
 
     try {
+      const effectiveHookTitle = textOverlayEnabled ? hookTitle.trim() : "";
+      const effectiveHookStyle = textOverlayEnabled && effectiveHookTitle ? (hookStyle !== "none" ? hookStyle : "viral_yellow") : "none";
+
       const res = await apiClient.renderClip({
         url: url.trim(),
         start_time: clip.start_time,
         end_time: clip.end_time,
         layout,
-        hook_title: hookTitle.trim(),
-        hook_style: hookTitle.trim() ? "viral_yellow" : "none",
+        hook_title: effectiveHookTitle,
+        hook_style: effectiveHookStyle,
         background_music: backgroundMusic,
         music_volume: musicVolume,
         progress_bar: progressBar,

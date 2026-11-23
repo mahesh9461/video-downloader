@@ -1,10 +1,10 @@
 {
-  "user_id": "usr_046f541938db",
+  "user_id": "default",
   "layout": "blurred_background",
   "progress_bar": true,
   "progress_bar_color": "cyan",
   "text_overlay": {
-    "enabled": false,
+    "enabled": true,
     "hook_style": "neon_cyan",
     "default_hook": "DON'T MISS THIS MOMENT!",
     "burn_captions": true,
@@ -29,5 +29,5 @@
     "Shorts"
   ],
   "active_channel_id": null,
-  "updated_at": "2026-11-23T09:07:43.443235+00:00"
+  "updated_at": "2026-11-23T09:40:30.540537+00:00"
 }
