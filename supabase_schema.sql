@@ -158,5 +158,9 @@ create policy "Allow all operations for service and anon on download_history"
 create policy "Allow all operations for service and anon on user_global_settings"
     on public.user_global_settings for all using (true) with check (true);
 
+-- Grant table privileges to anon and authenticated roles for REST access
+grant all on public.user_global_settings to anon, authenticated, service_role;
+grant all on all tables in schema public to anon, authenticated, service_role;
+
 -- Enable Realtime on autopilot_clips so Next.js UI gets instant WebSocket notifications
 alter publication supabase_realtime add table public.autopilot_clips;
