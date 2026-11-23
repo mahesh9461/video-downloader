@@ -1,4 +1,5 @@
 import asyncio
+import json
 import os
 import time
 import uuid
@@ -54,6 +55,7 @@ from app.schemas import (
     SelectChannelRequest,
     HistoryItemSchema,
     HistoryListResponse,
+    GlobalSettings,
 )
 from app.autopilot import autopilot_manager
 from app.ai_hook import generate_ai_hook
@@ -1612,5 +1614,87 @@ async def autopilot_audio_endpoint():
     """List available custom audio tracks in assets/audio/."""
     files = autopilot_manager.get_custom_audio_files()
     return {"custom_tracks": files, "count": len(files)}
+
+
+# ---------------------------------------------------------------------------
+# Global Settings Endpoints
+# ---------------------------------------------------------------------------
+
+GLOBAL_SETTINGS_FILE = os.path.join(os.path.dirname(__file__), "..", "data", "global_settings.json")
+
+
+@app.get("/api/settings/global", response_model=GlobalSettings)
+async def get_global_settings_endpoint(authorization: Optional[str] = Header(None)):
+    """Retrieve global user customization settings (Supabase with local JSON fallback)."""
+    user_id = "default"
+    if authorization:
+        try:
+            from app.auth import get_user_by_token
+            u = await get_user_by_token(authorization.replace("Bearer ", "").strip())
+            if u:
+                user_id = u.id
+        except Exception:
+            pass
+
+    # Try Supabase if configured
+    try:
+        from app.supabase_client import get_global_settings_supabase, is_supabase_configured
+        if is_supabase_configured():
+            cloud_settings = await get_global_settings_supabase(user_id=user_id)
+            if cloud_settings:
+                return GlobalSettings(**cloud_settings)
+    except Exception as e:
+        logger.debug("Failed reading settings from Supabase: %s", e)
+
+    # Local file fallback
+    try:
+        if os.path.exists(GLOBAL_SETTINGS_FILE):
+            with open(GLOBAL_SETTINGS_FILE, "r", encoding="utf-8") as f:
+                data = json.load(f)
+                return GlobalSettings(**data)
+    except Exception as e:
+        logger.debug("Failed reading local settings file: %s", e)
+
+    return GlobalSettings(user_id=user_id)
+
+
+@app.post("/api/settings/global", response_model=GlobalSettings)
+async def update_global_settings_endpoint(
+    settings: GlobalSettings,
+    authorization: Optional[str] = Header(None),
+):
+    """Save or update global customization settings (persists to Supabase and local JSON fallback)."""
+    user_id = settings.user_id or "default"
+    if authorization:
+        try:
+            from app.auth import get_user_by_token
+            u = await get_user_by_token(authorization.replace("Bearer ", "").strip())
+            if u:
+                user_id = u.id
+                settings.user_id = user_id
+        except Exception:
+            pass
+
+    settings.updated_at = datetime.now(timezone.utc).isoformat()
+    settings_dict = settings.model_dump()
+
+    # Save to local fallback file
+    try:
+        os.makedirs(os.path.dirname(GLOBAL_SETTINGS_FILE), exist_ok=True)
+        with open(GLOBAL_SETTINGS_FILE, "w", encoding="utf-8") as f:
+            json.dump(settings_dict, f, indent=2)
+    except Exception as e:
+        logger.warning("Failed writing local settings file: %s", e)
+
+    # Sync to Supabase in background / async if configured
+    try:
+        from app.supabase_client import save_global_settings_supabase, is_supabase_configured
+        if is_supabase_configured():
+            asyncio.create_task(save_global_settings_supabase(settings_dict, user_id=user_id))
+    except Exception as e:
+        logger.debug("Failed syncing settings to Supabase: %s", e)
+
+    return settings
+
 
 

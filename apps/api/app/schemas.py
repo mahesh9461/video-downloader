@@ -383,5 +383,46 @@ class AutopilotStatus(BaseModel):
     user: Optional[UserProfile] = None
 
 
+# ---------------------------------------------------------------------------
+# Global Customization & Settings Schemas
+# ---------------------------------------------------------------------------
+
+class TextOverlaySettings(BaseModel):
+    enabled: bool = Field(True, description="Whether to display overlay text banner")
+    hook_style: str = Field("viral_yellow", description="Style preset: viral_yellow, neon_cyan, red_bold, clean_white, none")
+    default_hook: str = Field("WAIT FOR THE END!", description="Default hook headline text")
+    burn_captions: bool = Field(False, description="Burn dynamic subtitle captions into video")
+    caption_style: str = Field("viral_yellow", description="Caption font style preset")
+    position: str = Field("top", description="Position of hook headline: top, center, bottom")
+
+
+class AudioMixSettings(BaseModel):
+    background_music: str = Field("none", description="Background music preset: none, vice_city_synth, trap_beat, suspense_lofi")
+    music_volume: float = Field(0.15, ge=0.0, le=1.0, description="Music volume level relative to video speech (0.0 to 1.0)")
+    original_audio_volume: float = Field(1.0, ge=0.0, le=2.0, description="Original speech audio volume multiplier")
+    ducking_enabled: bool = Field(True, description="Lower background music when speech is detected")
+
+
+class CoverImageSettings(BaseModel):
+    enabled: bool = Field(True, description="Slap a 1-second viral cover thumbnail as opening frame")
+    theme: str = Field("gta_action", description="Cover theme preset: gta_action, neon_glow, bold_text, clean_minimal")
+    headline: str = Field("WAIT FOR WHAT HAPPENS NEXT...", description="Default cover text headline")
+
+
+class GlobalSettings(BaseModel):
+    user_id: Optional[str] = Field("default", description="Associated user ID or 'default'")
+    layout: str = Field("center_crop", description="Default 9:16 vertical layout: center_crop, blurred_background, stacked")
+    progress_bar: bool = Field(True, description="Include kinetic progress bar at bottom of Short")
+    progress_bar_color: str = Field("yellow", description="Progress bar color: yellow, cyan, pink, red, green")
+    text_overlay: TextOverlaySettings = Field(default_factory=TextOverlaySettings)
+    audio_mix: AudioMixSettings = Field(default_factory=AudioMixSettings)
+    cover_image: CoverImageSettings = Field(default_factory=CoverImageSettings)
+    default_privacy: str = Field("public", description="Default YouTube upload privacy: public, unlisted, private")
+    default_tags: List[str] = Field(default_factory=lambda: ["Shorts", "Viral", "Trending"])
+    active_channel_id: Optional[str] = None
+    updated_at: Optional[str] = None
+
+
+
 
 

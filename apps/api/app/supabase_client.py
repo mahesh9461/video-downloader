@@ -350,3 +350,50 @@ async def get_download_history_supabase(user_id: Optional[str] = None, limit: in
         logger.debug("Supabase download history fetch skipped: %s", e)
     return []
 
+
+# ---------------------------------------------------------------------------
+# 6. Global Customization Settings in Supabase
+# ---------------------------------------------------------------------------
+
+async def save_global_settings_supabase(settings_dict: Dict[str, Any], user_id: str = "default") -> bool:
+    """Saves or updates global customization settings in Supabase."""
+    if not is_supabase_configured():
+        return False
+
+    endpoint = f"{get_supabase_url()}/rest/v1/user_global_settings"
+    headers = _get_headers()
+    headers["Prefer"] = "resolution=merge-duplicates"
+
+    payload = {
+        "user_id": user_id,
+        "settings": settings_dict,
+        "updated_at": datetime.now(timezone.utc).isoformat(),
+    }
+
+    try:
+        async with httpx.AsyncClient(timeout=8.0) as client:
+            resp = await client.post(endpoint, headers=headers, json=payload)
+            return resp.status_code in (200, 201)
+    except Exception as e:
+        logger.debug("Supabase global settings save skipped: %s", e)
+    return False
+
+
+async def get_global_settings_supabase(user_id: str = "default") -> Optional[Dict[str, Any]]:
+    """Retrieves global customization settings from Supabase."""
+    if not is_supabase_configured():
+        return None
+
+    url = f"{get_supabase_url()}/rest/v1/user_global_settings?user_id=eq.{user_id}&select=settings"
+    try:
+        async with httpx.AsyncClient(timeout=8.0) as client:
+            resp = await client.get(url, headers=_get_headers())
+            if resp.status_code == 200:
+                rows = resp.json()
+                if rows and len(rows) > 0 and "settings" in rows[0]:
+                    return rows[0]["settings"]
+    except Exception as e:
+        logger.debug("Supabase global settings fetch skipped: %s", e)
+    return None
+
+

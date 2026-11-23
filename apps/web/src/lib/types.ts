@@ -279,5 +279,42 @@ export interface AutopilotStatus {
   user?: UserProfile | null;
 }
 
+export interface TextOverlaySettings {
+  enabled: boolean;
+  hook_style: string;
+  default_hook: string;
+  burn_captions: boolean;
+  caption_style: string;
+  position: string;
+}
+
+export interface AudioMixSettings {
+  background_music: string;
+  music_volume: number;
+  original_audio_volume: number;
+  ducking_enabled: boolean;
+}
+
+export interface CoverImageSettings {
+  enabled: boolean;
+  theme: string;
+  headline: string;
+}
+
+export interface GlobalSettings {
+  user_id?: string;
+  layout: string;
+  progress_bar: boolean;
+  progress_bar_color: string;
+  text_overlay: TextOverlaySettings;
+  audio_mix: AudioMixSettings;
+  cover_image: CoverImageSettings;
+  default_privacy: "public" | "unlisted" | "private";
+  default_tags: string[];
+  active_channel_id?: string | null;
+  updated_at?: string;
+}
+
+
 
 

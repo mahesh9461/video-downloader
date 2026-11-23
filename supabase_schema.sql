@@ -114,6 +114,13 @@ alter table public.download_history add column if not exists user_id text;
 create index if not exists idx_download_history_downloaded_at on public.download_history(downloaded_at desc);
 create index if not exists idx_download_history_user_id on public.download_history(user_id);
 
+-- 8. Global Customization Settings (Text Overlay, Audio Mix, Cover Slap, Defaults)
+create table if not exists public.user_global_settings (
+    user_id text primary key default 'default',
+    settings jsonb not null default '{}'::jsonb,
+    updated_at timestamptz default now()
+);
+
 -- ==============================================================================
 -- Row Level Security (RLS) & Policies
 -- ==============================================================================
@@ -124,6 +131,7 @@ alter table public.autopilot_batches enable row level security;
 alter table public.autopilot_clips enable row level security;
 alter table public.custom_audio_library enable row level security;
 alter table public.download_history enable row level security;
+alter table public.user_global_settings enable row level security;
 
 -- Open policies for service and anon keys (single tenant / creator app)
 create policy "Allow all operations for service and anon on user_youtube_tokens"
@@ -146,6 +154,9 @@ create policy "Allow all operations for service and anon on custom_audio_library
 
 create policy "Allow all operations for service and anon on download_history"
     on public.download_history for all using (true) with check (true);
+
+create policy "Allow all operations for service and anon on user_global_settings"
+    on public.user_global_settings for all using (true) with check (true);
 
 -- Enable Realtime on autopilot_clips so Next.js UI gets instant WebSocket notifications
 alter publication supabase_realtime add table public.autopilot_clips;

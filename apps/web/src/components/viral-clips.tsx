@@ -43,6 +43,7 @@ import { Modal } from "@/components/ui/modal";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { ShortPreviewCard } from "@/components/short-preview-card";
 import { ChannelManagerModal } from "@/components/channel-manager-modal";
+import { GlobalSettingsPanel } from "@/components/global-settings-panel";
 import { apiClient } from "@/lib/api";
 import {
   ClipCandidate,
@@ -50,6 +51,7 @@ import {
   YouTubeAuthStatus,
   YouTubePublishResponse,
   YouTubeChannelItem,
+  GlobalSettings,
 } from "@/lib/types";
 import { formatDuration, formatFileSize } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
@@ -209,6 +211,18 @@ export function ViralClips() {
       } catch {}
     }
   };
+
+  const handleGlobalSettingsChange = useCallback((newSettings: GlobalSettings) => {
+    if (newSettings.layout) setLayout(newSettings.layout);
+    if (newSettings.audio_mix?.background_music) setBackgroundMusic(newSettings.audio_mix.background_music);
+    if (typeof newSettings.audio_mix?.music_volume === "number") setMusicVolume(newSettings.audio_mix.music_volume);
+    if (typeof newSettings.progress_bar === "boolean") setProgressBar(newSettings.progress_bar);
+    if (newSettings.progress_bar_color) setProgressBarColor(newSettings.progress_bar_color);
+    if (newSettings.default_privacy) setYtPrivacy(newSettings.default_privacy);
+    if (newSettings.text_overlay?.default_hook) setHookTitle(newSettings.text_overlay.default_hook);
+    if (typeof newSettings.text_overlay?.burn_captions === "boolean") setBurnCaptions(newSettings.text_overlay.burn_captions);
+    if (newSettings.text_overlay?.caption_style) setCaptionStyle(newSettings.text_overlay.caption_style);
+  }, []);
 
   const validateVideoUrl = (inputUrl: string): string | null => {
     try {
@@ -529,6 +543,9 @@ export function ViralClips() {
               )}
             </form>
           </Card>
+
+          {/* Global Customization Settings Panel under URL Input */}
+          <GlobalSettingsPanel onSettingsChange={handleGlobalSettingsChange} />
 
           {/* Discovered Clips Grid */}
           {clips.length > 0 ? (

@@ -15,6 +15,7 @@ import {
   ArrowRight,
 } from "lucide-react";
 import { UrlInput } from "@/components/url-input";
+import { GlobalSettingsPanel } from "@/components/global-settings-panel";
 import { VideoPreview } from "@/components/video-preview";
 import { DownloadOptions } from "@/components/download-options";
 import { ProgressBar } from "@/components/progress-bar";
@@ -139,13 +140,14 @@ export default function Home() {
         </div>
       </section>
 
-      {/* URL Input Bar */}
-      <section className="w-full max-w-2xl relative">
+      {/* URL Input Bar & Global Customization Settings */}
+      <section className="w-full max-w-2xl relative space-y-3">
         <UrlInput
           onSubmit={handleUrlSubmit}
           isLoading={isLoadingMetadata}
           disabled={isDownloading}
         />
+        <GlobalSettingsPanel />
       </section>
 
       {/* Content Area (Preview / Options / Progress / Error) */}

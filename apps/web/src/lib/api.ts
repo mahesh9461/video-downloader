@@ -19,6 +19,7 @@ import {
   YouTubeChannelItem,
   YouTubeChannelsResponse,
   HistoryItem,
+  GlobalSettings,
 } from "./types";
 
 const getApiBase = () => {
@@ -626,6 +627,31 @@ class ApiClient {
     const response = await fetch(this.resolveUrl("/api/autopilot/audio"));
     if (!response.ok) {
       throw new DownloadError("Failed to fetch audio tracks", "unknown");
+    }
+    return response.json();
+  }
+
+  async getGlobalSettings(): Promise<GlobalSettings> {
+    const response = await fetch(this.resolveUrl("/api/settings/global"), {
+      headers: this.getAuthHeaders(),
+    });
+    if (!response.ok) {
+      throw new DownloadError("Failed to fetch global settings", "unknown");
+    }
+    return response.json();
+  }
+
+  async saveGlobalSettings(settings: GlobalSettings): Promise<GlobalSettings> {
+    const response = await fetch(this.resolveUrl("/api/settings/global"), {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        ...this.getAuthHeaders(),
+      },
+      body: JSON.stringify(settings),
+    });
+    if (!response.ok) {
+      throw new DownloadError("Failed to save global settings", "unknown");
     }
     return response.json();
   }
