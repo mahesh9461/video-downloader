@@ -341,6 +341,14 @@ class AutopilotManager:
             last_err = None
             client_candidates = YOUTUBE_CLIENT_PROFILES if ("youtube" in vid_url or "youtu.be" in vid_url) else [None]
 
+            # Clean any stale or corrupted partial downloads from previous runs to prevent [Errno 5] I/O errors
+            for stale_part in DOWNLOAD_DIR.glob(f"{source_stem}.*"):
+                if stale_part.name.endswith(".part") or stale_part.stat().st_size == 0:
+                    try:
+                        stale_part.unlink(missing_ok=True)
+                    except Exception:
+                        pass
+
             for client_profile in client_candidates:
                 ydl_opts = get_base_ydl_opts("youtube", client_override=client_profile)
                 ydl_opts.update({
@@ -348,6 +356,7 @@ class AutopilotManager:
                     "format": format_selector,
                     "merge_output_format": "mp4",
                     "noplaylist": True,
+                    "overwrites": True,
                 })
                 try:
                     with yt_dlp.YoutubeDL(ydl_opts) as ydl:

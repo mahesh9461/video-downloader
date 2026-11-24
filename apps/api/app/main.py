@@ -876,6 +876,14 @@ async def render_viral_clip_endpoint(
             last_error = None
             title_hint = "clip"
 
+            # Clean any stale or corrupted partial downloads from previous runs to prevent [Errno 5] I/O errors
+            for stale_part in DOWNLOAD_DIR.glob(f"{stem}.*"):
+                if stale_part.name.endswith(".part") or stale_part.stat().st_size == 0:
+                    try:
+                        stale_part.unlink(missing_ok=True)
+                    except Exception:
+                        pass
+
             # Download the full high-definition video master (full stream ensures no 360p downscaling)
             for client_profile in client_candidates:
                 ydl_opts = get_base_ydl_opts("youtube" if is_yt else "general", client_override=client_profile)
@@ -884,6 +892,7 @@ async def render_viral_clip_endpoint(
                     "format": format_selector,
                     "merge_output_format": "mp4",
                     "noplaylist": True,
+                    "overwrites": True,
                 })
                 try:
                     with yt_dlp.YoutubeDL(ydl_opts) as ydl:

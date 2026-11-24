@@ -40,9 +40,10 @@ INSTAGRAM_REGEX = re.compile(
 )
 
 # Modern working client profiles ordered by reliability on datacenter IPs.
-# web+mweb first (least restricted), then mobile app clients, then embedded fallback.
-# tv client excluded — it frequently throws DRM/format errors.
+# visionos+web provides Full HD/4K DASH streams without SABR restrictions.
+# Fallback to web+mweb, mobile app clients, and embedded.
 YOUTUBE_CLIENT_PROFILES: List[List[str]] = [
+    ["visionos", "web"],
     ["web", "mweb"],
     ["android", "ios"],
     ["mediaconnect", "web_embedded"],
