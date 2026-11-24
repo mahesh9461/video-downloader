@@ -457,12 +457,12 @@ def render_viral_clip(
     thread_str = str(threads) if threads > 0 else "0"
     cmd.extend([
         "-c:v", "libx264",
-        "-preset", "ultrafast",
+        "-preset", "veryfast",
         "-threads", thread_str,
-        "-tune", "fastdecode",
-        "-crf", "23",
+        "-tune", "film",
+        "-crf", "18",
         "-c:a", "aac",
-        "-b:a", "128k",
+        "-b:a", "192k",
         "-movflags", "+faststart",
         output_path,
     ])

@@ -322,15 +322,15 @@ class AutopilotManager:
         self._save_state()
 
         # Step 1: Download full source video with universal format fallback and multi-client rotation
+        # ALWAYS prioritize highest resolution available: 4K / 1440p / 1080p / best
         source_stem = f"autopilot_src_{vid_id}"
         outtmpl = str(DOWNLOAD_DIR / f"{source_stem}.%(ext)s")
         source_path: Optional[str] = None
 
         format_selector = (
-            "bestvideo[height<=1080][ext=mp4]+bestaudio[ext=m4a]/"
-            "bestvideo[height<=1080]+bestaudio/"
+            "bestvideo[ext=mp4]+bestaudio[ext=m4a]/"
             "bestvideo+bestaudio/"
-            "best[height<=1080]/"
+            "best[ext=mp4]/"
             "best/"
             "bv*+ba/b"
         )
@@ -403,7 +403,7 @@ class AutopilotManager:
         self._save_state()
 
         try:
-            # Step 2: Extract Subtitles or Cues
+            # Step 2: Extract Subtitles or Cues (Multi-language and auto-captions)
             cues = None
             try:
                 def _fetch_subs():
@@ -413,21 +413,44 @@ class AutopilotManager:
                         "skip_download": True,
                         "writesubtitles": True,
                         "writeautomaticsub": True,
-                        "subtitleslangs": ["en"],
+                        "subtitleslangs": ["en", "en-US", "en.*", "en-orig"],
                     })
                     with yt_dlp.YoutubeDL(ydl_opts) as ydl:
                         return ydl.extract_info(vid_url, download=False)
                 info = await asyncio.to_thread(_fetch_subs)
-                subs = info.get("requested_subtitles") or info.get("subtitles") or {}
-                en_sub = subs.get("en")
-                if en_sub and isinstance(en_sub, list) and en_sub[0].get("url"):
+                subs = (info.get("subtitles") or {}) if info else {}
+                auto_subs = (info.get("automatic_captions") or {}) if info else {}
+                all_subs = {**auto_subs, **subs}
+                
+                en_sub = None
+                for lk in ["en", "en-US", "en-orig"]:
+                    if lk in all_subs and all_subs[lk]:
+                        en_sub = all_subs[lk]
+                        break
+
+                if not en_sub and all_subs:
+                    for k, val in all_subs.items():
+                        if k.startswith("en") and val:
+                            en_sub = val
+                            break
+
+                sub_url = None
+                if en_sub and isinstance(en_sub, list):
+                    for fmt in en_sub:
+                        if fmt.get("ext") in ("vtt", "srt"):
+                            sub_url = fmt.get("url")
+                            break
+                    if not sub_url and en_sub[0].get("url"):
+                        sub_url = en_sub[0]["url"]
+
+                if sub_url:
                     import httpx
                     async with httpx.AsyncClient(timeout=10.0) as client:
-                        resp = await client.get(en_sub[0]["url"])
+                        resp = await client.get(sub_url)
                         if resp.status_code == 200:
                             cues = parse_vtt_or_srt(resp.text)
-            except Exception:
-                pass
+            except Exception as sub_err:
+                logger.debug("Autopilot subtitle extraction notice: %s", sub_err)
 
             total_dur = video_info.get("duration") or 300
             # Analyze and score clips to discover the most viral highlights

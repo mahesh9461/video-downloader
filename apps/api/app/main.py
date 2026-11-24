@@ -838,13 +838,11 @@ async def render_viral_clip_endpoint(
         stem = f"source_{job_id}"
         outtmpl_pattern = str(DOWNLOAD_DIR / f"{stem}.%(ext)s")
 
-        # Universal fallback format string that accepts ANY audio/video stream combination
+        # Universal fallback format string prioritizing highest available resolution (4K, 1440p, 1080p, best)
         format_selector = (
-            "bestvideo[height<=720][ext=mp4]+bestaudio[ext=m4a]/"
-            "bestvideo[height<=720]+bestaudio/"
-            "bestvideo[height<=1080]+bestaudio/"
+            "bestvideo[ext=mp4]+bestaudio[ext=m4a]/"
             "bestvideo+bestaudio/"
-            "best[height<=720]/"
+            "best[ext=mp4]/"
             "best/"
             "bv*+ba/b"
         )

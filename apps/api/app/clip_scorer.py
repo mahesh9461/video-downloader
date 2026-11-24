@@ -19,15 +19,17 @@ logger = logging.getLogger(__name__)
 
 # High-retention hook patterns and curiosity triggers
 HOOK_PATTERNS = [
-    (r"\b(why|how|what if|did you know|is it true|have you ever|can you actually)\b", 35, "Curiosity Question"),
-    (r"\b(the secret|the truth|nobody talks about|never do this|always remember|huge mistake)\b", 30, "Contrarian / Secret"),
-    (r"\b(insane|crazy|shocking|unbelievable|mind-blowing|terrifying|worst thing|best thing)\b", 25, "High Emotion"),
-    (r"\b(suddenly|everything changed|the moment|i realized|years ago when|i couldn't believe)\b", 20, "Story Hook"),
-    (r"\b(listen to this|watch this|look at what happened|wait till the end|check this out)\b", 25, "Direct Call to Watch"),
-    (r"\b(hack|strategy|shortcut|framework|rule number|step by step)\b", 20, "High-Value Tip"),
+    (r"\b(why|how|what if|did you know|is it true|have you ever|can you actually|how to|what happens when)\b", 35, "Curiosity Question"),
+    (r"\b(the secret|the truth|nobody talks about|never do this|always remember|huge mistake|stop doing this|they lied to you)\b", 32, "Contrarian / Secret"),
+    (r"\b(insane|crazy|shocking|unbelievable|mind-blowing|terrifying|worst thing|best thing|omg|no way|holy shit|wtf)\b", 28, "High Emotion / Shock"),
+    (r"\b(suddenly|everything changed|the moment|i realized|years ago when|i couldn't believe|it turned out)\b", 22, "Dramatic Story Turn"),
+    (r"\b(listen to this|watch this|look at what happened|wait till the end|check this out|watch till the drop|pay attention)\b", 26, "Urgent Call to Watch"),
+    (r"\b(hack|strategy|shortcut|framework|rule number|step by step|secret trick|game changer)\b", 24, "High-Value Hack"),
+    (r"\b(i was wrong|everyone thinks|don't do this|before you buy|the real reason)\b", 25, "Myth Busting"),
 ]
 
 PUNCTUATION_QUESTION_PATTERN = re.compile(r"\?")
+PUNCTUATION_EXCLAMATION_PATTERN = re.compile(r"!")
 
 
 def parse_timestamp_to_seconds(ts: str) -> float:
@@ -83,6 +85,10 @@ def evaluate_hook_score(opening_text: str) -> Tuple[int, str]:
     if PUNCTUATION_QUESTION_PATTERN.search(opening_text):
         score += 20
         reasons.append("Opening Question")
+
+    if PUNCTUATION_EXCLAMATION_PATTERN.search(opening_text):
+        score += 15
+        reasons.append("Exclamatory Hook")
 
     for pattern, pts, label in HOOK_PATTERNS:
         if re.search(pattern, text_lower):
@@ -204,13 +210,28 @@ def analyze_and_score_clips(
             hook_pts, hook_reason = evaluate_hook_score(hook_text)
             pacing_pts, pacing_reason = evaluate_dialogue_pacing(words, actual_duration)
 
-            # Keyword intensity bonus (up to 20 pts)
+            # Keyword intensity & viral triggers bonus (up to 20 pts)
             intensity_pts = 0
             text_lower = full_window_text.lower()
-            if any(w in text_lower for w in ["important", "remember", "crazy", "result", "money", "future"]):
+            viral_keywords = [
+                "important", "remember", "crazy", "result", "money", "future", "secret", "hack",
+                "insane", "million", "billion", "danger", "warning", "never", "always", "destroy",
+                "genius", "win", "lose", "mistake", "truth", "lies", "stop", "shocking"
+            ]
+            matches_count = sum(1 for w in viral_keywords if w in text_lower)
+            if matches_count >= 3:
+                intensity_pts += 15
+            elif matches_count >= 1:
                 intensity_pts += 10
-            if len(words) > 50:
-                intensity_pts += 10
+
+            # Information density / verbal punch
+            wpm = (len(words) / actual_duration) * 60.0
+            if 130 <= wpm <= 175:
+                intensity_pts += 5
+            elif len(words) > 50:
+                intensity_pts += 5
+
+            intensity_pts = min(20, intensity_pts)
 
             viral_score = min(99, max(45, hook_pts + pacing_pts + intensity_pts))
             hook_title = generate_hook_title(hook_text, fallback_topic=video_title)
@@ -269,6 +290,16 @@ VIRAL_MUSIC_HOOKS = [
     ("THE BEST 30 SECONDS", "High-vibe climax with peak vocal intensity"),
     ("CANNOT STOP REPLAYING THIS", "Catchiest melodic loop in the entire track"),
     ("THIS GIVES ME CHILLS", "Emotional bridge and vocal peak"),
+    ("MAXIMUM VOLUME FOR THIS", "Bass boost and peak drop moment"),
+]
+
+VIRAL_GAMING_HOOKS = [
+    ("HOW DID HE SURVIVE THIS?!", "Insane high-stakes gameplay clutch"),
+    ("THE COOLEST GLITCH IN GTA", "Unbelievable secret discovery in game"),
+    ("WAIT TILL YOU SEE THE END", "Jaw-dropping stunt and viral finish"),
+    ("THIS IS ACTUALLY INSANE", "High-octane mission showdown"),
+    ("NOBODY KNEW ABOUT THIS SPOT", "Secret hidden easter egg uncovered"),
+    ("1 IN A MILLION MOMENT", "Improbable stunt that broke the physics"),
 ]
 
 VIRAL_GENERAL_HOOKS = [
@@ -277,6 +308,7 @@ VIRAL_GENERAL_HOOKS = [
     ("THE MOST INTENSE 30 SECONDS", "Action and energy peak of the video"),
     ("WATCH TILL THE VERY END", "Crucial revelation and concluding impact"),
     ("THE MOMENT EVERYTHING CHANGED", "Core highlight and dramatic climax"),
+    ("THE HARDEST TRUTH YOU NEED", "High-retention wisdom and core revelation"),
 ]
 
 
@@ -297,7 +329,17 @@ def _generate_fallback_candidates(
         w in title_lower
         for w in ["ost", "song", "music", "soundtrack", "slowed", "reverb", "audio", "lyrics", "album", "remix", "beat", "cover"]
     )
-    hook_presets = VIRAL_MUSIC_HOOKS if is_music else VIRAL_GENERAL_HOOKS
+    is_gaming = any(
+        w in title_lower
+        for w in ["gta", "grand theft auto", "gameplay", "mission", "trailer", "gaming", "fortnite", "cod", "roblox", "speedrun", "mod"]
+    )
+
+    if is_music:
+        hook_presets = VIRAL_MUSIC_HOOKS
+    elif is_gaming:
+        hook_presets = VIRAL_GAMING_HOOKS
+    else:
+        hook_presets = VIRAL_GENERAL_HOOKS
 
     if total_duration < clip_len:
         default_hook, default_summary = hook_presets[0]
