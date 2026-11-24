@@ -327,9 +327,11 @@ class AutopilotManager:
         outtmpl = str(DOWNLOAD_DIR / f"{source_stem}.%(ext)s")
         source_path: Optional[str] = None
 
+        # Prioritize absolute highest HD resolution video stream (1080p, 1440p, 4K) merged with best audio into MP4
         format_selector = (
-            "bestvideo[ext=mp4]+bestaudio[ext=m4a]/"
             "bestvideo+bestaudio/"
+            "bestvideo[ext=mp4]+bestaudio[ext=m4a]/"
+            "best[height>=720]/"
             "best[ext=mp4]/"
             "best/"
             "bv*+ba/b"

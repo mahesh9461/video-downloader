@@ -1,31 +1,20 @@
 {
   "is_running": false,
-  "state": "idle",
+  "state": "error",
   "current_batch": null,
   "active_clip_id": null,
-  "current_step": "completed",
-  "current_step_label": "All 6 clips successfully uploaded to YouTube!",
+  "current_step": "failed",
+  "current_step_label": "Batch processing failed: 'NoneType' object has no attribute 'clips'",
   "processed_video_ids": [
     "kT6fs5zlw-Y"
   ],
-  "daily_uploads_count": 6,
+  "daily_uploads_count": 0,
   "daily_upload_limit": 6,
   "upload_interval_seconds": 3600,
   "cooldown_until": null,
-  "disk_space_cleaned_mb": 1261.52,
-  "last_cleaned_at": "2026-11-23T09:10:45.669662+00:00",
+  "disk_space_cleaned_mb": 1391.25,
+  "last_cleaned_at": "2026-11-24T23:12:29.444258",
   "recent_logs": [
-    "[14:39:21] \u2705 Video preview ready for Short #5: gta6_short_c6470654_5.mp4",
-    "[14:39:21] \ud83c\udfa3 Hook created for Short #6: 'WAIT FOR WHAT HAPPENS NEXT...'",
-    "[14:39:21] \ud83c\udfb5 Text & Song set for Short #6: mrbeast_urgency | energetic_beat",
-    "[14:39:21] \ud83c\udfac Rendering Short 6/6 (threads=2): 'WAIT FOR WHAT HAPPENS NEXT...'",
-    "[14:39:31] \ud83d\uddbc\ufe0f Generated Full HD viral cover for Short #6: gta6_cover_c6470654_6.jpg",
-    "[14:39:32] \ud83c\udfaf Concat slapped cover as opening frame on Short #6",
-    "[14:39:32] \u2705 Video preview ready for Short #6: gta6_short_c6470654_6.mp4",
-    "[14:39:32] \ud83e\uddf9 Cleaned disk: deleted autopilot_src_kT6fs5zlw-Y.mp4 (freed 287.2 MB)",
-    "[14:39:32] \u2705 Batch c6470654 ready: 6 GTA 6 Shorts prepared.",
-    "[14:39:32] \ud83d\ude80 Starting sequential auto-upload: uploading all 6 clips to YouTube one by one...",
-    "[14:39:32] \ud83d\udce4 Uploading Short #1/6: 'WAIT FOR WHAT HAPPENS NEXT...'",
     "[14:39:32] \ud83d\ude80 Publishing Short #1/6 to YouTube: 'WAIT FOR WHAT HAPPENS NEXT...'",
     "[14:39:41] \ud83c\udf89 Successfully uploaded Short #1! URL: https://www.youtube.com/shorts/avKftD3Z9Fg",
     "[14:39:44] \ud83d\udce4 Uploading Short #2/6: 'NOBODY EXPECTED THIS PART'",
@@ -44,7 +33,18 @@
     "[14:40:33] \ud83d\ude80 Publishing Short #6/6 to YouTube: 'WAIT FOR WHAT HAPPENS NEXT...'",
     "[14:40:42] \ud83c\udf89 Successfully uploaded Short #6! URL: https://www.youtube.com/shorts/X6YKvEsbXY0",
     "[14:40:45] \ud83e\uddf9 Purged 108.7 MB temporary clip files from completed batch.",
-    "[14:40:45] \ud83c\udf89 Batch complete! All 6 clips published to YouTube one by one. Cleared active batch & purged temporary storage."
+    "[14:40:45] \ud83c\udf89 Batch complete! All 6 clips published to YouTube one by one. Cleared active batch & purged temporary storage.",
+    "[23:11:16] \ud83d\udce5 Downloading source video for clipping: 'I am in BIG PROBLEM!! Urmila vs Lucia Hogaya \ud83d\ude2d GTA 6'",
+    "[23:12:16] \ud83d\udce6 Downloaded source (129.7 MB). Analyzing 6 viral segments...",
+    "[23:12:17] \ud83d\uded1 Terminated active download/run. Cleaned up 0.0 MB partial files.",
+    "[23:12:18] \ud83c\udfa3 Hook for Short #1: 'HOW DID HE SURVIVE THIS?!' (overlay_enabled=True)",
+    "[23:12:18] \ud83c\udfb5 Text & Song set for Clip #1: neon_cyan | vice_city_synth",
+    "[23:12:18] \ud83c\udfac Rendering Clip 1 (9:16 vertical, threads=2): hook='HOW DID HE SURVIVE THIS?!' style='neon_cyan'",
+    "[23:12:27] \ud83d\udd04 Reset autopilot state, cooldown, and daily upload counter.",
+    "[23:12:29] \u23ed\ufe0f Cover thumbnail generation skipped for Short #1 (disabled in global settings)",
+    "[23:12:29] \u2705 Video preview ready for Short #1: gta6_short_deeb4c6a_1.mp4",
+    "[23:12:29] \u274c Failed to process batch: 'NoneType' object has no attribute 'clips'",
+    "[23:12:29] \ud83e\uddf9 Cleaned disk: deleted autopilot_src_ZCGuCyNSajQ.mp4 (freed 129.7 MB)"
   ],
   "all_published_videos": [
     {
@@ -171,10 +171,10 @@
   ],
   "recent_errors": [
     {
-      "title": "GTA 6 - Free Roam Open World Map Exploration in Stunning 4k! Next Gen PS5 Pro Gameplay",
+      "title": "I am in BIG PROBLEM!! Urmila vs Lucia Hogaya \ud83d\ude2d GTA 6",
       "stage": "batch",
       "error": "'NoneType' object has no attribute 'clips'",
-      "timestamp": "2026-11-23T09:06:13.344228+00:00"
+      "timestamp": "2026-11-24T17:42:29.444594+00:00"
     }
   ]
 }
