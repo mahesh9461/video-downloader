@@ -270,8 +270,9 @@ def build_video_filtergraph(
     progress_bar: bool = True,
     progress_bar_color: str = "yellow",
     subtitles_path: Optional[str] = None,
+    anti_copyright_shield: bool = False,
 ) -> str:
-    """Builds video filtergraph (1080x1920 vertical or 1920x1080 horizontal HD) with optional hook text overlay, subtitles, and progress bar."""
+    """Builds video filtergraph (1080x1920 vertical or 1920x1080 horizontal HD) with optional hook text overlay, subtitles, progress bar, and anti-copyright visual cloaking."""
     is_horizontal = layout in ("horizontal", "landscape", "16:9")
     if is_horizontal:
         base_v = "[0:v]scale=1920:1080:force_original_aspect_ratio=decrease,pad=1920:1080:(ow-iw)/2:(oh-ih)/2:black[framed]"
@@ -354,6 +355,10 @@ def build_video_filtergraph(
             f"drawbox=x=0:y=ih-{bar_h}:w='iw*min(1.0,t/{safe_dur})':h={bar_h}:color={bar_color}:t=fill"
         )
 
+    # 4. Anti-Copyright Visual Cloaking (Imperceptible Color/Contrast Shift to break visual Content ID)
+    if anti_copyright_shield:
+        filters.append("eq=contrast=1.04:brightness=0.01:saturation=1.05")
+
     if not filters:
         return f"{base_v};[framed]null[v]"
 
@@ -382,9 +387,11 @@ def render_viral_clip(
     progress_bar_color: str = "yellow",
     subtitles_path: Optional[str] = None,
     threads: int = 0,
+    anti_copyright_shield: bool = False,
+    mute_original_audio: bool = False,
 ) -> Dict[str, Any]:
     """
-    Renders a vertical 9:16 viral short using FFmpeg.
+    Renders a vertical 9:16 viral short using FFmpeg with optional anti-copyright shield and audio controls.
     """
     ffmpeg = _require_ffmpeg()
 
@@ -403,6 +410,7 @@ def render_viral_clip(
         progress_bar=progress_bar,
         progress_bar_color=progress_bar_color,
         subtitles_path=subtitles_path,
+        anti_copyright_shield=anti_copyright_shield,
     )
 
     # Check for custom audio file or procedural preset
@@ -431,39 +439,61 @@ def render_viral_clip(
         "-i", input_path,
     ]
 
+    # Add second audio input if background music is specified
     if has_custom_audio:
-        # Loop custom background audio track and duck volume
-        cmd.extend([
-            "-stream_loop", "-1",
-            "-i", custom_audio_path,
-            "-filter_complex",
-            f"{video_filter};"
-            f"[0:a]volume=1.0[voice];"
-            f"[1:a]volume={music_volume}[music];"
-            f"[voice][music]amix=inputs=2:duration=first:dropout_transition=2[a]",
-            "-map", "[v]",
-            "-map", "[a]",
-        ])
+        cmd.extend(["-stream_loop", "-1", "-i", custom_audio_path])
     elif has_synth_music:
-        # Generate procedural harmonic background music bed
         synth_expr = SYNTH_EXPRESSIONS[background_music]
         cmd.extend([
             "-f", "lavfi",
             "-i", f"aevalsrc=exprs='{synth_expr}':d={clip_duration}:s=44100",
+        ])
+
+    # Audio filtering: Anti-Copyright acoustic cloaking (pitch shift + tempo stabilization + EQ filtering)
+    if anti_copyright_shield:
+        voice_af = "asetrate=44100*1.04,aresample=44100,atempo=1/1.04,equalizer=f=1000:t=q:w=1:g=-2,highpass=f=60"
+    else:
+        voice_af = "volume=1.0"
+
+    if mute_original_audio:
+        if has_custom_audio or has_synth_music:
+            # Source voice completely muted; only background track plays at full volume
+            cmd.extend([
+                "-filter_complex",
+                f"{video_filter};[1:a]volume=1.0[a]",
+                "-map", "[v]",
+                "-map", "[a]",
+            ])
+        else:
+            # Mute completely without music
+            cmd.extend([
+                "-filter_complex", video_filter,
+                "-map", "[v]",
+            ])
+    elif has_custom_audio or has_synth_music:
+        cmd.extend([
             "-filter_complex",
             f"{video_filter};"
-            f"[0:a]volume=1.0[voice];"
+            f"[0:a]{voice_af}[voice];"
             f"[1:a]volume={music_volume}[music];"
             f"[voice][music]amix=inputs=2:duration=first:dropout_transition=2[a]",
             "-map", "[v]",
             "-map", "[a]",
         ])
     else:
-        cmd.extend([
-            "-filter_complex", video_filter,
-            "-map", "[v]",
-            "-map", "0:a?",  # Map audio if present
-        ])
+        if anti_copyright_shield:
+            cmd.extend([
+                "-filter_complex",
+                f"{video_filter};[0:a]{voice_af}[a]",
+                "-map", "[v]",
+                "-map", "[a]",
+            ])
+        else:
+            cmd.extend([
+                "-filter_complex", video_filter,
+                "-map", "[v]",
+                "-map", "0:a?",  # Map audio if present
+            ])
 
     thread_str = str(threads) if threads > 0 else "0"
     cmd.extend([
@@ -515,6 +545,8 @@ async def process_clip_render(
     progress_bar: bool = True,
     progress_bar_color: str = "yellow",
     subtitles_path: Optional[str] = None,
+    anti_copyright_shield: bool = False,
+    mute_original_audio: bool = False,
 ) -> Dict[str, Any]:
     """Async wrapper that renders the viral short in a background thread."""
     job_id = uuid.uuid4().hex[:10]
@@ -536,6 +568,8 @@ async def process_clip_render(
         progress_bar=progress_bar,
         progress_bar_color=progress_bar_color,
         subtitles_path=subtitles_path,
+        anti_copyright_shield=anti_copyright_shield,
+        mute_original_audio=mute_original_audio,
     )
     result["download_url"] = f"/api/file/{result['filename']}"
     return result

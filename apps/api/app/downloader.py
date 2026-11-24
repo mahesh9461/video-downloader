@@ -1,6 +1,8 @@
 import asyncio
 import os
 import re
+import shutil
+import subprocess
 import time
 import uuid
 import logging
@@ -884,7 +886,87 @@ def extract_metadata(url: str) -> VideoMetadata:
     )
 
 
-async def download_video_stream(url: str, format_id: str) -> AsyncGenerator[str, None]:
+def apply_anti_copyright_shield(
+    input_path: str,
+    mute_audio: bool = False,
+    is_audio_only: bool = False,
+) -> str:
+    """
+    Applies non-destructive anti-copyright cloaking to downloaded media files:
+    1. Audio: Shifts pitch (+4%), resamples, keeps tempo stabilized, and applies frequency EQ cuts.
+    2. Video: Modifies color histograms (contrast/saturation) to defeat visual Content ID matching.
+    3. Mute: If mute_audio is requested, strips audio completely.
+    Returns the path to the transformed file.
+    """
+    ffmpeg = FFMPEG_PATH or shutil.which("ffmpeg")
+    if not ffmpeg or not os.path.exists(input_path):
+        return input_path
+
+    base_dir = os.path.dirname(input_path)
+    filename = os.path.basename(input_path)
+    stem, ext = os.path.splitext(filename)
+    output_path = os.path.join(base_dir, f"shielded_{stem}{ext}")
+
+    af = "asetrate=44100*1.04,aresample=44100,atempo=1/1.04,equalizer=f=1000:t=q:w=1:g=-2,highpass=f=60"
+    vf = "eq=contrast=1.04:brightness=0.01:saturation=1.05"
+
+    try:
+        if is_audio_only:
+            if mute_audio:
+                return input_path
+            cmd = [
+                ffmpeg, "-y", "-i", input_path,
+                "-af", af,
+                "-b:a", "192k",
+                output_path,
+            ]
+        else:
+            if mute_audio:
+                cmd = [
+                    ffmpeg, "-y", "-i", input_path,
+                    "-vf", vf,
+                    "-an",
+                    "-c:v", "libx264", "-preset", "veryfast", "-crf", "18",
+                    "-movflags", "+faststart",
+                    output_path,
+                ]
+            else:
+                cmd = [
+                    ffmpeg, "-y", "-i", input_path,
+                    "-vf", vf,
+                    "-af", af,
+                    "-c:v", "libx264", "-preset", "veryfast", "-crf", "18",
+                    "-c:a", "aac", "-b:a", "192k",
+                    "-movflags", "+faststart",
+                    output_path,
+                ]
+
+        logger.info("Executing Anti-Copyright Shield on %s", input_path)
+        res = subprocess.run(cmd, capture_output=True, text=True, timeout=180)
+        if res.returncode == 0 and os.path.exists(output_path) and os.path.getsize(output_path) > 0:
+            try:
+                os.replace(output_path, input_path)
+                return input_path
+            except Exception:
+                return output_path
+        else:
+            logger.warning("Anti-copyright shield processing failed: %s", res.stderr[:300] if res.stderr else "Unknown")
+            if os.path.exists(output_path):
+                os.remove(output_path)
+            return input_path
+    except Exception as e:
+        logger.warning("Anti-copyright shield exception: %s", e)
+        if os.path.exists(output_path):
+            os.remove(output_path)
+        return input_path
+
+
+async def download_video_stream(
+    url: str,
+    format_id: str,
+    anti_copyright_shield: bool = False,
+    mute_audio: bool = False,
+) -> AsyncGenerator[str, None]:
     url = sanitize_url(url)
     loop = asyncio.get_running_loop()
     queue: asyncio.Queue = asyncio.Queue()
@@ -1098,6 +1180,23 @@ async def download_video_stream(url: str, format_id: str) -> AsyncGenerator[str,
                 success = True
 
         if success:
+            if anti_copyright_shield or mute_audio:
+                loop.call_soon_threadsafe(
+                    queue.put_nowait,
+                    DownloadProgress(
+                        status="converting",
+                        percent=99.0,
+                    ),
+                )
+                target_path = str(DOWNLOAD_DIR / final_filename)
+                shielded_path = apply_anti_copyright_shield(
+                    target_path,
+                    mute_audio=mute_audio,
+                    is_audio_only=is_audio,
+                )
+                final_filename = os.path.basename(shielded_path)
+                final_filesize = os.path.getsize(shielded_path)
+
             loop.call_soon_threadsafe(
                 queue.put_nowait,
                 DownloadProgress(

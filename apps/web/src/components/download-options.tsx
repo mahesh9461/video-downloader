@@ -9,6 +9,8 @@ import {
   Smartphone,
   Sparkles,
   Loader2,
+  ShieldCheck,
+  VolumeX,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -19,7 +21,7 @@ import { formatFileSize, cn } from "@/lib/utils";
 
 interface DownloadOptionsProps {
   metadata: VideoMetadata;
-  onDownload: (formatId: string, label: string) => void;
+  onDownload: (formatId: string, label: string, antiCopyrightShield?: boolean, muteAudio?: boolean) => void;
   isDownloading: boolean;
   activeFormatId: string | null;
 }
@@ -31,30 +33,82 @@ export function DownloadOptions({
   activeFormatId,
 }: DownloadOptionsProps) {
   const [selectedFormatId, setSelectedFormatId] = useState<string | null>(null);
+  const [antiCopyrightShield, setAntiCopyrightShield] = useState<boolean>(true);
+  const [muteAudio, setMuteAudio] = useState<boolean>(false);
 
   if (metadata.platform === "tiktok") {
-    return <TikTokOptions metadata={metadata} onDownload={onDownload} isDownloading={isDownloading} activeFormatId={activeFormatId} />;
+    return (
+      <TikTokOptions
+        metadata={metadata}
+        onDownload={onDownload}
+        isDownloading={isDownloading}
+        activeFormatId={activeFormatId}
+        antiCopyrightShield={antiCopyrightShield}
+        setAntiCopyrightShield={setAntiCopyrightShield}
+        muteAudio={muteAudio}
+        setMuteAudio={setMuteAudio}
+      />
+    );
   }
 
   if (metadata.platform === "instagram") {
-    return <InstagramOptions metadata={metadata} onDownload={onDownload} isDownloading={isDownloading} activeFormatId={activeFormatId} />;
+    return (
+      <InstagramOptions
+        metadata={metadata}
+        onDownload={onDownload}
+        isDownloading={isDownloading}
+        activeFormatId={activeFormatId}
+        antiCopyrightShield={antiCopyrightShield}
+        setAntiCopyrightShield={setAntiCopyrightShield}
+        muteAudio={muteAudio}
+        setMuteAudio={setMuteAudio}
+      />
+    );
   }
 
-  return <YouTubeOptions metadata={metadata} onDownload={onDownload} isDownloading={isDownloading} activeFormatId={activeFormatId} selectedFormatId={selectedFormatId} setSelectedFormatId={setSelectedFormatId} />;
+  return (
+    <YouTubeOptions
+      metadata={metadata}
+      onDownload={onDownload}
+      isDownloading={isDownloading}
+      activeFormatId={activeFormatId}
+      selectedFormatId={selectedFormatId}
+      setSelectedFormatId={setSelectedFormatId}
+      antiCopyrightShield={antiCopyrightShield}
+      setAntiCopyrightShield={setAntiCopyrightShield}
+      muteAudio={muteAudio}
+      setMuteAudio={setMuteAudio}
+    />
+  );
 }
 
 /* ─── YouTube Options ─── */
 
 interface YouTubeOptionsProps {
   metadata: VideoMetadata;
-  onDownload: (formatId: string, label: string) => void;
+  onDownload: (formatId: string, label: string, antiCopyrightShield?: boolean, muteAudio?: boolean) => void;
   isDownloading: boolean;
   activeFormatId: string | null;
   selectedFormatId: string | null;
   setSelectedFormatId: (id: string | null) => void;
+  antiCopyrightShield: boolean;
+  setAntiCopyrightShield: (v: boolean) => void;
+  muteAudio: boolean;
+  setMuteAudio: (v: boolean) => void;
 }
 
-function YouTubeOptions({ metadata, onDownload, isDownloading, activeFormatId, selectedFormatId, setSelectedFormatId }: YouTubeOptionsProps) {
+function YouTubeOptions({
+  metadata,
+  onDownload,
+  isDownloading,
+  activeFormatId,
+  selectedFormatId,
+  setSelectedFormatId,
+  antiCopyrightShield,
+  setAntiCopyrightShield,
+  muteAudio,
+  setMuteAudio,
+}: YouTubeOptionsProps) {
   const videoFormats = metadata.formats.filter((f) => !f.is_audio_only);
   const audioFormats = metadata.formats.filter((f) => f.is_audio_only);
 
@@ -62,7 +116,7 @@ function YouTubeOptions({ metadata, onDownload, isDownloading, activeFormatId, s
     if (!selectedFormatId) return;
     const format = metadata.formats.find((f) => f.format_id === selectedFormatId);
     if (format) {
-      onDownload(selectedFormatId, format.label);
+      onDownload(selectedFormatId, format.label, antiCopyrightShield, muteAudio);
     }
   };
 
@@ -126,6 +180,61 @@ function YouTubeOptions({ metadata, onDownload, isDownloading, activeFormatId, s
           </div>
         )}
 
+        {/* Anti-Copyright & Audio Cloaking Controls */}
+        <div className="p-3.5 rounded-xl bg-cyan-950/20 border border-cyan-500/30 space-y-2.5">
+          <div className="flex items-center justify-between gap-2">
+            <div className="flex items-center gap-2">
+              <ShieldCheck className="w-4 h-4 text-cyan-400 shrink-0" />
+              <div>
+                <span className="text-xs font-bold text-white block">Anti-Copyright Shield</span>
+                <span className="text-[11px] text-zinc-300 block">Modifies pitch (+4%), tempo, & EQ to bypass YouTube Content ID</span>
+              </div>
+            </div>
+            <button
+              type="button"
+              role="switch"
+              aria-checked={antiCopyrightShield}
+              aria-label="Anti-Copyright Shield"
+              onClick={() => setAntiCopyrightShield(!antiCopyrightShield)}
+              className={`w-9 h-5 flex items-center rounded-full p-0.5 transition-colors ${
+                antiCopyrightShield ? "bg-cyan-500" : "bg-zinc-700"
+              }`}
+            >
+              <div
+                className={`bg-zinc-950 w-4 h-4 rounded-full shadow-md transform transition-transform ${
+                  antiCopyrightShield ? "translate-x-4" : "translate-x-0"
+                }`}
+              />
+            </button>
+          </div>
+
+          <div className="flex items-center justify-between gap-2 pt-2 border-t border-white/5">
+            <div className="flex items-center gap-2">
+              <VolumeX className="w-4 h-4 text-zinc-400 shrink-0" />
+              <div>
+                <span className="text-xs font-medium text-zinc-300 block">Mute Audio</span>
+                <span className="text-[10px] text-zinc-400 block">Remove audio track completely</span>
+              </div>
+            </div>
+            <button
+              type="button"
+              role="switch"
+              aria-checked={muteAudio}
+              aria-label="Mute Audio"
+              onClick={() => setMuteAudio(!muteAudio)}
+              className={`w-9 h-5 flex items-center rounded-full p-0.5 transition-colors ${
+                muteAudio ? "bg-rose-500" : "bg-zinc-700"
+              }`}
+            >
+              <div
+                className={`bg-zinc-950 w-4 h-4 rounded-full shadow-md transform transition-transform ${
+                  muteAudio ? "translate-x-4" : "translate-x-0"
+                }`}
+              />
+            </button>
+          </div>
+        </div>
+
         {/* Download button */}
         <Button
           variant="gradient"
@@ -155,12 +264,25 @@ function YouTubeOptions({ metadata, onDownload, isDownloading, activeFormatId, s
 
 interface TikTokOptionsProps {
   metadata: VideoMetadata;
-  onDownload: (formatId: string, label: string) => void;
+  onDownload: (formatId: string, label: string, antiCopyrightShield?: boolean, muteAudio?: boolean) => void;
   isDownloading: boolean;
   activeFormatId: string | null;
+  antiCopyrightShield: boolean;
+  setAntiCopyrightShield: (v: boolean) => void;
+  muteAudio: boolean;
+  setMuteAudio: (v: boolean) => void;
 }
 
-function TikTokOptions({ metadata, onDownload, isDownloading, activeFormatId }: TikTokOptionsProps) {
+function TikTokOptions({
+  metadata,
+  onDownload,
+  isDownloading,
+  activeFormatId,
+  antiCopyrightShield,
+  setAntiCopyrightShield,
+  muteAudio,
+  setMuteAudio,
+}: TikTokOptionsProps) {
   const videoFormat = metadata.formats.find((f) => !f.is_audio_only && f.label.toLowerCase().includes("no watermark"));
   const hdFormat = metadata.formats.find((f) => !f.is_audio_only && f.label.toLowerCase().includes("hd"));
   const audioFormat = metadata.formats.find((f) => f.is_audio_only);
@@ -179,7 +301,62 @@ function TikTokOptions({ metadata, onDownload, isDownloading, activeFormatId }: 
           TikTok Download
         </CardTitle>
       </CardHeader>
-      <CardContent>
+      <CardContent className="space-y-4">
+        {/* Anti-Copyright & Audio Cloaking Controls */}
+        <div className="p-3.5 rounded-xl bg-cyan-950/20 border border-cyan-500/30 space-y-2.5">
+          <div className="flex items-center justify-between gap-2">
+            <div className="flex items-center gap-2">
+              <ShieldCheck className="w-4 h-4 text-cyan-400 shrink-0" />
+              <div>
+                <span className="text-xs font-bold text-white block">Anti-Copyright Shield</span>
+                <span className="text-[11px] text-zinc-300 block">Modifies pitch (+4%), tempo, & EQ to bypass YouTube Content ID</span>
+              </div>
+            </div>
+            <button
+              type="button"
+              role="switch"
+              aria-checked={antiCopyrightShield}
+              aria-label="Anti-Copyright Shield"
+              onClick={() => setAntiCopyrightShield(!antiCopyrightShield)}
+              className={`w-9 h-5 flex items-center rounded-full p-0.5 transition-colors ${
+                antiCopyrightShield ? "bg-cyan-500" : "bg-zinc-700"
+              }`}
+            >
+              <div
+                className={`bg-zinc-950 w-4 h-4 rounded-full shadow-md transform transition-transform ${
+                  antiCopyrightShield ? "translate-x-4" : "translate-x-0"
+                }`}
+              />
+            </button>
+          </div>
+
+          <div className="flex items-center justify-between gap-2 pt-2 border-t border-white/5">
+            <div className="flex items-center gap-2">
+              <VolumeX className="w-4 h-4 text-zinc-400 shrink-0" />
+              <div>
+                <span className="text-xs font-medium text-zinc-300 block">Mute Audio</span>
+                <span className="text-[10px] text-zinc-400 block">Remove audio track completely</span>
+              </div>
+            </div>
+            <button
+              type="button"
+              role="switch"
+              aria-checked={muteAudio}
+              aria-label="Mute Audio"
+              onClick={() => setMuteAudio(!muteAudio)}
+              className={`w-9 h-5 flex items-center rounded-full p-0.5 transition-colors ${
+                muteAudio ? "bg-rose-500" : "bg-zinc-700"
+              }`}
+            >
+              <div
+                className={`bg-zinc-950 w-4 h-4 rounded-full shadow-md transform transition-transform ${
+                  muteAudio ? "translate-x-4" : "translate-x-0"
+                }`}
+              />
+            </button>
+          </div>
+        </div>
+
         <div className="grid gap-3">
           {buttons.map(({ format, icon: Icon, label, sublabel }) => (
             <Button
@@ -190,7 +367,7 @@ function TikTokOptions({ metadata, onDownload, isDownloading, activeFormatId }: 
                 activeFormatId === format!.format_id && isDownloading && "border-cyan-500 bg-cyan-500/15"
               )}
               disabled={isDownloading}
-              onClick={() => onDownload(format!.format_id, label)}
+              onClick={() => onDownload(format!.format_id, label, antiCopyrightShield, muteAudio)}
             >
               <div className="flex items-center justify-center w-10 h-10 rounded-xl bg-cyan-500/10 shrink-0">
                 {isDownloading && activeFormatId === format!.format_id ? (
@@ -256,12 +433,25 @@ function FormatButton({ format, isSelected, isActive, isDownloading, onClick }: 
 
 interface InstagramOptionsProps {
   metadata: VideoMetadata;
-  onDownload: (formatId: string, label: string) => void;
+  onDownload: (formatId: string, label: string, antiCopyrightShield?: boolean, muteAudio?: boolean) => void;
   isDownloading: boolean;
   activeFormatId: string | null;
+  antiCopyrightShield: boolean;
+  setAntiCopyrightShield: (v: boolean) => void;
+  muteAudio: boolean;
+  setMuteAudio: (v: boolean) => void;
 }
 
-function InstagramOptions({ metadata, onDownload, isDownloading, activeFormatId }: InstagramOptionsProps) {
+function InstagramOptions({
+  metadata,
+  onDownload,
+  isDownloading,
+  activeFormatId,
+  antiCopyrightShield,
+  setAntiCopyrightShield,
+  muteAudio,
+  setMuteAudio,
+}: InstagramOptionsProps) {
   const videoFormat = metadata.formats.find((f) => !f.is_audio_only);
   const audioFormat = metadata.formats.find((f) => f.is_audio_only);
 
@@ -284,6 +474,62 @@ function InstagramOptions({ metadata, onDownload, isDownloading, activeFormatId 
             {metadata.notice}
           </div>
         )}
+
+        {/* Anti-Copyright & Audio Cloaking Controls */}
+        <div className="p-3.5 rounded-xl bg-cyan-950/20 border border-cyan-500/30 space-y-2.5">
+          <div className="flex items-center justify-between gap-2">
+            <div className="flex items-center gap-2">
+              <ShieldCheck className="w-4 h-4 text-cyan-400 shrink-0" />
+              <div>
+                <span className="text-xs font-bold text-white block">Anti-Copyright Shield</span>
+                <span className="text-[11px] text-zinc-300 block">Modifies pitch (+4%), tempo, & EQ to bypass YouTube Content ID</span>
+              </div>
+            </div>
+            <button
+              type="button"
+              role="switch"
+              aria-checked={antiCopyrightShield}
+              aria-label="Anti-Copyright Shield"
+              onClick={() => setAntiCopyrightShield(!antiCopyrightShield)}
+              className={`w-9 h-5 flex items-center rounded-full p-0.5 transition-colors ${
+                antiCopyrightShield ? "bg-cyan-500" : "bg-zinc-700"
+              }`}
+            >
+              <div
+                className={`bg-zinc-950 w-4 h-4 rounded-full shadow-md transform transition-transform ${
+                  antiCopyrightShield ? "translate-x-4" : "translate-x-0"
+                }`}
+              />
+            </button>
+          </div>
+
+          <div className="flex items-center justify-between gap-2 pt-2 border-t border-white/5">
+            <div className="flex items-center gap-2">
+              <VolumeX className="w-4 h-4 text-zinc-400 shrink-0" />
+              <div>
+                <span className="text-xs font-medium text-zinc-300 block">Mute Audio</span>
+                <span className="text-[10px] text-zinc-400 block">Remove audio track completely</span>
+              </div>
+            </div>
+            <button
+              type="button"
+              role="switch"
+              aria-checked={muteAudio}
+              aria-label="Mute Audio"
+              onClick={() => setMuteAudio(!muteAudio)}
+              className={`w-9 h-5 flex items-center rounded-full p-0.5 transition-colors ${
+                muteAudio ? "bg-rose-500" : "bg-zinc-700"
+              }`}
+            >
+              <div
+                className={`bg-zinc-950 w-4 h-4 rounded-full shadow-md transform transition-transform ${
+                  muteAudio ? "translate-x-4" : "translate-x-0"
+                }`}
+              />
+            </button>
+          </div>
+        </div>
+
         <div className="grid gap-3">
           {buttons.map(({ format, icon: Icon, label, sublabel }) => (
             <Button
@@ -294,7 +540,7 @@ function InstagramOptions({ metadata, onDownload, isDownloading, activeFormatId 
                 activeFormatId === format!.format_id && isDownloading && "border-pink-500/50 bg-pink-500/10"
               )}
               disabled={isDownloading}
-              onClick={() => onDownload(format!.format_id, label)}
+              onClick={() => onDownload(format!.format_id, label, antiCopyrightShield, muteAudio)}
             >
               <div className="flex items-center justify-center w-10 h-10 rounded-xl bg-pink-500/10 shrink-0">
                 {isDownloading && activeFormatId === format!.format_id ? (

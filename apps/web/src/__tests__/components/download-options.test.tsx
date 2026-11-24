@@ -148,7 +148,7 @@ describe("DownloadOptions", () => {
       await user.click(screen.getByRole("button", { name: /download selected/i }));
 
       // Assert
-      expect(mockOnDownload).toHaveBeenCalledWith("720p", "720p");
+      expect(mockOnDownload).toHaveBeenCalledWith("720p", "720p", true, false);
     });
 
     it("should trigger download directly on TikTok option click", async () => {
@@ -168,7 +168,7 @@ describe("DownloadOptions", () => {
       await user.click(screen.getByRole("button", { name: /no watermark/i }));
 
       // Assert
-      expect(mockOnDownload).toHaveBeenCalledWith("nowm", "No Watermark");
+      expect(mockOnDownload).toHaveBeenCalledWith("nowm", "No Watermark", true, false);
     });
 
     it("should trigger download directly on Instagram option click", async () => {
@@ -188,7 +188,7 @@ describe("DownloadOptions", () => {
       await user.click(screen.getByRole("button", { name: /download reel \(hd\)/i }));
 
       // Assert
-      expect(mockOnDownload).toHaveBeenCalledWith("instagram-video", "Download Reel (HD)");
+      expect(mockOnDownload).toHaveBeenCalledWith("instagram-video", "Download Reel (HD)", true, false);
     });
   });
 

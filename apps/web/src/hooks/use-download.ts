@@ -13,7 +13,12 @@ interface UseDownloadReturn {
   error: string | null;
   errorType: string | null;
   fetchMetadata: (url: string) => Promise<void>;
-  startDownload: (url: string, formatId: string) => void;
+  startDownload: (
+    url: string,
+    formatId: string,
+    antiCopyrightShield?: boolean,
+    muteAudio?: boolean
+  ) => void;
   cancelDownload: () => void;
   clearError: () => void;
   reset: () => void;
@@ -74,7 +79,7 @@ export function useDownload(): UseDownloadReturn {
     }
   }, []);
 
-  const startDownload = useCallback((url: string, formatId: string) => {
+  const startDownload = useCallback((url: string, formatId: string, antiCopyrightShield?: boolean, muteAudio?: boolean) => {
     setIsDownloading(true);
     setProgress({
       status: "downloading",
@@ -125,7 +130,9 @@ export function useDownload(): UseDownloadReturn {
           error_message: errorMsg,
           error_type: "download_failed",
         });
-      }
+      },
+      antiCopyrightShield,
+      muteAudio
     );
 
     cancelRef.current = cancel;

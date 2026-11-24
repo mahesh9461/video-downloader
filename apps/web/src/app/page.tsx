@@ -66,7 +66,7 @@ export default function Home() {
   );
 
   const handleDownload = useCallback(
-    (formatId: string, label: string) => {
+    (formatId: string, label: string, antiCopyrightShield?: boolean, muteAudio?: boolean) => {
       setActiveFormatId(formatId);
       const chosenFormat = metadata?.formats.find((f) => f.format_id === formatId);
 
@@ -78,7 +78,7 @@ export default function Home() {
         is_audio: chosenFormat?.is_audio_only || label.toLowerCase().includes("mp3"),
       });
 
-      startDownload(currentUrl, formatId);
+      startDownload(currentUrl, formatId, antiCopyrightShield, muteAudio);
 
       if (metadata) {
         addToHistory({

@@ -103,6 +103,8 @@ export interface ClipRenderRequest {
   progress_bar_color?: string;
   burn_captions?: boolean;
   caption_style?: string;
+  anti_copyright_shield?: boolean;
+  mute_original_audio?: boolean;
 }
 
 export interface ClipRenderResponse {

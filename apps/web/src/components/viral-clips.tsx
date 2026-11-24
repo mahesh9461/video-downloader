@@ -32,6 +32,8 @@ import {
   Lightbulb,
   Trash2,
   Plus,
+  ShieldCheck,
+  VolumeX,
 } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -92,6 +94,8 @@ export function ViralClips() {
   const [progressBarColor, setProgressBarColor] = useState<string>("yellow");
   const [burnCaptions, setBurnCaptions] = useState<boolean>(false);
   const [captionStyle, setCaptionStyle] = useState<string>("viral_yellow");
+  const [antiCopyrightShield, setAntiCopyrightShield] = useState<boolean>(true);
+  const [muteOriginalAudio, setMuteOriginalAudio] = useState<boolean>(false);
 
   // Render Execution & Progress state
   const [isRendering, setIsRendering] = useState(false);
@@ -339,6 +343,8 @@ export function ViralClips() {
         progress_bar_color: progressBarColor,
         burn_captions: burnCaptions,
         caption_style: captionStyle,
+        anti_copyright_shield: antiCopyrightShield,
+        mute_original_audio: muteOriginalAudio,
       });
 
       setRenderProgress(100);
@@ -793,6 +799,74 @@ export function ViralClips() {
                       {progressBar ? "Yellow Bar Active" : "No Progress Bar"}
                     </button>
                   </div>
+                </div>
+              </div>
+
+              {/* Anti-Copyright Protection & Audio Controls */}
+              <div className="p-4 rounded-xl bg-cyan-950/20 border border-cyan-500/30 space-y-3">
+                <div className="flex items-center justify-between gap-3">
+                  <div className="flex items-center gap-2.5">
+                    <div className="p-2 rounded-lg bg-cyan-500/20 text-cyan-400">
+                      <ShieldCheck className="w-4 h-4" />
+                    </div>
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs font-bold text-white">Anti-Copyright Shield</span>
+                        <Badge variant="active" className="text-[10px] py-0 px-1.5 bg-cyan-500/20 text-cyan-300 border-cyan-500/40">
+                          Content ID Safe
+                        </Badge>
+                      </div>
+                      <p className="text-[11px] text-zinc-300 mt-0.5">
+                        Alters audio pitch (+4%), tempo, & EQ so YouTube Content ID cannot match the fingerprint.
+                      </p>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    role="switch"
+                    aria-checked={antiCopyrightShield}
+                    aria-label="Anti-Copyright Shield"
+                    onClick={() => setAntiCopyrightShield(!antiCopyrightShield)}
+                    className={`w-10 h-6 flex items-center rounded-full p-1 transition-colors shrink-0 ${
+                      antiCopyrightShield ? "bg-cyan-500" : "bg-zinc-700"
+                    }`}
+                  >
+                    <div
+                      className={`bg-zinc-950 w-4 h-4 rounded-full shadow-md transform transition-transform ${
+                        antiCopyrightShield ? "translate-x-4" : "translate-x-0"
+                      }`}
+                    />
+                  </button>
+                </div>
+
+                <div className="flex items-center justify-between gap-3 pt-2.5 border-t border-white/5">
+                  <div className="flex items-center gap-2.5">
+                    <div className="p-2 rounded-lg bg-zinc-800 text-zinc-400">
+                      <VolumeX className="w-4 h-4" />
+                    </div>
+                    <div>
+                      <span className="text-xs font-bold text-zinc-300">Mute Original Audio Track</span>
+                      <p className="text-[11px] text-zinc-400 mt-0.5">
+                        Removes original audio completely (plays only your selected background music).
+                      </p>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    role="switch"
+                    aria-checked={muteOriginalAudio}
+                    aria-label="Mute Original Audio Track"
+                    onClick={() => setMuteOriginalAudio(!muteOriginalAudio)}
+                    className={`w-10 h-6 flex items-center rounded-full p-1 transition-colors shrink-0 ${
+                      muteOriginalAudio ? "bg-rose-500" : "bg-zinc-700"
+                    }`}
+                  >
+                    <div
+                      className={`bg-zinc-950 w-4 h-4 rounded-full shadow-md transform transition-transform ${
+                        muteOriginalAudio ? "translate-x-4" : "translate-x-0"
+                      }`}
+                    />
+                  </button>
                 </div>
               </div>
 

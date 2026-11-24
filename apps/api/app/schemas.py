@@ -31,6 +31,8 @@ class VideoMetadata(BaseModel):
 class DownloadRequest(BaseModel):
     url: str = Field(..., description="Target video URL")
     format_id: str = Field(..., description="Format ID or selection token")
+    anti_copyright_shield: bool = Field(False, description="Apply anti-copyright audio and video cloaking to prevent Content ID claims")
+    mute_audio: bool = Field(False, description="Mute or strip audio on downloaded video")
 
 
 class DownloadProgress(BaseModel):
@@ -142,6 +144,8 @@ class ClipRenderRequest(BaseModel):
     progress_bar_color: str = Field("yellow", description="Progress bar color: 'yellow', 'cyan', 'violet', or 'red'")
     burn_captions: bool = Field(False, description="Burn in Ssemble-style viral subtitle captions")
     caption_style: str = Field("viral_yellow", description="Caption style: 'viral_yellow' or 'clean_white'")
+    anti_copyright_shield: bool = Field(False, description="Apply anti-copyright audio and video cloaking (pitch shift, tempo adjustment, and EQ) to prevent Content ID claims")
+    mute_original_audio: bool = Field(False, description="Mute or strip the original audio completely")
 
 
 class ClipRenderResponse(BaseModel):

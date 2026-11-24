@@ -146,7 +146,9 @@ describe("useDownload hook", () => {
         "720p",
         expect.any(Function), // onProgress
         expect.any(Function), // onComplete
-        expect.any(Function)  // onError
+        expect.any(Function), // onError
+        undefined,
+        undefined
       );
     });
 

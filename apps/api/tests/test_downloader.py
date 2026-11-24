@@ -495,3 +495,23 @@ async def test_run_download_profile_fallback(mock_ydl_class, tmp_path):
     assert any('"status":"complete"' in ev or '"status": "complete"' in ev for ev in events)
     assert mock_ydl.extract_info.call_count == 2
     assert not is_youtube_cooldown_active()
+
+
+def test_apply_anti_copyright_shield(tmp_path):
+    from app.downloader import apply_anti_copyright_shield
+
+    test_file = tmp_path / "sample.mp4"
+    test_file.write_bytes(b"dummy video data")
+
+    with patch("subprocess.run") as mock_sub:
+        mock_proc = MagicMock()
+        mock_proc.returncode = 0
+        mock_sub.return_value = mock_proc
+
+        with patch("os.path.exists", return_value=True), patch("os.path.getsize", return_value=1234):
+            res = apply_anti_copyright_shield(str(test_file), mute_audio=False)
+            assert os.path.exists(res)
+            mock_sub.assert_called_once()
+            args = " ".join(mock_sub.call_args[0][0])
+            assert "asetrate=" in args
+            assert "eq=contrast=" in args

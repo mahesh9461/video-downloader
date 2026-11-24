@@ -87,7 +87,9 @@ class ApiClient {
     formatId: string,
     onProgress: (progress: DownloadProgress) => void,
     onComplete: (downloadUrl: string) => void,
-    onError: (error: string) => void
+    onError: (error: string) => void,
+    antiCopyrightShield?: boolean,
+    muteAudio?: boolean
   ): () => void {
     const abortController = new AbortController();
 
@@ -96,7 +98,12 @@ class ApiClient {
         const response = await fetch(this.resolveUrl("/api/download"), {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ url, format_id: formatId }),
+          body: JSON.stringify({
+            url,
+            format_id: formatId,
+            anti_copyright_shield: !!antiCopyrightShield,
+            mute_audio: !!muteAudio,
+          }),
           signal: abortController.signal,
         });
 

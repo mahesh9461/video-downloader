@@ -321,7 +321,12 @@ async def download_video(req: DownloadRequest, request: Request):
     # Opportunistically sweep any expired files
     sweep_expired_files()
 
-    stream_generator = download_video_stream(req.url.strip(), req.format_id.strip())
+    stream_generator = download_video_stream(
+        req.url.strip(),
+        req.format_id.strip(),
+        anti_copyright_shield=req.anti_copyright_shield,
+        mute_audio=req.mute_audio,
+    )
     return StreamingResponse(
         stream_generator,
         media_type="text/event-stream",
@@ -1023,6 +1028,8 @@ async def render_viral_clip_endpoint(
             progress_bar=req.progress_bar,
             progress_bar_color=req.progress_bar_color,
             subtitles_path=subtitles_temp_path,
+            anti_copyright_shield=req.anti_copyright_shield,
+            mute_original_audio=req.mute_original_audio,
         )
     finally:
         # If we downloaded a temporary source video or created a temporary sub file, clean it up

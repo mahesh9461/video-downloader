@@ -156,7 +156,9 @@ describe("E2E Integration Flow", () => {
         "yt-1080p",
         expect.any(Function),
         expect.any(Function),
-        expect.any(Function)
+        expect.any(Function),
+        true,
+        false
       );
 
       await waitFor(() => {

@@ -202,6 +202,37 @@ class TestClipRenderer:
         assert res["filesize"] > 0
         mock_subprocess.assert_called_once()
 
+    def test_build_video_filtergraph_anti_copyright(self):
+        fg = build_video_filtergraph(
+            layout="center_crop",
+            hook_title="TEST",
+            anti_copyright_shield=True,
+        )
+        assert "eq=contrast=" in fg
+
+    @patch("subprocess.run")
+    @patch("shutil.which", return_value="/usr/bin/ffmpeg")
+    def test_render_viral_clip_anti_copyright_and_mute(self, mock_which, mock_subprocess, tmp_path):
+        mock_proc = MagicMock()
+        mock_proc.returncode = 0
+        mock_subprocess.return_value = mock_proc
+
+        out_file = tmp_path / "clip_shield.mp4"
+        out_file.write_bytes(b"dummy mp4 data")
+
+        res = render_viral_clip(
+            input_path="/tmp/input.mp4",
+            output_path=str(out_file),
+            start_time=0.0,
+            end_time=20.0,
+            anti_copyright_shield=True,
+            mute_original_audio=True,
+            background_music="lofi_chill",
+        )
+        assert res["duration"] == 20.0
+        cmd_args = " ".join(mock_subprocess.call_args[0][0])
+        assert "[1:a]volume=1.0[a]" in cmd_args
+
 
 # ---------------------------------------------------------------------------
 # API tests: Viral Clips
