@@ -11,11 +11,13 @@ import {
   Lightbulb,
   ShieldCheck,
   Check,
+  Sliders,
 } from "lucide-react";
 import { Modal } from "./ui/modal";
 import { Button } from "./ui/button";
 import { Badge } from "./ui/badge";
 import { ConfirmDialog } from "./ui/confirm-dialog";
+import { ChannelPresetModal } from "./channel-preset-modal";
 import { YouTubeChannelItem } from "@/lib/types";
 import { apiClient } from "@/lib/api";
 import { useToast } from "@/hooks/use-toast";
@@ -38,6 +40,7 @@ export function ChannelManagerModal({
   const { success, error } = useToast();
   const [isConnecting, setIsConnecting] = useState(false);
   const [channelToDelete, setChannelToDelete] = useState<YouTubeChannelItem | null>(null);
+  const [channelToConfigure, setChannelToConfigure] = useState<YouTubeChannelItem | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
 
   const handleConnectAnother = async () => {
@@ -177,6 +180,18 @@ export function ChannelManagerModal({
 
                     {/* Actions */}
                     <div className="flex items-center gap-2 w-full sm:w-auto justify-end pt-2 sm:pt-0 border-t sm:border-t-0 border-zinc-800/80">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setChannelToConfigure(ch)}
+                        className="text-xs"
+                        aria-label={`Edit presets for ${ch.channel_title}`}
+                      >
+                        <Sliders className="w-3.5 h-3.5 mr-1 text-cyan-400" />
+                        Defaults
+                      </Button>
+
                       {!isActive ? (
                         <Button
                           type="button"
@@ -235,6 +250,16 @@ export function ChannelManagerModal({
           </div>
         </div>
       </Modal>
+
+      {/* Channel Presets & Defaults Modal */}
+      <ChannelPresetModal
+        isOpen={Boolean(channelToConfigure)}
+        onClose={() => setChannelToConfigure(null)}
+        channel={channelToConfigure}
+        onSaved={(_updated) => {
+          onChannelsUpdated();
+        }}
+      />
 
       {/* Disconnect Confirmation Dialog */}
       <ConfirmDialog

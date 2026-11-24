@@ -18,8 +18,11 @@ from app.youtube_publisher import (
     clear_stored_token,
     exchange_code_for_token,
     get_user_channels,
+    save_user_channel,
     set_active_channel_id,
     delete_user_channel,
+    update_channel_settings,
+    get_channel_preset,
     publish_short_video,
     _channels_store,
 )
@@ -327,3 +330,86 @@ def test_deleting_channel_a_leaves_b_connected_and_active():
     assert channels_remaining[0]["channel_id"] == "UC_B"
     assert channels_remaining[0]["is_default"] is True
     assert _channels_store["active_channel_id"] == "UC_B"
+
+
+def test_update_channel_settings_custom_description_tags_category():
+    """Verify user can add/modify description, tags, category, and made_for_kids for a channel."""
+    save_user_channel({
+        "channel_id": "UC_CUSTOM_1",
+        "channel_title": "Custom Vlogger",
+        "access_token": "tok_1",
+        "refresh_token": "ref_1",
+        "is_default": True,
+    })
+
+    # Update settings with specific tags, category, and description
+    updated = update_channel_settings("UC_CUSTOM_1", {
+        "description": "My custom vlogging channel description with links!",
+        "tags": ["vlog", "#dailyvlog", "tech", "vlog"],  # test deduplication & # stripping
+        "category_id": "22",
+        "made_for_kids": False,
+        "ai_generated": False,
+        "paid_promotion": True,
+    })
+
+    assert updated is not None
+    assert updated["description"] == "My custom vlogging channel description with links!"
+    assert updated["tags"] == ["vlog", "dailyvlog", "tech"]
+    assert updated["category_id"] == "22"
+    assert updated["category_name"] == "People & Blogs"
+    assert updated["made_for_kids"] is False
+    assert updated["paid_promotion"] is True
+
+    # Check preset retrieval returns these custom stored settings
+    preset = get_channel_preset("UC_CUSTOM_1")
+    assert preset["description"] == "My custom vlogging channel description with links!"
+    assert preset["tags"] == ["vlog", "dailyvlog", "tech"]
+    assert preset["categoryId"] == "22"
+    assert preset["category_name"] == "People & Blogs"
+    assert preset["selfDeclaredMadeForKids"] is False
+    assert preset["paidProductPlacement"] is True
+
+    # User can modify again
+    modified = update_channel_settings("UC_CUSTOM_1", {
+        "description": "Updated new description",
+        "tags": ["travel", "food"],
+        "category_id": "19",
+    })
+    assert modified["description"] == "Updated new description"
+    assert modified["tags"] == ["travel", "food"]
+    assert modified["category_id"] == "19"
+    assert modified["category_name"] == "Travel & Events"
+
+
+def test_update_channel_settings_api_endpoint():
+    """Verify PUT /api/youtube/channels/{channel_id}/settings endpoint."""
+    from fastapi.testclient import TestClient
+    from app.main import app
+
+    client = TestClient(app)
+
+    save_user_channel({
+        "channel_id": "UC_API_TEST",
+        "channel_title": "API Test Channel",
+        "access_token": "tok_api",
+        "refresh_token": "ref_api",
+        "is_default": True,
+    })
+
+    res = client.put(
+        "/api/youtube/channels/UC_API_TEST/settings",
+        json={
+            "description": "Endpoint configured description",
+            "tags": ["test1", "test2", "#hashtag"],
+            "category_id": "1",
+            "made_for_kids": True,
+        },
+    )
+    assert res.status_code == 200
+    data = res.json()
+    assert data["channel_id"] == "UC_API_TEST"
+    assert data["description"] == "Endpoint configured description"
+    assert data["tags"] == ["test1", "test2", "hashtag"]
+    assert data["category_id"] == "1"
+    assert data["category_name"] == "Film & Animation"
+    assert data["made_for_kids"] is True

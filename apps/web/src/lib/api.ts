@@ -18,6 +18,7 @@ import {
   AuthResponse,
   YouTubeChannelItem,
   YouTubeChannelsResponse,
+  UpdateChannelSettingsRequest,
   HistoryItem,
   GlobalSettings,
 } from "./types";
@@ -560,6 +561,32 @@ class ApiClient {
     });
     if (!response.ok) {
       throw new DownloadError("Failed to delete channel", "youtube_error");
+    }
+    return response.json();
+  }
+
+  async updateYouTubeChannelSettings(
+    channelId: string,
+    settings: UpdateChannelSettingsRequest
+  ): Promise<YouTubeChannelItem> {
+    const response = await fetch(
+      this.resolveUrl(`/api/youtube/channels/${encodeURIComponent(channelId)}/settings`),
+      {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+          ...this.getAuthHeaders(),
+        },
+        body: JSON.stringify(settings),
+      }
+    );
+    if (!response.ok) {
+      let detail = "Failed to update channel presets";
+      try {
+        const err = await response.json();
+        detail = err.detail || detail;
+      } catch {}
+      throw new DownloadError(detail, "youtube_error");
     }
     return response.json();
   }

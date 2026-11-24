@@ -42,6 +42,26 @@ DEFAULT_YOUTUBE_TAGS = [
 
 DEFAULT_YOUTUBE_CATEGORY_ID = "20"  # Gaming Category
 
+# Default Pipsy Pop Kids & Nursery Rhymes Presets
+PIPSY_POP_CHANNEL_ID = "UCgwgp-cWzUEi4Vw-7mRSfOw"
+PIPSY_POP_DESCRIPTION = (
+    "Join Mother Duck and her cute little ducklings on a fun swimming adventure! Sing and count along with this classic Five Little Ducks nursery rhyme, perfect for babies, toddlers, and preschoolers.\n\n"
+    "🔔 Subscribe to Pipsy Pop for more fun nursery rhymes, counting songs, and kid-friendly cartoons!\n\n"
+    "#FiveLittleDucks #NurseryRhymes #KidsSongs #PipsyPop #ToddlerSongs #CartoonsForKids #CountingSongs"
+)
+
+PIPSY_POP_TAGS = [
+    "Five Little Ducks", "Five Little Ducks Went Swimming One Day", "nursery rhymes",
+    "kids songs", "Pipsy Pop", "PipsyPop", "toddler songs", "cartoons for kids",
+    "counting songs", "baby songs", "children songs", "preschool songs",
+    "rhymes for children", "kindergarten songs", "duck song", "sing along",
+    "kids animation", "educational songs", "fun kids videos", "Mother Duck",
+    "ducklings", "Mother Duck and her cute little ducklings", "classic Five Little Ducks",
+    "songs for babies", "learning songs"
+]
+
+PIPSY_POP_CATEGORY_ID = "1"  # Film & Animation Category
+
 # Multi-channel persistent cache file and store
 CHANNELS_CACHE_FILE = Path(__file__).resolve().parent.parent / "data" / "youtube_channels.json"
 _channels_store: Dict[str, Any] = {"channels": {}, "active_channel_id": None}
@@ -72,8 +92,95 @@ def _save_channels_store():
         logger.warning("Failed to save channels cache: %s", e)
 
 
+# Standard YouTube Categories
+YOUTUBE_CATEGORIES: Dict[str, str] = {
+    "1": "Film & Animation",
+    "2": "Autos & Vehicles",
+    "10": "Music",
+    "15": "Pets & Animals",
+    "17": "Sports",
+    "19": "Travel & Events",
+    "20": "Gaming",
+    "22": "People & Blogs",
+    "23": "Comedy",
+    "24": "Entertainment",
+    "25": "News & Politics",
+    "26": "Howto & Style",
+    "27": "Education",
+    "28": "Science & Technology",
+    "29": "Nonprofits & Activism",
+}
+
+
+def get_channel_preset(channel_id: Optional[str] = None, channel_title: Optional[str] = None) -> Dict[str, Any]:
+    """Returns the channel-specific metadata preset (description, tags, category, audience)."""
+    channels_map = _channels_store.get("channels", {})
+    target_ch = None
+    if channel_id and channel_id in channels_map:
+        target_ch = channels_map[channel_id]
+    elif not channel_id:
+        active_id = _channels_store.get("active_channel_id")
+        if active_id and active_id in channels_map:
+            target_ch = channels_map[active_id]
+
+    c_title = (channel_title or (target_ch.get("channel_title") if target_ch else "")).lower()
+    cid = channel_id or (target_ch.get("channel_id") if target_ch else "")
+
+    # If the channel specifically has saved custom settings, use them!
+    if target_ch and any(target_ch.get(k) is not None for k in ("description", "tags", "category_id", "made_for_kids")):
+        cat_id = str(target_ch.get("category_id") or ("1" if cid == PIPSY_POP_CHANNEL_ID else "20"))
+        cat_name = target_ch.get("category_name") or YOUTUBE_CATEGORIES.get(cat_id, "Entertainment")
+        desc = target_ch.get("description")
+        if desc is None:
+            desc = PIPSY_POP_DESCRIPTION if (cid == PIPSY_POP_CHANNEL_ID or "pipsy" in c_title) else DEFAULT_YOUTUBE_DESCRIPTION
+        tags = target_ch.get("tags")
+        if tags is None:
+            tags = PIPSY_POP_TAGS if (cid == PIPSY_POP_CHANNEL_ID or "pipsy" in c_title) else DEFAULT_YOUTUBE_TAGS
+        mfk = target_ch.get("made_for_kids")
+        if mfk is None:
+            mfk = True if (cid == PIPSY_POP_CHANNEL_ID or "pipsy" in c_title) else False
+
+        return {
+            "channel_id": cid,
+            "channel_title": target_ch.get("channel_title") or ("Pipsy Pop" if cid == PIPSY_POP_CHANNEL_ID else "YouTube Channel"),
+            "description": desc,
+            "tags": tags,
+            "categoryId": cat_id,
+            "category_name": cat_name,
+            "selfDeclaredMadeForKids": bool(mfk),
+            "containsSyntheticMedia": bool(target_ch.get("ai_generated", False)),
+            "paidProductPlacement": bool(target_ch.get("paid_promotion", False)),
+        }
+
+    if cid == PIPSY_POP_CHANNEL_ID or "pipsy" in c_title or "pop" in c_title:
+        return {
+            "channel_id": PIPSY_POP_CHANNEL_ID,
+            "channel_title": "Pipsy Pop",
+            "description": PIPSY_POP_DESCRIPTION,
+            "tags": PIPSY_POP_TAGS,
+            "categoryId": PIPSY_POP_CATEGORY_ID,
+            "category_name": "Film & Animation",
+            "selfDeclaredMadeForKids": True,
+            "containsSyntheticMedia": False,
+            "paidProductPlacement": False,
+        }
+
+    # Default: ViceVerse GTA 6 Gaming
+    return {
+        "channel_id": "UC8wRcCQSvwn7Qf6BMxiUl4Q",
+        "channel_title": "GTA World: ViceVerse",
+        "description": DEFAULT_YOUTUBE_DESCRIPTION,
+        "tags": DEFAULT_YOUTUBE_TAGS,
+        "categoryId": DEFAULT_YOUTUBE_CATEGORY_ID,
+        "category_name": "Gaming",
+        "selfDeclaredMadeForKids": False,
+        "containsSyntheticMedia": False,
+        "paidProductPlacement": False,
+    }
+
+
 def get_user_channels(user_id: Optional[str] = None) -> List[Dict[str, Any]]:
-    """Returns list of connected YouTube channels for user, including token validity."""
+    """Returns list of connected YouTube channels for user, including token validity and channel presets."""
     channels_map = _channels_store.get("channels", {})
     active_id = _channels_store.get("active_channel_id")
 
@@ -105,6 +212,8 @@ def get_user_channels(user_id: Optional[str] = None) -> List[Dict[str, Any]]:
         has_tok = bool(ch.get("access_token"))
         token_valid = (exp is not None and time.time() < (float(exp) - 60)) or has_ref or has_tok
 
+        preset = get_channel_preset(cid, ch.get("channel_title"))
+
         results.append({
             "id": cid,
             "channel_id": ch.get("channel_id", cid),
@@ -115,6 +224,13 @@ def get_user_channels(user_id: Optional[str] = None) -> List[Dict[str, Any]]:
             "refresh_token": ch.get("refresh_token"),
             "user_id": ch.get("user_id", user_id),
             "connected_at": ch.get("connected_at"),
+            "description": ch.get("description") or preset["description"],
+            "tags": ch.get("tags") or preset["tags"],
+            "category_id": ch.get("category_id") or preset["categoryId"],
+            "category_name": ch.get("category_name") or preset["category_name"],
+            "made_for_kids": ch.get("made_for_kids") if "made_for_kids" in ch else preset["selfDeclaredMadeForKids"],
+            "ai_generated": ch.get("ai_generated") if "ai_generated" in ch else preset["containsSyntheticMedia"],
+            "paid_promotion": ch.get("paid_promotion") if "paid_promotion" in ch else preset["paidProductPlacement"],
         })
     return results
 
@@ -164,6 +280,14 @@ def save_user_channel(channel_data: Dict[str, Any], user_id: Optional[str] = Non
         "user_id": user_id or channel_data.get("user_id") or "default",
         "connected_at": channel_data.get("connected_at") or (existing.get("connected_at") if existing else time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())),
     }
+
+    # Preserve custom channel metadata presets if present
+    for field in ("description", "tags", "category_id", "category_name", "made_for_kids", "ai_generated", "paid_promotion"):
+        if field in channel_data and channel_data[field] is not None:
+            rec[field] = channel_data[field]
+        elif existing and field in existing and existing[field] is not None:
+            rec[field] = existing[field]
+
     channels_map[cid] = rec
 
     if is_def or not _channels_store.get("active_channel_id"):
@@ -253,6 +377,68 @@ def delete_user_channel(channel_id: str, user_id: Optional[str] = None) -> bool:
             pass
         return True
     return False
+
+
+def update_channel_settings(
+    channel_id: str,
+    settings: Dict[str, Any],
+    user_id: Optional[str] = None
+) -> Optional[Dict[str, Any]]:
+    """Updates custom default metadata (description, tags, category, audience) for a specific channel."""
+    channels_map = _channels_store.setdefault("channels", {})
+    if channel_id not in channels_map:
+        return None
+    ch = channels_map[channel_id]
+
+    if "description" in settings and settings["description"] is not None:
+        ch["description"] = str(settings["description"]).strip()
+
+    if "tags" in settings and settings["tags"] is not None:
+        raw_tags = settings["tags"]
+        if isinstance(raw_tags, str):
+            raw_tags = [t.strip() for t in raw_tags.split(",") if t.strip()]
+        cleaned_tags = []
+        seen = set()
+        for t in raw_tags:
+            tag_str = str(t).strip().lstrip("#").strip()
+            if tag_str and tag_str.lower() not in seen:
+                seen.add(tag_str.lower())
+                cleaned_tags.append(tag_str)
+        ch["tags"] = cleaned_tags
+
+    if "category_id" in settings and settings["category_id"] is not None:
+        cat_id = str(settings["category_id"]).strip()
+        ch["category_id"] = cat_id
+        ch["category_name"] = settings.get("category_name") or YOUTUBE_CATEGORIES.get(cat_id, "Entertainment")
+
+    if "made_for_kids" in settings and settings["made_for_kids"] is not None:
+        ch["made_for_kids"] = bool(settings["made_for_kids"])
+
+    if "ai_generated" in settings and settings["ai_generated"] is not None:
+        ch["ai_generated"] = bool(settings["ai_generated"])
+
+    if "paid_promotion" in settings and settings["paid_promotion"] is not None:
+        ch["paid_promotion"] = bool(settings["paid_promotion"])
+
+    _save_channels_store()
+
+    preset = get_channel_preset(channel_id, ch.get("channel_title"))
+    return {
+        "id": channel_id,
+        "channel_id": channel_id,
+        "channel_title": ch.get("channel_title", "YouTube Channel"),
+        "thumbnail_url": ch.get("thumbnail_url"),
+        "is_default": (channel_id == _channels_store.get("active_channel_id")),
+        "user_id": ch.get("user_id", user_id or "default"),
+        "connected_at": ch.get("connected_at"),
+        "description": ch.get("description") or preset["description"],
+        "tags": ch.get("tags") or preset["tags"],
+        "category_id": ch.get("category_id") or preset["categoryId"],
+        "category_name": ch.get("category_name") or preset["category_name"],
+        "made_for_kids": ch.get("made_for_kids") if "made_for_kids" in ch else preset["selfDeclaredMadeForKids"],
+        "ai_generated": ch.get("ai_generated") if "ai_generated" in ch else preset["containsSyntheticMedia"],
+        "paid_promotion": ch.get("paid_promotion") if "paid_promotion" in ch else preset["paidProductPlacement"],
+    }
 
 
 def get_channel_token(channel_id: Optional[str] = None, user_id: Optional[str] = None) -> Optional[str]:
@@ -687,18 +873,34 @@ async def publish_short_video(
 
     file_size = video_path.stat().st_size
     init_url = "https://www.googleapis.com/upload/youtube/v3/videos?uploadType=resumable&part=snippet,status"
+
+    # Resolve channel-specific metadata preset (Pipsy Pop vs GTA ViceVerse)
+    preset = get_channel_preset(channel_id=channel_id)
+
+    # Use channel-specific description if caller left it empty or passed GTA default to Pipsy Pop
+    if description and description.strip() and (description.strip() != DEFAULT_YOUTUBE_DESCRIPTION or preset["channel_id"] != PIPSY_POP_CHANNEL_ID):
+        final_description = description.strip()
+    else:
+        final_description = preset["description"]
+
+    # Use channel-specific tags if caller didn't pass custom tags or passed GTA default to Pipsy Pop
+    if tags and (tags != DEFAULT_YOUTUBE_TAGS or preset["channel_id"] != PIPSY_POP_CHANNEL_ID):
+        final_tags = tags
+    else:
+        final_tags = preset["tags"]
+
     snippet: Dict[str, Any] = {
         "title": title[:100],
-        "description": description.strip() if description and description.strip() else DEFAULT_YOUTUBE_DESCRIPTION,
-        "tags": tags if tags else DEFAULT_YOUTUBE_TAGS,
-        "categoryId": DEFAULT_YOUTUBE_CATEGORY_ID,
+        "description": final_description,
+        "tags": final_tags,
+        "categoryId": preset["categoryId"],
     }
 
     metadata = {
         "snippet": snippet,
         "status": {
             "privacyStatus": privacy if privacy in ["public", "unlisted", "private"] else "public",
-            "selfDeclaredMadeForKids": False,
+            "selfDeclaredMadeForKids": preset["selfDeclaredMadeForKids"],
         },
     }
 

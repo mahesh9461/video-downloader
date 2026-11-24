@@ -150,6 +150,7 @@ export interface YouTubePublishRequest {
   tags?: string[];
   privacy: "public" | "unlisted" | "private";
   access_token?: string;
+  channel_id?: string;
 }
 
 export interface YouTubePublishResponse {
@@ -202,6 +203,25 @@ export interface YouTubeChannelItem {
   is_default: boolean;
   user_id?: string;
   connected_at?: string | null;
+  description?: string | null;
+  tags?: string[] | null;
+  category_id?: string | null;
+  category_name?: string | null;
+  made_for_kids?: boolean | null;
+  ai_generated?: boolean | null;
+  paid_promotion?: boolean | null;
+  email?: string | null;
+  subscriber_count?: string | null;
+}
+
+export interface UpdateChannelSettingsRequest {
+  description?: string;
+  tags?: string[];
+  category_id?: string;
+  category_name?: string;
+  made_for_kids?: boolean;
+  ai_generated?: boolean;
+  paid_promotion?: boolean;
 }
 
 export interface YouTubeChannelsResponse {

@@ -28,6 +28,13 @@ create table if not exists public.user_youtube_channels (
     refresh_token text,
     token_expiry timestamptz,
     is_default boolean default false,
+    description text,
+    tags text[],
+    category_id text default '20',
+    category_name text default 'Gaming',
+    made_for_kids boolean default false,
+    ai_generated boolean default false,
+    paid_promotion boolean default false,
     created_at timestamptz default now(),
     updated_at timestamptz default now()
 );

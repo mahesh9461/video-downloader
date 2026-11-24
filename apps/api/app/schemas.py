@@ -196,6 +196,7 @@ class YouTubePublishRequest(BaseModel):
     tags: Optional[List[str]] = Field(default_factory=list, description="List of video tags")
     privacy: str = Field("public", description="Privacy status: 'public', 'unlisted', or 'private'")
     access_token: Optional[str] = Field(None, description="Optional Google OAuth access token if not using session/stored credentials")
+    channel_id: Optional[str] = Field(None, description="Target YouTube channel ID")
 
 
 class YouTubePublishResponse(BaseModel):
@@ -333,6 +334,23 @@ class YouTubeChannelItem(BaseModel):
     is_default: bool = False
     user_id: Optional[str] = None
     connected_at: Optional[str] = None
+    description: Optional[str] = None
+    tags: Optional[List[str]] = None
+    category_id: Optional[str] = None
+    category_name: Optional[str] = None
+    made_for_kids: Optional[bool] = None
+    ai_generated: Optional[bool] = None
+    paid_promotion: Optional[bool] = None
+
+
+class UpdateChannelSettingsRequest(BaseModel):
+    description: Optional[str] = None
+    tags: Optional[List[str]] = None
+    category_id: Optional[str] = None
+    category_name: Optional[str] = None
+    made_for_kids: Optional[bool] = None
+    ai_generated: Optional[bool] = None
+    paid_promotion: Optional[bool] = None
 
 
 class YouTubeChannelsResponse(BaseModel):

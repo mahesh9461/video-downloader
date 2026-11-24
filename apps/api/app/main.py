@@ -53,6 +53,7 @@ from app.schemas import (
     YouTubeChannelItem,
     YouTubeChannelsResponse,
     SelectChannelRequest,
+    UpdateChannelSettingsRequest,
     HistoryItemSchema,
     HistoryListResponse,
     GlobalSettings,
@@ -72,6 +73,7 @@ from app.youtube_publisher import (
     set_active_channel_id,
     delete_user_channel,
     get_channel_token,
+    update_channel_settings,
 )
 from app.downloader import (
     extract_metadata,
@@ -1282,6 +1284,7 @@ async def youtube_publish_endpoint(req: YouTubePublishRequest):
             tags=req.tags,
             privacy=req.privacy,
             access_token=req.access_token,
+            channel_id=req.channel_id,
         )
         return YouTubePublishResponse(**result)
     except FileNotFoundError as e:
@@ -1408,6 +1411,29 @@ async def youtube_delete_channel_endpoint(channel_id: str, authorization: Option
     from app.youtube_publisher import delete_user_channel
     delete_user_channel(channel_id, user_id=user_id)
     return {"ok": True, "deleted_channel_id": channel_id}
+
+
+@app.put("/api/youtube/channels/{channel_id}/settings", response_model=YouTubeChannelItem)
+@app.post("/api/youtube/channels/{channel_id}/settings", response_model=YouTubeChannelItem)
+async def youtube_update_channel_settings_endpoint(
+    channel_id: str,
+    payload: UpdateChannelSettingsRequest,
+    authorization: Optional[str] = Header(None),
+):
+    """Updates custom default metadata (description, tags, category, audience) for a specific YouTube channel."""
+    user_id = None
+    if authorization:
+        try:
+            from app.auth import get_user_by_token
+            u = await get_user_by_token(authorization.replace("Bearer ", "").strip())
+            if u:
+                user_id = u.id
+        except Exception:
+            pass
+    res = update_channel_settings(channel_id, payload.model_dump(exclude_unset=True), user_id=user_id)
+    if not res:
+        raise HTTPException(status_code=404, detail="Channel not found in your connected accounts.")
+    return YouTubeChannelItem(**res)
 
 
 # ---------------------------------------------------------------------------

@@ -253,6 +253,9 @@ async def save_user_channel_supabase(channel_data: Dict[str, Any], user_id: str 
         "expires_at": channel_data.get("expires_at"),
         "is_default": bool(channel_data.get("is_default", False)),
     }
+    for field in ("description", "tags", "category_id", "category_name", "made_for_kids", "ai_generated", "paid_promotion"):
+        if field in channel_data and channel_data[field] is not None:
+            payload[field] = channel_data[field]
 
     try:
         async with httpx.AsyncClient(timeout=8.0) as client:

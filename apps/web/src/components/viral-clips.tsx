@@ -45,6 +45,7 @@ import { Modal } from "@/components/ui/modal";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { ShortPreviewCard } from "@/components/short-preview-card";
 import { ChannelManagerModal } from "@/components/channel-manager-modal";
+import { ChannelPresetModal } from "@/components/channel-preset-modal";
 import { GlobalSettingsPanel } from "@/components/global-settings-panel";
 import { apiClient } from "@/lib/api";
 import {
@@ -60,6 +61,44 @@ import { useToast } from "@/hooks/use-toast";
 
 const DEFAULT_GTA_DESCRIPTION =
   "Welcome to GTA World: ViceVerse — your daily hub for GTA 6 Shorts, live gameplay streams, hidden Leonida secrets, Vice City map discoveries, crazy physics tests, and launch-week moments with Jason and Lucia.\n\nSubscribe and turn on notifications so you never miss a daily Short or live stream!\n\n#GTA6 #GTAVI #Shorts #GTA6Shorts #GTA6Live #GTA6LiveStream #ViceCity #Leonida #GTA6Gameplay #GTA6Launch #GamingShorts #LiveGaming";
+
+const PIPSY_POP_DESCRIPTION =
+  "Join Mother Duck and her cute little ducklings on a fun swimming adventure! Sing and count along with this classic Five Little Ducks nursery rhyme, perfect for babies, toddlers, and preschoolers.\n\n🔔 Subscribe to Pipsy Pop for more fun nursery rhymes, counting songs, and kid-friendly cartoons!\n\n#FiveLittleDucks #NurseryRhymes #KidsSongs #PipsyPop #ToddlerSongs #CartoonsForKids #CountingSongs";
+
+const PIPSY_POP_TAGS = [
+  "Five Little Ducks",
+  "Five Little Ducks Went Swimming One Day",
+  "nursery rhymes",
+  "kids songs",
+  "Pipsy Pop",
+  "PipsyPop",
+  "toddler songs",
+  "cartoons for kids",
+  "counting songs",
+  "baby songs",
+  "children songs",
+  "preschool songs",
+  "rhymes for children",
+  "kindergarten songs",
+  "duck song",
+  "sing along",
+  "kids animation",
+  "educational songs",
+  "fun kids videos",
+  "Mother Duck",
+  "ducklings",
+  "Mother Duck and her cute little ducklings",
+  "classic Five Little Ducks",
+  "songs for babies",
+  "learning songs",
+];
+
+const DEFAULT_GTA_TAGS = [
+  "GTA 6", "GTA VI", "Grand Theft Auto 6", "GTA 6 Shorts", "ViceVerse",
+  "GTA World ViceVerse", "ViceVerse GTA 6", "Vice City", "GTA 6 secrets",
+  "GTA 6 gameplay", "GTA 6 Easter eggs", "GTA 6 clips", "GTA 6 physics",
+  "GTA 6 map", "gaming Shorts", "gta6 gameplay", "gta6 lucia"
+];
 
 const STEPS: StepItem[] = [
   { id: 1, label: "Add Video", description: "Paste link or select clip" },
@@ -118,6 +157,7 @@ export function ViralClips() {
 
   // Modals & Dialogs
   const [showChannelModal, setShowChannelModal] = useState(false);
+  const [channelToConfigure, setChannelToConfigure] = useState<YouTubeChannelItem | null>(null);
   const [showYouTubeModal, setShowYouTubeModal] = useState(false);
   const [copiedLink, setCopiedLink] = useState(false);
 
@@ -207,6 +247,47 @@ export function ViralClips() {
   const activeChannel = useMemo(() => {
     return channels.find((c) => c.channel_id === activeChannelId) || channels[0] || null;
   }, [channels, activeChannelId]);
+
+  const isPipsy = useMemo(() => {
+    if (!activeChannel) return false;
+    return (
+      activeChannel.channel_id === "UCgwgp-cWzUEi4Vw-7mRSfOw" ||
+      activeChannel.channel_title?.toLowerCase().includes("pipsy")
+    );
+  }, [activeChannel]);
+
+  const currentChannelTags = useMemo(() => {
+    if (activeChannel?.tags && activeChannel.tags.length > 0) {
+      return activeChannel.tags;
+    }
+    return isPipsy ? PIPSY_POP_TAGS : DEFAULT_GTA_TAGS;
+  }, [activeChannel, isPipsy]);
+
+  useEffect(() => {
+    if (activeChannel) {
+      const isPip =
+        activeChannel.channel_id === "UCgwgp-cWzUEi4Vw-7mRSfOw" ||
+        activeChannel.channel_title?.toLowerCase().includes("pipsy");
+      if (activeChannel.description) {
+        setYtDescription(activeChannel.description);
+      } else if (isPip) {
+        setYtDescription(PIPSY_POP_DESCRIPTION);
+      } else {
+        setYtDescription(DEFAULT_GTA_DESCRIPTION);
+      }
+    }
+  }, [activeChannel]);
+
+  const handleChannelPresetSaved = useCallback((updated: YouTubeChannelItem) => {
+    setChannels((prev) =>
+      prev.map((c) => (c.channel_id === updated.channel_id ? { ...c, ...updated } : c))
+    );
+    if (activeChannelId === updated.channel_id) {
+      if (updated.description) {
+        setYtDescription(updated.description);
+      }
+    }
+  }, [activeChannelId]);
 
   const handleUrlChange = (newUrl: string) => {
     setUrl(newUrl);
@@ -424,8 +505,10 @@ export function ViralClips() {
         filename: renderedClip.filename,
         title: ytTitle.trim(),
         description: ytDescription.trim(),
+        tags: currentChannelTags,
         privacy: ytPrivacy,
         access_token: ytAccessToken.trim() || undefined,
+        channel_id: activeChannel?.channel_id || activeChannelId || undefined,
       });
 
       setUploadProgress(100);
@@ -1028,6 +1111,10 @@ export function ViralClips() {
                         try {
                           await apiClient.selectYouTubeChannel(ch.channel_id);
                           setActiveChannelId(ch.channel_id);
+                          const isPip =
+                            ch.channel_id === "UCgwgp-cWzUEi4Vw-7mRSfOw" ||
+                            ch.channel_title?.toLowerCase().includes("pipsy");
+                          setYtDescription(ch.description || (isPip ? PIPSY_POP_DESCRIPTION : DEFAULT_GTA_DESCRIPTION));
                           success(`Switched active channel to ${ch.channel_title}`);
                         } catch {}
                       }}
@@ -1076,7 +1163,21 @@ export function ViralClips() {
                         </div>
                       </div>
 
-                      <div className="shrink-0">
+                      <div className="flex items-center gap-2 shrink-0">
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setChannelToConfigure(ch);
+                          }}
+                          className="text-xs text-zinc-400 hover:text-cyan-300 hover:bg-cyan-500/10 px-2 py-1 h-auto"
+                          aria-label={`Edit presets for ${ch.channel_title}`}
+                        >
+                          <Sliders className="w-3.5 h-3.5 mr-1 text-cyan-400" />
+                          Defaults
+                        </Button>
                         {isActive ? (
                           <div className="w-6 h-6 rounded-full bg-cyan-500 text-zinc-950 flex items-center justify-center font-bold">
                             <Check className="w-4 h-4 stroke-[3]" />
@@ -1216,6 +1317,68 @@ export function ViralClips() {
               </div>
             ) : (
               <form onSubmit={handlePublishToYouTube} className="space-y-5">
+                {/* Channel Publishing Profile (Category, Tags, Audience & Compliance) */}
+                <div className="p-3.5 rounded-xl bg-zinc-900/60 border border-zinc-800 space-y-2.5">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs font-bold text-white flex items-center gap-1.5">
+                        <Settings className="w-3.5 h-3.5 text-cyan-400" />
+                        Channel: {activeChannel?.channel_title || "YouTube"}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (activeChannel) setChannelToConfigure(activeChannel);
+                        }}
+                        className="text-[11px] text-cyan-400 hover:text-cyan-300 font-semibold underline underline-offset-2 flex items-center gap-1"
+                        aria-label="Edit channel defaults"
+                      >
+                        <Sliders className="w-3 h-3" />
+                        Edit Defaults
+                      </button>
+                    </div>
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      <Badge variant="outline" className="text-[10px] py-0 px-2 border-cyan-500/30 text-cyan-300 bg-cyan-950/20">
+                        {activeChannel?.category_name
+                          ? `${activeChannel.category_name} (Cat ${activeChannel.category_id || "1"})`
+                          : isPipsy
+                          ? "Film & Animation (Cat 1)"
+                          : "Gaming (Cat 20)"}
+                      </Badge>
+                      <Badge
+                        variant="outline"
+                        className={`text-[10px] py-0 px-2 ${
+                          (activeChannel?.made_for_kids ?? isPipsy)
+                            ? "border-amber-500/30 text-amber-300 bg-amber-950/20"
+                            : "border-zinc-700 text-zinc-300"
+                        }`}
+                      >
+                        {(activeChannel?.made_for_kids ?? isPipsy)
+                          ? "👶 Made for Kids (COPPA)"
+                          : "👥 General Audience"}
+                      </Badge>
+                      <Badge variant="outline" className="text-[10px] py-0 px-2 border-emerald-500/30 text-emerald-300 bg-emerald-950/20">
+                        AI Content: {activeChannel?.ai_generated ? "Yes" : "No"}
+                      </Badge>
+                      <Badge variant="outline" className="text-[10px] py-0 px-2 border-emerald-500/30 text-emerald-300 bg-emerald-950/20">
+                        Paid Promo: {activeChannel?.paid_promotion ? "Yes" : "No"}
+                      </Badge>
+                    </div>
+                  </div>
+                  <div>
+                    <span className="text-[11px] font-semibold text-zinc-400 block mb-1">
+                      Target Tags for this Channel ({currentChannelTags.length} tags):
+                    </span>
+                    <div className="flex flex-wrap gap-1 max-h-16 overflow-y-auto pr-1">
+                      {currentChannelTags.map((tag) => (
+                        <span key={tag} className="text-[10px] px-1.5 py-0.5 rounded bg-zinc-800 text-zinc-300 border border-zinc-700/60 font-mono">
+                          #{tag}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+
                 {/* Short Title */}
                 <div>
                   <div className="flex justify-between items-center mb-1.5">
@@ -1467,6 +1630,14 @@ export function ViralClips() {
           </form>
         </div>
       </Modal>
+
+      {/* Channel Presets & Defaults Modal */}
+      <ChannelPresetModal
+        isOpen={Boolean(channelToConfigure)}
+        onClose={() => setChannelToConfigure(null)}
+        channel={channelToConfigure}
+        onSaved={handleChannelPresetSaved}
+      />
     </div>
   );
 }
