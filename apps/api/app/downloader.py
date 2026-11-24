@@ -1007,6 +1007,7 @@ async def download_video_stream(
             if height_match:
                 max_h = height_match.group(1)
                 ydl_opts["format"] = (
+                    f"bestvideo[height={max_h}]+bestaudio/"
                     f"bestvideo[height<={max_h}]+bestaudio/"
                     f"bestvideo[height<={max_h}][ext=mp4]+bestaudio[ext=m4a]/"
                     f"bestvideo+bestaudio/"

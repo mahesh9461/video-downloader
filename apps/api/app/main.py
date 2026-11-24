@@ -838,68 +838,45 @@ async def render_viral_clip_endpoint(
         actual_input_path = str(local_candidate)
         title_hint = local_candidate.stem
     else:
-        # Download the video source with multi-client resilience and universal format fallback
+        # Download the full video source in HD with multi-client resilience and universal format fallback
         import yt_dlp
-        from yt_dlp.utils import download_range_func
         import uuid as _uuid
 
         job_id = _uuid.uuid4().hex[:10]
-        stem = f"source_{job_id}"
-        outtmpl_pattern = str(DOWNLOAD_DIR / f"{stem}.%(ext)s")
-
-        # Universal fallback format string prioritizing highest available resolution (4K, 1440p, 1080p, 720p HD)
-        format_selector = (
-            "bestvideo+bestaudio/"
-            "bestvideo[ext=mp4]+bestaudio[ext=m4a]/"
-            "best[height>=720]/"
-            "best[ext=mp4]/"
-            "best/"
-            "bv*+ba/b"
-        )
-
         is_yt = "youtube" in source_input.lower() or "youtu.be" in source_input.lower()
-        client_candidates = YOUTUBE_CLIENT_PROFILES if is_yt else [None]
-        download_success = False
-        last_error = None
-        title_hint = "clip"
+        vid_id = extract_youtube_id(source_input) if is_yt else None
 
-        # Step A: Attempt fast range download of only the needed section (avoids downloading hundreds of megabytes)
-        safe_range_start = max(0.0, req.start_time - 2.0)
-        safe_range_end = req.end_time + 2.0
+        # Check if full HD master video was already downloaded for this video ID
+        cached_candidates = []
+        if vid_id:
+            cached_candidates = [
+                p for p in DOWNLOAD_DIR.glob(f"full_hd_src_{vid_id}.*")
+                if not p.name.endswith(".part") and p.stat().st_size > 1024 * 1024
+            ]
 
-        for client_profile in client_candidates:
-            ydl_opts = get_base_ydl_opts("youtube" if is_yt else "general", client_override=client_profile)
-            ydl_opts.update({
-                "outtmpl": outtmpl_pattern,
-                "format": format_selector,
-                "merge_output_format": "mp4",
-                "noplaylist": True,
-                "download_ranges": download_range_func(None, [(safe_range_start, safe_range_end)]),
-                "force_keyframes_at_cuts": True,
-            })
-            try:
-                with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-                    info = await asyncio.to_thread(ydl.extract_info, source_input, download=True)
-                    if info:
-                        title_hint = info.get("title", title_hint)
+        if cached_candidates:
+            actual_input_path = str(cached_candidates[0])
+            title_hint = cached_candidates[0].stem
+            download_success = True
+        else:
+            stem = f"full_hd_src_{vid_id}" if vid_id else f"source_{job_id}"
+            outtmpl_pattern = str(DOWNLOAD_DIR / f"{stem}.%(ext)s")
 
-                # Look for downloaded file matching stem with any extension
-                candidates = [
-                    p for p in DOWNLOAD_DIR.glob(f"{stem}.*")
-                    if not p.name.endswith(".part") and p.stat().st_size > 0
-                ]
-                if candidates:
-                    actual_input_path = str(candidates[0])
-                    temp_source_path = actual_input_path
-                    download_success = True
-                    break
-            except Exception as e:
-                last_error = e
-                logger.warning("yt-dlp profile %s failed to fetch range clip segment: %s", client_profile, e)
-                continue
+            # Always fetch highest resolution available (1080p, 1440p, 4K, 720p HD) merged with best audio into MP4
+            format_selector = (
+                "bestvideo[height>=1080]+bestaudio/"
+                "bestvideo[height>=720]+bestaudio/"
+                "bestvideo+bestaudio/"
+                "best[height>=720]/"
+                "best"
+            )
 
-        # Step B: Fallback to full download without download_ranges if range request failed
-        if not download_success:
+            client_candidates = YOUTUBE_CLIENT_PROFILES if is_yt else [None]
+            download_success = False
+            last_error = None
+            title_hint = "clip"
+
+            # Download the full high-definition video master (full stream ensures no 360p downscaling)
             for client_profile in client_candidates:
                 ydl_opts = get_base_ydl_opts("youtube" if is_yt else "general", client_override=client_profile)
                 ydl_opts.update({
@@ -913,6 +890,7 @@ async def render_viral_clip_endpoint(
                         info = await asyncio.to_thread(ydl.extract_info, source_input, download=True)
                         if info:
                             title_hint = info.get("title", title_hint)
+
                     candidates = [
                         p for p in DOWNLOAD_DIR.glob(f"{stem}.*")
                         if not p.name.endswith(".part") and p.stat().st_size > 0
@@ -924,7 +902,7 @@ async def render_viral_clip_endpoint(
                         break
                 except Exception as e:
                     last_error = e
-                    logger.warning("yt-dlp profile %s full download fallback failed: %s", client_profile, e)
+                    logger.warning("yt-dlp profile %s full HD download failed: %s", client_profile, e)
                     continue
 
         # Step C: If yt-dlp failed completely, try our built-in InnerTube CDN streamer
