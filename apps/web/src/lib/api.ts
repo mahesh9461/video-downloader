@@ -186,9 +186,10 @@ class ApiClient {
 
   async analyzeClips(
     url: string,
-    minDuration = 30,
-    maxDuration = 60,
-    maxClips = 5
+    minDuration = 15,
+    maxDuration = 30,
+    maxClips = 5,
+    durationMode = "short"
   ): Promise<ClipAnalyzeResponse> {
     const response = await fetch(this.resolveUrl("/api/clips/analyze"), {
       method: "POST",
@@ -198,6 +199,7 @@ class ApiClient {
         min_duration: minDuration,
         max_duration: maxDuration,
         max_clips: maxClips,
+        duration_mode: durationMode,
       }),
     });
 

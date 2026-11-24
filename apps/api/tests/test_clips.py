@@ -114,7 +114,7 @@ It literally doubles your output.
         clips = analyze_and_score_clips(cues, total_duration=180.0, video_title="Software Mastery", max_clips=3)
         assert len(clips) > 0
         assert clips[0].viral_score >= 60
-        assert clips[0].duration >= 30.0
+        assert clips[0].duration >= 15.0
         # Ensure clips don't overlap completely
         if len(clips) > 1:
             assert clips[0].clip_id != clips[1].clip_id
@@ -177,7 +177,7 @@ class TestClipRenderer:
     def test_render_viral_clip_duration_too_long(self):
         with patch("app.clip_renderer._require_ffmpeg", return_value="/usr/bin/ffmpeg"):
             with pytest.raises(ClipRenderException) as exc:
-                render_viral_clip("/tmp/in.mp4", "/tmp/out.mp4", start_time=0.0, end_time=250.0)
+                render_viral_clip("/tmp/in.mp4", "/tmp/out.mp4", start_time=0.0, end_time=350.0)
             assert exc.value.error_type == "duration_too_long"
 
     @patch("app.clip_renderer._require_ffmpeg", return_value="/usr/bin/ffmpeg")

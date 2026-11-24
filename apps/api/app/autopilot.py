@@ -452,16 +452,40 @@ class AutopilotManager:
             except Exception as sub_err:
                 logger.debug("Autopilot subtitle extraction notice: %s", sub_err)
 
+            # Load user global settings if present to respect duration_mode, text overlay, audio mix, and cover image settings
+            global_settings = None
+            try:
+                from app.main import GLOBAL_SETTINGS_FILE
+                from app.schemas import GlobalSettings
+                if os.path.exists(GLOBAL_SETTINGS_FILE):
+                    with open(GLOBAL_SETTINGS_FILE, "r", encoding="utf-8") as f:
+                        global_settings = GlobalSettings(**json.load(f))
+            except Exception as e:
+                logger.debug("Failed reading global settings: %s", e)
+
+            dur_mode = (global_settings and getattr(global_settings, "duration_mode", None)) or "short"
             total_dur = video_info.get("duration") or 300
+
             # Analyze and score clips to discover the most viral highlights
+            # short mode: <30s (typically 15-28s); long mode: 3-4 min (180-240s)
+            if dur_mode == "long":
+                raw_min = 180.0
+                raw_max = 240.0
+                raw_default_clip_len = 180.0
+            else:
+                raw_min = 15.0
+                raw_max = 28.0
+                raw_default_clip_len = 25.0
+
             raw_candidates = analyze_and_score_clips(
                 cues=cues,
                 total_duration=total_dur,
                 video_title=vid_title,
-                min_duration=25.0,
-                max_duration=50.0,
+                min_duration=int(raw_min),
+                max_duration=int(raw_max),
                 max_clips=12,
                 video_id=vid_id,
+                duration_mode=dur_mode,
             )
 
             # Pick the top 6 highest-scoring viral moments
@@ -471,12 +495,13 @@ class AutopilotManager:
                 reverse=True,
             )[:6]
 
-            # Ensure we have exactly 6 segments
-            while len(clip_candidates) < 6:
+            # Ensure we have segments
+            target_slice_count = 6 if dur_mode == "short" else min(3, max(1, int(total_dur // 180) or 1))
+            while len(clip_candidates) < target_slice_count:
                 idx = len(clip_candidates)
-                step = total_dur / 7.0
+                step = total_dur / float(target_slice_count + 1)
                 start = round(step * (idx + 1), 1)
-                end = min(total_dur, start + 35.0)
+                end = min(total_dur, start + raw_default_clip_len)
                 from app.schemas import ClipCandidate
                 clip_candidates.append(ClipCandidate(
                     start_time=start,
@@ -605,11 +630,14 @@ class AutopilotManager:
                 clip.current_step = "styling"
                 clip.background_music = audio_choice
                 clip.progress_bar_color = profile["progress_bar_color"]
-                clip.layout = (global_settings and global_settings.layout) or profile["layout"]
+                if dur_mode == "long":
+                    clip.layout = "horizontal"
+                else:
+                    clip.layout = (global_settings and global_settings.layout) or profile["layout"]
                 clip.step_description = f"Overlay: {clip.hook_style} ({profile['progress_bar_color']} bar) • Song: {audio_choice}"
                 self.current_step = "styling"
-                self.current_step_label = f"Short #{clip_index}: Styled text ({clip.hook_style}) & song ({audio_choice})"
-                self._log(f"🎵 Text & Song set for Short #{clip_index}: {clip.hook_style} | {audio_choice}")
+                self.current_step_label = f"Clip #{clip_index}: Styled text ({clip.hook_style}) & song ({audio_choice})"
+                self._log(f"🎵 Text & Song set for Clip #{clip_index}: {clip.hook_style} | {audio_choice}")
                 self._save_state()
 
                 # Substep 3: Low-CPU Video Rendering
@@ -617,10 +645,11 @@ class AutopilotManager:
                 output_path = str(DOWNLOAD_DIR / output_filename)
                 clip.status = "rendering"
                 clip.current_step = "rendering"
-                clip.step_description = f"Rendering 9:16 vertical video with low CPU mode..."
+                format_desc = "Full HD horizontal 16:9" if dur_mode == "long" else "9:16 vertical"
+                clip.step_description = f"Rendering {format_desc} video with low CPU mode..."
                 self.current_step = "rendering"
-                self.current_step_label = f"Rendering Short #{clip_index}/6 (threads=2)..."
-                self._log(f"🎬 Rendering Short {clip_index}/6 (threads=2): hook='{render_hook_title}' style='{render_hook_style}'")
+                self.current_step_label = f"Rendering Clip #{clip_index}/{len(clip_candidates[:target_slice_count])} (threads=2)..."
+                self._log(f"🎬 Rendering Clip {clip_index} ({format_desc}, threads=2): hook='{render_hook_title}' style='{render_hook_style}'")
                 self._save_state()
 
                 render_layout = clip.layout
@@ -650,9 +679,9 @@ class AutopilotManager:
                 clip.download_url = f"/api/file/{output_filename}"
 
                 # Check global cover image setting
-                cover_enabled = True
+                cover_enabled = False
                 if global_settings and hasattr(global_settings, "cover_image") and global_settings.cover_image:
-                    cover_enabled = global_settings.cover_image.enabled
+                    cover_enabled = global_settings.cover_image.enabled and dur_mode != "long"
 
                 if cover_enabled:
                     # Generate Full HD 1080x1920 viral cover image

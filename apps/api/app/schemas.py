@@ -116,9 +116,10 @@ class ClipCandidate(BaseModel):
 
 class ClipAnalyzeRequest(BaseModel):
     url: Optional[str] = Field(None, description="YouTube or video URL to analyze")
-    min_duration: int = Field(30, ge=15, le=120, description="Minimum clip duration in seconds")
-    max_duration: int = Field(60, ge=20, le=180, description="Maximum clip duration in seconds")
+    min_duration: int = Field(15, ge=5, le=300, description="Minimum clip duration in seconds")
+    max_duration: int = Field(60, ge=10, le=300, description="Maximum clip duration in seconds")
     max_clips: int = Field(5, ge=1, le=10, description="Maximum number of clips to return")
+    duration_mode: Optional[str] = Field("short", description="'short' (<30s vertical 9:16) or 'long' (3-4min horizontal 16:9)")
 
 
 class ClipAnalyzeResponse(BaseModel):
@@ -404,14 +405,15 @@ class AudioMixSettings(BaseModel):
 
 
 class CoverImageSettings(BaseModel):
-    enabled: bool = Field(True, description="Slap a 1-second viral cover thumbnail as opening frame")
+    enabled: bool = Field(False, description="Slap a viral cover thumbnail as opening frame (default false)")
     theme: str = Field("gta_action", description="Cover theme preset: gta_action, neon_glow, bold_text, clean_minimal")
     headline: str = Field("WAIT FOR WHAT HAPPENS NEXT...", description="Default cover text headline")
 
 
 class GlobalSettings(BaseModel):
     user_id: Optional[str] = Field("default", description="Associated user ID or 'default'")
-    layout: str = Field("center_crop", description="Default 9:16 vertical layout: center_crop, blurred_background, stacked")
+    duration_mode: str = Field("short", description="Clip duration mode: 'short' (<30s vertical 9:16) or 'long' (3-4 min horizontal 16:9)")
+    layout: str = Field("center_crop", description="Default layout: center_crop, blurred_background, horizontal, stacked")
     progress_bar: bool = Field(True, description="Include kinetic progress bar at bottom of Short")
     progress_bar_color: str = Field("yellow", description="Progress bar color: yellow, cyan, pink, red, green")
     text_overlay: TextOverlaySettings = Field(default_factory=TextOverlaySettings)

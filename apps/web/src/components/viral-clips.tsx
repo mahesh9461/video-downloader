@@ -81,6 +81,7 @@ export function ViralClips() {
   const [selectedClip, setSelectedClip] = useState<ClipCandidate | null>(null);
 
   // Customization & Rendering state
+  const [durationMode, setDurationMode] = useState<"short" | "long">("short");
   const [layout, setLayout] = useState<string>("center_crop");
   const [hookTitle, setHookTitle] = useState<string>("");
   const [hookStyle, setHookStyle] = useState<string>("none");
@@ -214,6 +215,12 @@ export function ViralClips() {
   };
 
   const handleGlobalSettingsChange = useCallback((newSettings: GlobalSettings) => {
+    if (newSettings.duration_mode) {
+      setDurationMode(newSettings.duration_mode);
+      if (newSettings.duration_mode === "long") {
+        setLayout("horizontal");
+      }
+    }
     if (newSettings.layout) setLayout(newSettings.layout);
     if (newSettings.audio_mix?.background_music) setBackgroundMusic(newSettings.audio_mix.background_music);
     if (typeof newSettings.audio_mix?.music_volume === "number") setMusicVolume(newSettings.audio_mix.music_volume);
@@ -271,7 +278,9 @@ export function ViralClips() {
     setRenderedClip(null);
 
     try {
-      const res = await apiClient.analyzeClips(url.trim(), 30, 60, 4);
+      const minD = durationMode === "long" ? 180 : 15;
+      const maxD = durationMode === "long" ? 240 : 28;
+      const res = await apiClient.analyzeClips(url.trim(), minD, maxD, 4, durationMode);
       setVideoTitle(res.title || "Video Highlights");
       setClips(res.clips);
 
@@ -722,13 +731,14 @@ export function ViralClips() {
               {/* Layout Mode Selector */}
               <div>
                 <label className="block text-sm font-bold text-white mb-2">
-                  Vertical 9:16 Layout
+                  Video Framing &amp; Layout
                 </label>
-                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5">
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
                   {[
-                    { id: "center_crop", label: "Center Crop", desc: "Full-screen action" },
+                    { id: "center_crop", label: "Center Crop", desc: "Full-screen 9:16" },
                     { id: "blurred_background", label: "Blurred Canvas", desc: "Soft border glow" },
-                    { id: "stacked", label: "Split Stack", desc: "Two camera angles" },
+                    { id: "stacked", label: "Split Stack", desc: "Dual vertical" },
+                    { id: "horizontal", label: "Full HD 16:9", desc: "Widescreen landscape" },
                   ].map((l) => (
                     <button
                       key={l.id}

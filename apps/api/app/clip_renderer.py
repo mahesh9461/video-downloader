@@ -23,7 +23,7 @@ from app.cache import duration_cache
 
 logger = logging.getLogger(__name__)
 
-# Available 9:16 vertical layouts
+# Available layouts
 LAYOUT_PRESETS: List[PresetOption] = [
     PresetOption(
         id="center_crop",
@@ -44,6 +44,11 @@ LAYOUT_PRESETS: List[PresetOption] = [
         id="fit_black",
         label="Classic Letterbox",
         description="Fits original video within a clean vertical black canvas.",
+    ),
+    PresetOption(
+        id="horizontal",
+        label="Full HD 16:9 Landscape (Original Horizontal)",
+        description="Keeps widescreen 1920x1080 landscape format in highest HD quality for 3-4 min videos.",
     ),
 ]
 
@@ -266,8 +271,11 @@ def build_video_filtergraph(
     progress_bar_color: str = "yellow",
     subtitles_path: Optional[str] = None,
 ) -> str:
-    """Builds the 1080x1920 vertical layout filtergraph with optional hook text overlay, subtitles, and kinetic progress bar."""
-    if layout == "center_crop":
+    """Builds video filtergraph (1080x1920 vertical or 1920x1080 horizontal HD) with optional hook text overlay, subtitles, and progress bar."""
+    is_horizontal = layout in ("horizontal", "landscape", "16:9")
+    if is_horizontal:
+        base_v = "[0:v]scale=1920:1080:force_original_aspect_ratio=decrease,pad=1920:1080:(ow-iw)/2:(oh-ih)/2:black[framed]"
+    elif layout == "center_crop":
         base_v = "[0:v]crop=ih*9/16:ih:(iw-ow)/2:0,scale=1080:1920[framed]"
     elif layout == "split_screen":
         base_v = (
@@ -293,42 +301,44 @@ def build_video_filtergraph(
     if hook_title and hook_title.strip() and hook_style not in ("none", "clean"):
         clean_title = sanitize_drawtext_string(hook_title.strip())
         if clean_title:
+            y_pos = "120" if is_horizontal else "240"
+            font_sz = "44" if is_horizontal else "52"
             if hook_style == "hormozi_bold":
                 filters.append(
-                    f"drawtext=text='{clean_title}':fontsize=52:fontcolor=0xFFE600:"
+                    f"drawtext=text='{clean_title}':fontsize={font_sz}:fontcolor=0xFFE600:"
                     "borderw=4:bordercolor=black:shadowcolor=black@0.9:shadowx=3:shadowy=3:"
-                    "x=(w-text_w)/2:y=240:line_spacing=12"
+                    f"x=(w-text_w)/2:y={y_pos}:line_spacing=12"
                 )
             elif hook_style in ("mrbeast_urgency", "red_accent"):
                 filters.append(
-                    f"drawtext=text='{clean_title}':fontsize=48:fontcolor=white:"
+                    f"drawtext=text='{clean_title}':fontsize={font_sz}:fontcolor=white:"
                     "box=1:boxcolor=0xE50914@0.92:boxborderw=16:"
-                    "x=(w-text_w)/2:y=240:line_spacing=12"
+                    f"x=(w-text_w)/2:y={y_pos}:line_spacing=12"
                 )
             elif hook_style == "tiktok_trending":
                 filters.append(
-                    f"drawtext=text='{clean_title}':fontsize=46:fontcolor=white:"
+                    f"drawtext=text='{clean_title}':fontsize={font_sz}:fontcolor=white:"
                     "box=1:boxcolor=0x111827@0.8:boxborderw=18:"
-                    "x=(w-text_w)/2:y=240:line_spacing=12"
+                    f"x=(w-text_w)/2:y={y_pos}:line_spacing=12"
                 )
             elif hook_style in ("cinematic_glow", "minimal"):
                 filters.append(
-                    f"drawtext=text='{clean_title}':fontsize=50:fontcolor=white:"
+                    f"drawtext=text='{clean_title}':fontsize={font_sz}:fontcolor=white:"
                     "borderw=3:bordercolor=black@0.8:shadowcolor=black@0.95:shadowx=4:shadowy=4:"
-                    "x=(w-text_w)/2:y=240:line_spacing=12"
+                    f"x=(w-text_w)/2:y={y_pos}:line_spacing=12"
                 )
             elif hook_style == "bold_white":
                 filters.append(
-                    f"drawtext=text='{clean_title}':fontsize=48:fontcolor=white:"
+                    f"drawtext=text='{clean_title}':fontsize={font_sz}:fontcolor=white:"
                     "box=1:boxcolor=black@0.75:boxborderw=14:"
-                    "x=(w-text_w)/2:y=240:line_spacing=10"
+                    f"x=(w-text_w)/2:y={y_pos}:line_spacing=10"
                 )
             else:
                 # Default: yellow_box
                 filters.append(
-                    f"drawtext=text='{clean_title}':fontsize=48:fontcolor=yellow:"
+                    f"drawtext=text='{clean_title}':fontsize={font_sz}:fontcolor=yellow:"
                     "box=1:boxcolor=black@0.7:boxborderw=12:"
-                    "x=(w-text_w)/2:y=240:line_spacing=10"
+                    f"x=(w-text_w)/2:y={y_pos}:line_spacing=10"
                 )
 
     # 2. Ssemble-Style Viral Auto-Captions Burn-in
@@ -339,8 +349,9 @@ def build_video_filtergraph(
     if progress_bar:
         bar_color = PROGRESS_BAR_COLORS.get(progress_bar_color, "0xFFE600@0.95")
         safe_dur = max(0.1, round(clip_duration, 2))
+        bar_h = 10 if is_horizontal else 14
         filters.append(
-            f"drawbox=x=0:y=ih-14:w='iw*min(1.0,t/{safe_dur})':h=14:color={bar_color}:t=fill"
+            f"drawbox=x=0:y=ih-{bar_h}:w='iw*min(1.0,t/{safe_dur})':h={bar_h}:color={bar_color}:t=fill"
         )
 
     if not filters:
@@ -381,8 +392,8 @@ def render_viral_clip(
         raise ClipRenderException("End time must be strictly greater than start time.", "invalid_time_range")
 
     clip_duration = round(end_time - start_time, 2)
-    if clip_duration > 180:
-        raise ClipRenderException("Maximum clip duration is 3 minutes (180 seconds).", "duration_too_long")
+    if clip_duration > 300:
+        raise ClipRenderException("Maximum clip duration is 5 minutes (300 seconds).", "duration_too_long")
 
     video_filter = build_video_filtergraph(
         layout=layout,

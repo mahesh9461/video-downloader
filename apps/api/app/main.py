@@ -658,6 +658,7 @@ async def analyze_viral_clips(req: ClipAnalyzeRequest, request: Request):
             max_duration=req.max_duration,
             max_clips=req.max_clips,
             video_id=local_path.name,
+            duration_mode=req.duration_mode or "short",
         )
         return ClipAnalyzeResponse(
             video_id=local_path.name,
@@ -737,6 +738,7 @@ async def analyze_viral_clips(req: ClipAnalyzeRequest, request: Request):
         max_clips=req.max_clips,
         video_id=meta.id,
         thumbnail_url=meta.thumbnail,
+        duration_mode=req.duration_mode or "short",
     )
 
     return ClipAnalyzeResponse(

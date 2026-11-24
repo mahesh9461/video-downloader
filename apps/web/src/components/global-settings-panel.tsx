@@ -25,6 +25,7 @@ import { useToast } from "@/hooks/use-toast";
 
 export const DEFAULT_GLOBAL_SETTINGS: GlobalSettings = {
   user_id: "default",
+  duration_mode: "short",
   layout: "center_crop",
   progress_bar: true,
   progress_bar_color: "yellow",
@@ -43,7 +44,7 @@ export const DEFAULT_GLOBAL_SETTINGS: GlobalSettings = {
     ducking_enabled: true,
   },
   cover_image: {
-    enabled: true,
+    enabled: false,
     theme: "gta_action",
     headline: "WAIT FOR WHAT HAPPENS NEXT...",
   },
@@ -502,13 +503,46 @@ export function GlobalSettingsPanel({
             <div className="space-y-4">
               <div>
                 <label className="block text-xs font-bold text-zinc-300 mb-2">
-                  Default 9:16 Vertical Framing
+                  Clip Duration &amp; Video Format
                 </label>
-                <div className="grid grid-cols-3 gap-2.5">
+                <div className="grid grid-cols-2 gap-2.5">
                   {[
-                    { id: "center_crop", label: "Center Crop", desc: "Edge-to-edge fill" },
-                    { id: "blurred_background", label: "Blurred Canvas", desc: "Side glow border" },
-                    { id: "stacked", label: "Split Stack", desc: "Dual vertical split" },
+                    { id: "short", label: "Short Video (< 30s)", desc: "Vertical 9:16 for Shorts / Reels / TikTok" },
+                    { id: "long", label: "Full HD Video (3–4 min)", desc: "Horizontal 16:9 for Widescreen YouTube / PC" },
+                  ].map((d) => (
+                    <button
+                      key={d.id}
+                      type="button"
+                      onClick={() =>
+                        updateSettings((prev) => ({
+                          ...prev,
+                          duration_mode: d.id as "short" | "long",
+                          layout: d.id === "long" ? "horizontal" : (prev.layout === "horizontal" ? "center_crop" : prev.layout),
+                        }))
+                      }
+                      className={`p-3 rounded-xl border text-left transition-all ${
+                        (settings.duration_mode || "short") === d.id
+                          ? "bg-cyan-500/20 border-cyan-500/60 text-white font-bold"
+                          : "bg-zinc-900/60 border-zinc-800 text-zinc-300 hover:border-zinc-700"
+                      }`}
+                    >
+                      <span className="block text-xs font-bold">{d.label}</span>
+                      <span className="block text-[10px] text-zinc-400 mt-0.5">{d.desc}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-zinc-300 mb-2">
+                  Video Framing &amp; Layout
+                </label>
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+                  {[
+                    { id: "center_crop", label: "Center Crop", desc: "9:16 edge-to-edge" },
+                    { id: "blurred_background", label: "Blurred Canvas", desc: "9:16 soft glow" },
+                    { id: "stacked", label: "Split Stack", desc: "Dual vertical" },
+                    { id: "horizontal", label: "Full HD 16:9", desc: "Widescreen landscape" },
                   ].map((l) => (
                     <button
                       key={l.id}

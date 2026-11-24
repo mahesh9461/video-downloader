@@ -111,13 +111,13 @@ describe("GlobalSettingsPanel", () => {
       const coverTab = screen.getByRole("button", { name: /cover thumbnail/i });
       await user.click(coverTab);
 
-      // Assert: Cover active button visible
-      const coverToggle = screen.getByRole("button", { name: /cover active/i });
+      // Assert: Cover button visible (No Cover Slap by default)
+      const coverToggle = screen.getByRole("button", { name: /no cover slap/i });
       expect(coverToggle).toBeInTheDocument();
 
-      // Act: Toggle off
+      // Act: Toggle on
       await user.click(coverToggle);
-      expect(screen.getByRole("button", { name: /no cover slap/i })).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: /cover active/i })).toBeInTheDocument();
     });
   });
 

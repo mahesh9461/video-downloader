@@ -165,33 +165,63 @@ def analyze_and_score_clips(
     cues: Optional[List[Dict[str, Any]]],
     total_duration: float,
     video_title: str = "Video Highlights",
-    min_duration: int = 30,
-    max_duration: int = 60,
+    min_duration: int = 15,
+    max_duration: int = 30,
     max_clips: int = 5,
     video_id: Optional[str] = None,
     thumbnail_url: Optional[str] = None,
+    duration_mode: str = "short",
 ) -> List[ClipCandidate]:
     """
     Core virality analyzer:
-    1. Windows the video into 30-60s candidate slices.
-    2. Scores each slice on Hook Quality, Speech Pacing, and Vocabulary Intensity.
-    3. Sorts and selects non-overlapping top-performing clips with thumbnail and retention metrics.
+    1. Supports duration_mode:
+       - 'short': <30s clips (typically 15-28s) for vertical 9:16 Shorts/Reels/TikToks.
+       - 'long': 3-4 minute videos (typically 180-240s) for horizontal 16:9 full HD format.
+    2. Windows the video into candidate slices based on duration_mode.
+    3. Scores each slice on Hook Quality, Speech Pacing, and Vocabulary Intensity.
+    4. Sorts and selects non-overlapping top-performing clips with thumbnail and retention metrics.
     """
     thumb = thumbnail_url or (f"https://i.ytimg.com/vi/{video_id}/hqdefault.jpg" if video_id else None)
 
-    # If no subtitles/cues were available, generate evenly spaced energetic slices
+    # Determine window constraints based on duration_mode
+    if duration_mode == "long":
+        min_d = max(60, min_duration if min_duration > 60 else 180)
+        max_d = min(total_duration, max(min_d, max_duration if max_duration >= 180 else 240))
+        target_duration = float(min(max_d, max(min_d, 180.0)))
+        step_sec = 60.0
+    else:
+        # 'short' mode: strictly <30s (defaulting to 15-28s, but honoring caller's min/max when provided)
+        min_d = min(28, max(5, min_duration)) if min_duration < 30 else float(min_duration)
+        max_d = min(29.5, max(min_d, max_duration if max_duration < 30 else 28)) if max_duration < 30 else float(max_duration)
+        target_duration = float(min(max_d, max(min_d, min(max_duration, 28.0))))
+        step_sec = 10.0
+
+    # If video is shorter than minimum requested duration, adjust target
+    if total_duration < min_d:
+        min_d = max(5.0, total_duration * 0.8)
+        target_duration = total_duration
+
+    # If no subtitles/cues were available, generate distributed energetic slices
     if not cues:
-        logger.info("No transcript cues available; generating distributed highlight windows.")
-        return _generate_fallback_candidates(total_duration, video_title, min_duration, max_clips, video_id=video_id, thumbnail_url=thumb)
+        logger.info("No transcript cues available; generating distributed highlight windows for mode=%s.", duration_mode)
+        return _generate_fallback_candidates(
+            total_duration,
+            video_title,
+            int(target_duration),
+            max_clips,
+            video_id=video_id,
+            thumbnail_url=thumb,
+            duration_mode=duration_mode,
+        )
 
     candidates: List[ClipCandidate] = []
-    step_sec = 15.0  # Slide window in 15-second steps for high coverage
-    target_duration = float(min(max_duration, max(min_duration, 45)))
 
     current_start = 0.0
-    while current_start + min_duration <= total_duration:
+    while current_start + min_d <= total_duration:
         current_end = min(total_duration, current_start + target_duration)
         actual_duration = current_end - current_start
+        if actual_duration < min_d:
+            break
 
         # Collect cues falling inside this window
         window_cues = [
@@ -265,11 +295,11 @@ def analyze_and_score_clips(
 
     # Greedily pick non-overlapping clips
     selected: List[ClipCandidate] = []
+    overlap_threshold = 30.0 if duration_mode == "long" else 6.0
     for cand in candidates:
         overlap = False
         for s in selected:
-            # Overlap threshold: max 6 seconds shared
-            if max(cand.start_time, s.start_time) < min(cand.end_time, s.end_time) - 6.0:
+            if max(cand.start_time, s.start_time) < min(cand.end_time, s.end_time) - overlap_threshold:
                 overlap = True
                 break
         if not overlap:
@@ -279,7 +309,15 @@ def analyze_and_score_clips(
 
     # If nothing qualified, provide fallback slices
     if not selected:
-        return _generate_fallback_candidates(total_duration, video_title, min_duration, max_clips, video_id=video_id, thumbnail_url=thumb)
+        return _generate_fallback_candidates(
+            total_duration,
+            video_title,
+            int(target_duration),
+            max_clips,
+            video_id=video_id,
+            thumbnail_url=thumb,
+            duration_mode=duration_mode,
+        )
 
     return selected
 
@@ -319,6 +357,7 @@ def _generate_fallback_candidates(
     max_clips: int,
     video_id: Optional[str] = None,
     thumbnail_url: Optional[str] = None,
+    duration_mode: str = "short",
 ) -> List[ClipCandidate]:
     """Generates authentic, high-converting viral highlight segments when no transcript is present."""
     thumb = thumbnail_url or (f"https://i.ytimg.com/vi/{video_id}/hqdefault.jpg" if video_id else None)
@@ -341,7 +380,14 @@ def _generate_fallback_candidates(
     else:
         hook_presets = VIRAL_GENERAL_HOOKS
 
-    if total_duration < clip_len:
+    # Target clip duration adjustment
+    effective_clip_len = clip_len
+    if duration_mode == "short" and effective_clip_len >= 30:
+        effective_clip_len = 25
+    elif duration_mode == "long" and effective_clip_len < 60:
+        effective_clip_len = min(int(total_duration), 180)
+
+    if total_duration <= effective_clip_len:
         default_hook, default_summary = hook_presets[0]
         return [
             ClipCandidate(
@@ -360,10 +406,10 @@ def _generate_fallback_candidates(
         ]
 
     # Distribute clips across highest energy points in the video
-    step = (total_duration - clip_len) / max(1, max_clips)
+    step = (total_duration - effective_clip_len) / max(1, max_clips)
     for i in range(max_clips):
         start = round(i * step, 1)
-        end = round(min(total_duration, start + clip_len), 1)
+        end = round(min(total_duration, start + effective_clip_len), 1)
         score = max(72, 96 - (i * 3))
         hook_text, hook_summary = hook_presets[i % len(hook_presets)]
 
