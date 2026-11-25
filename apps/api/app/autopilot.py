@@ -68,6 +68,30 @@ PROCEDURAL_MUSIC_FALLBACKS: List[str] = [
 ]
 
 
+async def load_effective_global_settings(user_id: Optional[str] = None):
+    """Loads global settings from Supabase if configured, falling back to local JSON file."""
+    from app.schemas import GlobalSettings
+    effective_id = user_id or "default"
+    try:
+        from app.supabase_client import get_global_settings_supabase, is_supabase_configured
+        if is_supabase_configured():
+            cloud = await get_global_settings_supabase(effective_id)
+            if cloud:
+                return GlobalSettings(**cloud)
+    except Exception as e:
+        logger.debug("Failed loading settings from Supabase: %s", e)
+
+    try:
+        from app.main import GLOBAL_SETTINGS_FILE
+        if os.path.exists(GLOBAL_SETTINGS_FILE):
+            with open(GLOBAL_SETTINGS_FILE, "r", encoding="utf-8") as f:
+                data = json.load(f)
+                return GlobalSettings(**data)
+    except Exception as e:
+        logger.debug("Failed loading local settings: %s", e)
+    return None
+
+
 class AutopilotManager:
     """Manages autonomous discovery, clipping, rendering, scheduling, and cleanup."""
 
@@ -483,15 +507,7 @@ class AutopilotManager:
                 logger.debug("Autopilot subtitle extraction notice: %s", sub_err)
 
             # Load user global settings if present to respect duration_mode, text overlay, audio mix, and cover image settings
-            global_settings = None
-            try:
-                from app.main import GLOBAL_SETTINGS_FILE
-                from app.schemas import GlobalSettings
-                if os.path.exists(GLOBAL_SETTINGS_FILE):
-                    with open(GLOBAL_SETTINGS_FILE, "r", encoding="utf-8") as f:
-                        global_settings = GlobalSettings(**json.load(f))
-            except Exception as e:
-                logger.debug("Failed reading global settings: %s", e)
+            global_settings = await load_effective_global_settings(user_id=user_id)
 
             dur_mode = (global_settings and getattr(global_settings, "duration_mode", None)) or "short"
             total_dur = video_info.get("duration") or 300
@@ -595,15 +611,7 @@ class AutopilotManager:
 
             # Step 3: Sequential Low-CPU Rendering of the 6 Clips
             # Load user global settings if present to respect text overlay, audio mix, and cover image settings
-            global_settings = None
-            try:
-                from app.main import GLOBAL_SETTINGS_FILE
-                from app.schemas import GlobalSettings
-                if os.path.exists(GLOBAL_SETTINGS_FILE):
-                    with open(GLOBAL_SETTINGS_FILE, "r", encoding="utf-8") as f:
-                        global_settings = GlobalSettings(**json.load(f))
-            except Exception as e:
-                logger.debug("Failed reading global settings: %s", e)
+            global_settings = await load_effective_global_settings(user_id=user_id)
 
             for idx, cand in enumerate(clip_candidates[:6]):
                 if self.cancel_requested:
