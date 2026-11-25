@@ -13,15 +13,49 @@ import os
 import re
 import shutil
 import subprocess
+import threading
 import uuid
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Set
 
 from app.config import DOWNLOAD_DIR, FFMPEG_PATH
 from app.schemas import PresetOption
 from app.cache import duration_cache
 
 logger = logging.getLogger(__name__)
+
+# Active subprocess registry for instant, clean cancellation
+_ACTIVE_SUBPROCESSES: Set[subprocess.Popen] = set()
+_ACTIVE_SUBPROCESSES_LOCK = threading.Lock()
+
+
+def register_active_subprocess(proc: subprocess.Popen):
+    """Registers a running subprocess so it can be killed on cancellation."""
+    with _ACTIVE_SUBPROCESSES_LOCK:
+        _ACTIVE_SUBPROCESSES.add(proc)
+
+
+def unregister_active_subprocess(proc: subprocess.Popen):
+    """Removes a finished or terminated subprocess from the registry."""
+    with _ACTIVE_SUBPROCESSES_LOCK:
+        _ACTIVE_SUBPROCESSES.discard(proc)
+
+
+def terminate_all_active_subprocesses():
+    """Immediately kills all tracked active subprocesses (ffmpeg, etc.)."""
+    with _ACTIVE_SUBPROCESSES_LOCK:
+        procs = list(_ACTIVE_SUBPROCESSES)
+        _ACTIVE_SUBPROCESSES.clear()
+
+    for p in procs:
+        try:
+            p.kill()
+        except Exception:
+            pass
+        try:
+            p.wait(timeout=1.0)
+        except Exception:
+            pass
 
 # Available layouts
 LAYOUT_PRESETS: List[PresetOption] = [
@@ -510,14 +544,22 @@ def render_viral_clip(
 
     logger.info("Executing viral clip render: %s", " ".join(cmd[:15]))
 
+    proc = None
     try:
-        res = subprocess.run(cmd, capture_output=True, text=True, timeout=300)
-        if res.returncode != 0:
-            err = res.stderr[-500:] if res.stderr else "Unknown error"
+        proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+        register_active_subprocess(proc)
+        stdout, stderr = proc.communicate(timeout=300)
+        if proc.returncode != 0:
+            err = stderr[-500:] if stderr else "Unknown error"
             logger.error("FFmpeg clip render failed: %s", err)
             raise ClipRenderException(f"FFmpeg processing failed: {err}", "ffmpeg_error", 500)
     except subprocess.TimeoutExpired:
+        if proc:
+            proc.kill()
         raise ClipRenderException("Clip rendering timed out.", "timeout", 408)
+    finally:
+        if proc:
+            unregister_active_subprocess(proc)
 
     if not os.path.exists(output_path) or os.path.getsize(output_path) == 0:
         raise ClipRenderException("Rendered clip file is empty or missing.", "empty_file", 500)

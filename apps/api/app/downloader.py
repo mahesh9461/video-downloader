@@ -1030,7 +1030,12 @@ async def download_video_stream(
             ydl_opts["format"] = "best[ext=mp4]/best/bv*+ba/b"
             ydl_opts["merge_output_format"] = "mp4"
 
+    # Flag to cancel yt-dlp if client disconnects
+    is_cancelled = False
+
     def progress_hook(d: Dict[str, Any]):
+        if is_cancelled:
+            raise yt_dlp.utils.DownloadCancelled("Download cancelled by client.")
         status = d.get("status")
         if status == "downloading":
             total = safe_int(d.get("total_bytes") or d.get("total_bytes_estimate"), 0)
@@ -1235,8 +1240,11 @@ async def download_video_stream(
     # Run in bounded background executor using running loop
     loop.run_in_executor(DOWNLOAD_EXECUTOR, run_download)
 
-    while True:
-        prog = await queue.get()
-        if prog is None:
-            break
-        yield f"data: {prog.model_dump_json()}\n\n"
+    try:
+        while True:
+            prog = await queue.get()
+            if prog is None:
+                break
+            yield f"data: {prog.model_dump_json()}\n\n"
+    finally:
+        is_cancelled = True

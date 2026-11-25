@@ -1,10 +1,11 @@
 {
-  "user_id": "default",
-  "layout": "blurred_background",
+  "user_id": "usr_046f541938db",
+  "duration_mode": "long",
+  "layout": "horizontal",
   "progress_bar": true,
   "progress_bar_color": "cyan",
   "text_overlay": {
-    "enabled": true,
+    "enabled": false,
     "hook_style": "neon_cyan",
     "default_hook": "DON'T MISS THIS MOMENT!",
     "burn_captions": true,
@@ -22,12 +23,12 @@
     "theme": "neon_glow",
     "headline": "INSANE CLIP!"
   },
-  "default_privacy": "unlisted",
+  "default_privacy": "private",
   "default_tags": [
     "GTA6",
     "ViceCity",
     "Shorts"
   ],
   "active_channel_id": null,
-  "updated_at": "2026-11-23T09:40:30.540537+00:00"
+  "updated_at": "2026-11-25T08:21:28.443687+00:00"
 }

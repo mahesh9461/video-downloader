@@ -1592,7 +1592,10 @@ async def autopilot_trigger_endpoint(
                     user_id=user_id,
                 )
 
-    background_tasks.add_task(_run_batch)
+    # Track active background task so it can be cleanly cancelled by cancel_active_run
+    task = asyncio.create_task(_run_batch())
+    autopilot_manager._active_async_tasks.append(task)
+    task.add_done_callback(lambda t: autopilot_manager._active_async_tasks.remove(t) if t in autopilot_manager._active_async_tasks else None)
     return autopilot_manager.get_status(user_id=user_id)
 
 

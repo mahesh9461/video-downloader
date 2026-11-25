@@ -22,7 +22,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from app.config import DOWNLOAD_DIR, BASE_DIR
-from app.clip_renderer import render_viral_clip
+from app.clip_renderer import render_viral_clip, terminate_all_active_subprocesses
 from app.clip_scorer import analyze_and_score_clips, parse_vtt_or_srt
 from app.downloader import extract_metadata, get_base_ydl_opts, YOUTUBE_CLIENT_PROFILES
 from app.youtube_publisher import (
@@ -89,6 +89,8 @@ class AutopilotManager:
         self.all_published_videos: List[Dict[str, Any]] = []
         self.recent_errors: List[Dict[str, Any]] = []
         self._lock = asyncio.Lock()
+        self.cancel_requested: bool = False
+        self._active_async_tasks: List[asyncio.Task] = []
         self._load_state()
 
     def _log(self, message: str):
@@ -321,6 +323,8 @@ class AutopilotManager:
         self._log(f"📥 Downloading source video for clipping: '{vid_title}'")
         self._save_state()
 
+        self.cancel_requested = False
+
         # Step 1: Download full source video with universal format fallback and multi-client rotation
         # ALWAYS prioritize highest resolution available: 4K / 1440p / 1080p / best
         source_stem = f"autopilot_src_{vid_id}"
@@ -341,6 +345,10 @@ class AutopilotManager:
             last_err = None
             client_candidates = YOUTUBE_CLIENT_PROFILES if ("youtube" in vid_url or "youtu.be" in vid_url) else [None]
 
+            def _abort_hook(d):
+                if self.cancel_requested:
+                    raise yt_dlp.utils.DownloadCancelled("Autopilot download cancelled by user.")
+
             # Clean any stale or corrupted partial downloads from previous runs to prevent [Errno 5] I/O errors
             for stale_part in DOWNLOAD_DIR.glob(f"{source_stem}.*"):
                 if stale_part.name.endswith(".part") or stale_part.stat().st_size == 0:
@@ -350,6 +358,8 @@ class AutopilotManager:
                         pass
 
             for client_profile in client_candidates:
+                if self.cancel_requested:
+                    raise yt_dlp.utils.DownloadCancelled("Autopilot download cancelled by user.")
                 ydl_opts = get_base_ydl_opts("youtube", client_override=client_profile)
                 ydl_opts.update({
                     "outtmpl": outtmpl,
@@ -357,6 +367,7 @@ class AutopilotManager:
                     "merge_output_format": "mp4",
                     "noplaylist": True,
                     "overwrites": True,
+                    "progress_hooks": [_abort_hook],
                 })
                 try:
                     with yt_dlp.YoutubeDL(ydl_opts) as ydl:
@@ -367,6 +378,8 @@ class AutopilotManager:
                     ]
                     if matches:
                         return str(matches[0])
+                except yt_dlp.utils.DownloadCancelled:
+                    raise
                 except Exception as e:
                     last_err = e
                     continue
@@ -385,6 +398,9 @@ class AutopilotManager:
                 if matches:
                     source_path = str(matches[0])
         except Exception as dl_err:
+            if self.cancel_requested:
+                self._log("🛑 Download cancelled during source acquisition.")
+                return None
             self._log(f"❌ Failed to download source video: {dl_err}")
             self.state = "error"
             self.current_step = "failed"
@@ -396,6 +412,10 @@ class AutopilotManager:
                 "timestamp": datetime.now(timezone.utc).isoformat(),
             })
             self._save_state()
+            return None
+
+        if self.cancel_requested:
+            self._log("🛑 Batch creation halted by user cancellation.")
             return None
 
         if not source_path or not os.path.exists(source_path):
@@ -586,6 +606,9 @@ class AutopilotManager:
                 logger.debug("Failed reading global settings: %s", e)
 
             for idx, cand in enumerate(clip_candidates[:6]):
+                if self.cancel_requested:
+                    self._log("🛑 Rendering loop stopped by user cancellation.")
+                    break
                 clip_index = idx + 1
                 clip = self.current_batch.clips[idx]
                 profile = STYLE_PROFILES[idx % len(STYLE_PROFILES)]
@@ -681,7 +704,17 @@ class AutopilotManager:
                         threads=2,
                     )
 
-                await asyncio.to_thread(_render)
+                try:
+                    await asyncio.to_thread(_render)
+                except Exception as render_err:
+                    if self.cancel_requested:
+                        self._log(f"🛑 Clip #{clip_index} render aborted by user.")
+                        break
+                    raise render_err
+
+                if self.cancel_requested:
+                    self._log("🛑 Batch rendering aborted by user.")
+                    break
 
                 # Substep 4: Video Preview Ready ("her is your video preview")
                 clip.filename = output_filename
@@ -1038,6 +1071,7 @@ class AutopilotManager:
 
     def cancel_active_run(self) -> AutopilotStatus:
         """Immediately terminates any active download or rendering job and purges partial files."""
+        self.cancel_requested = True
         self.is_running = False
         self.state = "idle"
         self.current_step = "idle"
@@ -1045,6 +1079,19 @@ class AutopilotManager:
         self.active_clip_id = None
         self.current_batch = None
         self.recent_errors = []
+
+        # Cancel any active running async background tasks
+        for t in list(self._active_async_tasks):
+            if not t.done():
+                t.cancel()
+        self._active_async_tasks.clear()
+
+        # Terminate any active rendering subprocesses (ffmpeg)
+        try:
+            terminate_all_active_subprocesses()
+        except Exception as e:
+            logger.debug("Error terminating subprocesses: %s", e)
+
         purged_mb = 0.0
         for p in DOWNLOAD_DIR.glob("*.part"):
             try:
