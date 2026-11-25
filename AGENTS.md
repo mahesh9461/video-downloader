@@ -44,6 +44,21 @@ video-downloader/
   - Always clean up temporary files in `apps/api/downloads/` and `apps/api/data/` using `try...finally` blocks.
   - Never trust un-sanitized user input in shell parameters; use argument arrays (`exec` style) rather than `shell=True`.
 
+### 2.3 Vercel & Next.js Production Build Gate (MANDATORY)
+- **Always verify changes with `npm run build`** (which executes Next.js production webpack compile and comprehensive TypeScript checking across all pages, components, and tests). Never rely solely on linting.
+- **TypeScript & Schema Synchronization**:
+  - Whenever FastAPI Pydantic models in `apps/api/app/schemas.py` are modified, **immediately synchronize** `apps/web/src/lib/types.ts`.
+  - Maintain backward-compatible aliases for candidate and progress types:
+    - `ClipCandidate`: support `clip_id` & `id`, `summary` & `transcript_snippet`, `reason` & `reasoning`.
+    - `DownloadProgress`: support `error_message` & `error`.
+    - `VideoMetadata`: ensure `view_count` is included.
+- **Strict Null & Undefined Prop Guards**:
+  - Guard optional props expecting `string | undefined` with safe type-narrowing (`val || undefined`) or allow `string | null | undefined` in component interfaces.
+- **Notification Function Standard**:
+  - Never call non-existent global toast functions like `showToast(...)`. Always import and use `useToast()` from `@/hooks/use-toast`.
+- **Redux Slice Alignment in Tests**:
+  - Slices in `createTestStore()` are `video` and `auth`. Never assert against non-existent slices (e.g. `download` or `ui`).
+
 ---
 
 ## 3. Strict Testing Standards (MANDATORY)
@@ -97,7 +112,7 @@ Run all commands from the repository root:
 
 ## 5. Rules of Engagement for Agents
 
-1. **Test Before and After**: Run `npm test` and `npm run test:api` before and after structural changes.
+1. **Test & Build Gate (Non-Negotiable)**: Run `npm run build`, `npm test`, `npm run test:api`, and `npm run lint` before concluding any task. All four must pass with zero errors.
 2. **Never Break Linting**: Ensure `npm run lint` exits cleanly with zero errors before concluding your task.
 3. **Preserve User Intent**: When refactoring or fixing bugs, maintain existing functionality, design aesthetics (Tailwind dark theme), and API contracts.
 4. **No Premature Deletions**: Do not delete existing features, tests, or configurations unless explicitly instructed by the user.

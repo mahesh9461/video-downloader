@@ -24,6 +24,8 @@ These rules override existing examples in the codebase. If existing tests use di
 ---
 
 ## 2. React 19 & Next.js 16 Standards
+- **Vercel & Next.js Production Build Gate**: Always verify changes with `npm run build` to ensure 0 TypeScript compilation errors.
+- **TypeScript & Schema Synchronization**: Keep `apps/api/app/schemas.py` and `apps/web/src/lib/types.ts` strictly synchronized. Maintain backward-compatible aliases for `ClipCandidate` (`id`/`clip_id`, `reasoning`/`reason`), `DownloadProgress` (`error`/`error_message`), and `VideoMetadata` (`view_count`).
 - **ESLint Compliance**: Ensure all code passes `npm run lint` with 0 errors.
 - **No setState in Effects**: Do not call `setState` synchronously within a `useEffect` to compute derived state. Compute derived values directly in the render body.
 - **Escape Quotes in JSX**: Always escape quotes (`&quot;`, `&ldquo;`, `&rdquo;`, `&apos;`).

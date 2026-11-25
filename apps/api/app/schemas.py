@@ -344,6 +344,7 @@ class YouTubeChannelItem(BaseModel):
     tags: Optional[List[str]] = None
     category_id: Optional[str] = None
     category_name: Optional[str] = None
+    game_title: Optional[str] = None
     made_for_kids: Optional[bool] = None
     ai_generated: Optional[bool] = None
     paid_promotion: Optional[bool] = None
@@ -354,6 +355,7 @@ class UpdateChannelSettingsRequest(BaseModel):
     tags: Optional[List[str]] = None
     category_id: Optional[str] = None
     category_name: Optional[str] = None
+    game_title: Optional[str] = None
     made_for_kids: Optional[bool] = None
     ai_generated: Optional[bool] = None
     paid_promotion: Optional[bool] = None

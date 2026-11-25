@@ -15,11 +15,11 @@ import {
 import { cn } from "@/lib/utils";
 
 export interface ShortPreviewCardProps {
-  thumbnailUrl?: string;
-  videoUrl?: string;
+  thumbnailUrl?: string | null;
+  videoUrl?: string | null;
   title: string;
   channelName?: string;
-  channelThumbnail?: string;
+  channelThumbnail?: string | null;
   hookTitle?: string;
   layout?: string;
   musicTrack?: string;

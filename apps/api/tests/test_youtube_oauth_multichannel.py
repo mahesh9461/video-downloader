@@ -413,3 +413,30 @@ def test_update_channel_settings_api_endpoint():
     assert data["category_id"] == "1"
     assert data["category_name"] == "Film & Animation"
     assert data["made_for_kids"] is True
+
+
+def test_update_channel_settings_game_title_and_preset():
+    """Verify updating and persisting game_title for gaming category channel."""
+    save_user_channel({
+        "channel_id": "UC_GTA_TEST",
+        "channel_title": "GTA Vice City Hub",
+        "access_token": "tok_gta",
+        "refresh_token": "ref_gta",
+        "is_default": True,
+    })
+
+    updated = update_channel_settings("UC_GTA_TEST", {
+        "category_id": "20",
+        "game_title": "Grand Theft Auto VI",
+        "tags": ["GTA 6", "Grand Theft Auto VI", "Rockstar Games"],
+        "made_for_kids": False,
+    })
+
+    assert updated is not None
+    assert updated["category_id"] == "20"
+    assert updated["category_name"] == "Gaming"
+    assert updated["game_title"] == "Grand Theft Auto VI"
+
+    preset = get_channel_preset("UC_GTA_TEST")
+    assert preset["categoryId"] == "20"
+    assert preset["game_title"] == "Grand Theft Auto VI"

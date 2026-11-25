@@ -14,6 +14,9 @@ import {
   FileText,
   Shield,
   HelpCircle,
+  Gamepad2,
+  Sparkles,
+  Info,
 } from "lucide-react";
 import { Modal } from "./ui/modal";
 import { Button } from "./ui/button";
@@ -21,6 +24,47 @@ import { Input } from "./ui/input";
 import { YouTubeChannelItem, UpdateChannelSettingsRequest } from "@/lib/types";
 import { apiClient } from "@/lib/api";
 import { useToast } from "@/hooks/use-toast";
+
+export const GTA6_PRESET = {
+  categoryId: "20",
+  gameTitle: "Grand Theft Auto VI",
+  madeForKids: false,
+  aiGenerated: false,
+  paidPromotion: false,
+  description:
+    "Welcome to GTA World: ViceVerse — your daily hub for GTA 6 Shorts, live gameplay streams, hidden Leonida secrets, Vice City map discoveries, crazy physics tests, and launch-week moments with Jason and Lucia.\n\n" +
+    "Subscribe and turn on notifications so you never miss a daily Short or live stream!\n\n" +
+    "🎮 Game: Grand Theft Auto VI (Rockstar Games)\n\n" +
+    "#GTA6 #GTAVI #Shorts #GTA6Shorts #GTA6Live #GTA6LiveStream #ViceCity #Leonida #GTA6Gameplay #GTA6Launch #GamingShorts #LiveGaming",
+  tags: [
+    "GTA 6", "GTA VI", "Grand Theft Auto VI", "Grand Theft Auto 6", "Rockstar Games", "GTA 6 Shorts", "ViceVerse",
+    "GTA World ViceVerse", "ViceVerse GTA 6", "Vice City", "GTA 6 secrets", "GTA 6 gameplay", "GTA 6 Easter eggs",
+    "GTA 6 clips", "GTA 6 physics", "GTA 6 map", "gaming Shorts", "gta6 gameplay", "gta6 lucia", "lucia gta6",
+    "gta6 pc", "gta6 car", "gta6 woke", "illojuan gta6", "gta6 first mission", "gta6 on pc", "gya6 live",
+    "gta6livestram", "Jason and Lucia GTA 6", "Jason GTA 6", "Boobie Ike GTA 6", "Brian Heder GTA 6",
+    "Roxy GTA 6", "GTA 6 characters", "GTA 6 cast", "Grand Theft Auto"
+  ],
+};
+
+export const PIPSY_POP_PRESET = {
+  categoryId: "1",
+  gameTitle: "",
+  madeForKids: true,
+  aiGenerated: false,
+  paidPromotion: false,
+  description:
+    "Join Mother Duck and her cute little ducklings on a fun swimming adventure! Sing and count along with this classic Five Little Ducks nursery rhyme, perfect for babies, toddlers, and preschoolers.\n\n" +
+    "🔔 Subscribe to Pipsy Pop for more fun nursery rhymes, counting songs, and kid-friendly cartoons!\n\n" +
+    "#FiveLittleDucks #NurseryRhymes #KidsSongs #PipsyPop #ToddlerSongs #CartoonsForKids #CountingSongs",
+  tags: [
+    "Five Little Ducks", "Five Little Ducks Went Swimming One Day", "nursery rhymes", "kids songs",
+    "Pipsy Pop", "PipsyPop", "toddler songs", "cartoons for kids", "counting songs", "baby songs",
+    "children songs", "preschool songs", "rhymes for children", "kindergarten songs", "duck song",
+    "sing along", "kids animation", "educational songs", "fun kids videos", "Mother Duck",
+    "ducklings", "Mother Duck and her cute little ducklings", "classic Five Little Ducks",
+    "songs for babies", "learning songs"
+  ],
+};
 
 export const YOUTUBE_CATEGORY_OPTIONS: { id: string; label: string }[] = [
   { id: "1", label: "Film & Animation (Cat 1)" },
@@ -60,6 +104,7 @@ export function ChannelPresetModal({
   const [description, setDescription] = useState("");
   const [tags, setTags] = useState<string[]>([]);
   const [categoryId, setCategoryId] = useState("20");
+  const [gameTitle, setGameTitle] = useState("Grand Theft Auto VI");
   const [madeForKids, setMadeForKids] = useState(false);
   const [aiGenerated, setAiGenerated] = useState(false);
   const [paidPromotion, setPaidPromotion] = useState(false);
@@ -75,6 +120,10 @@ export function ChannelPresetModal({
       setDescription(channel.description || "");
       setTags(Array.isArray(channel.tags) ? [...channel.tags] : []);
       setCategoryId(channel.category_id || (channel.channel_title?.toLowerCase().includes("pipsy") ? "1" : "20"));
+      setGameTitle(
+        channel.game_title ||
+          (channel.category_id === "20" || !channel.category_id ? "Grand Theft Auto VI" : "")
+      );
       setMadeForKids(
         channel.made_for_kids !== undefined && channel.made_for_kids !== null
           ? Boolean(channel.made_for_kids)
@@ -89,6 +138,26 @@ export function ChannelPresetModal({
   }, [channel, isOpen]);
 
   if (!channel) return null;
+
+  const applyGTA6Preset = () => {
+    setCategoryId(GTA6_PRESET.categoryId);
+    setGameTitle(GTA6_PRESET.gameTitle);
+    setMadeForKids(GTA6_PRESET.madeForKids);
+    setAiGenerated(GTA6_PRESET.aiGenerated);
+    setPaidPromotion(GTA6_PRESET.paidPromotion);
+    setDescription(GTA6_PRESET.description);
+    setTags([...GTA6_PRESET.tags]);
+  };
+
+  const applyPipsyPreset = () => {
+    setCategoryId(PIPSY_POP_PRESET.categoryId);
+    setGameTitle(PIPSY_POP_PRESET.gameTitle);
+    setMadeForKids(PIPSY_POP_PRESET.madeForKids);
+    setAiGenerated(PIPSY_POP_PRESET.aiGenerated);
+    setPaidPromotion(PIPSY_POP_PRESET.paidPromotion);
+    setDescription(PIPSY_POP_PRESET.description);
+    setTags([...PIPSY_POP_PRESET.tags]);
+  };
 
   const handleAddTag = (val: string) => {
     const cleaned = val.trim().replace(/^#+/, "").trim();
@@ -143,6 +212,7 @@ export function ChannelPresetModal({
         tags,
         category_id: categoryId,
         category_name: cleanCategoryName,
+        game_title: categoryId === "20" ? (gameTitle.trim() || "Grand Theft Auto VI") : undefined,
         made_for_kids: madeForKids,
         ai_generated: aiGenerated,
         paid_promotion: paidPromotion,
@@ -203,6 +273,35 @@ export function ChannelPresetModal({
           </div>
         </div>
 
+        {/* Quick Presets Bar */}
+        <div className="flex flex-wrap items-center justify-between gap-2.5 p-3 rounded-xl bg-gradient-to-r from-amber-500/10 via-purple-500/10 to-cyan-500/10 border border-amber-500/20">
+          <div className="flex items-center gap-1.5 text-xs font-bold text-amber-300">
+            <Sparkles className="w-3.5 h-3.5 text-amber-400" />
+            <span>1-Click Presets:</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={applyGTA6Preset}
+              className="h-7 text-xs bg-amber-500/10 border-amber-500/40 text-amber-200 hover:bg-amber-500/20 hover:text-white"
+            >
+              <Gamepad2 className="w-3.5 h-3.5 mr-1 text-amber-400" />
+              GTA 6 Gaming Presets
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={applyPipsyPreset}
+              className="h-7 text-xs bg-rose-500/10 border-rose-500/40 text-rose-200 hover:bg-rose-500/20 hover:text-white"
+            >
+              👶 Pipsy Pop (Kids)
+            </Button>
+          </div>
+        </div>
+
         {/* 1. YouTube Category Selector */}
         <div className="space-y-2">
           <label htmlFor="channel-category-select" className="block text-xs font-bold text-white flex items-center gap-1.5">
@@ -225,6 +324,37 @@ export function ChannelPresetModal({
             YouTube category assigned automatically to all Shorts published to this channel.
           </p>
         </div>
+
+        {/* Game Title & Studio Optimization (Category 20 Gaming) */}
+        {categoryId === "20" && (
+          <div className="space-y-2.5 p-3.5 rounded-xl bg-purple-950/20 border border-purple-500/30">
+            <div className="flex items-center justify-between">
+              <label htmlFor="game-title-input" className="text-xs font-bold text-purple-200 flex items-center gap-1.5">
+                <Gamepad2 className="w-4 h-4 text-purple-400" />
+                Game Title &amp; YouTube Entity Link
+              </label>
+              <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded bg-purple-500/20 text-purple-300 border border-purple-500/30 font-mono">
+                YouTube Knowledge Graph
+              </span>
+            </div>
+            <Input
+              id="game-title-input"
+              value={gameTitle}
+              onChange={(e) => setGameTitle(e.target.value)}
+              placeholder="e.g. Grand Theft Auto VI"
+              className="h-10 text-xs font-semibold bg-zinc-950 border-purple-500/40 text-white placeholder:text-zinc-500"
+            />
+            <div className="text-[11px] text-zinc-300 space-y-1.5 bg-zinc-950/70 p-3 rounded-lg border border-purple-500/20 leading-relaxed">
+              <p className="font-semibold text-purple-300 flex items-center gap-1.5">
+                <Info className="w-3.5 h-3.5 text-purple-400 shrink-0" />
+                Why YouTube Studio shows &quot;Game title (optional): None&quot; on API uploads:
+              </p>
+              <p className="text-zinc-400">
+                Google&apos;s YouTube Data API v3 does not expose a writable API field for the internal Studio game selector. Setting <strong>&quot;{gameTitle || "Grand Theft Auto VI"}&quot;</strong> here automatically embeds the official game attribution line (<code>🎮 Game: {gameTitle || "Grand Theft Auto VI"} (Rockstar Games)</code>) and official tags (<code>#GrandTheftAutoVI #GTA6 #RockstarGames</code>) into every upload, allowing YouTube&apos;s automated Knowledge Graph crawler to classify and link your video under the official Grand Theft Auto VI topic.
+              </p>
+            </div>
+          </div>
+        )}
 
         {/* 2. Audience & Compliance (COPPA, AI, Promo) */}
         <div className="space-y-3 p-3.5 rounded-xl bg-zinc-900/40 border border-zinc-800/80">

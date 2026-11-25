@@ -94,9 +94,9 @@ export function ProgressBar({ progress, onCancel, onReset }: ProgressBarProps) {
           )}
 
           {/* Error detail */}
-          {progress.status === "error" && progress.error && (
+          {progress.status === "error" && (progress.error_message || progress.error) && (
             <p className="text-xs text-rose-300 font-medium bg-rose-500/10 p-2.5 rounded-lg border border-rose-500/20">
-              {progress.error}
+              {progress.error_message || progress.error}
             </p>
           )}
         </div>

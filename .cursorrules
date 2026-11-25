@@ -5,9 +5,11 @@
 - apps/api: FastAPI (Python 3.11+, yt-dlp, static-ffmpeg 7.0, async SSE)
 
 # Quality Gates
+- Always run `npm run build` and ensure Next.js production build & TypeScript checks exit with 0 errors.
 - Always run `npm run lint` and ensure 0 errors.
 - Always run `npm test` and ensure all Jest tests pass.
 - Always run `npm run test:api` and ensure all Pytest tests pass.
+- Synchronize `apps/api/app/schemas.py` and `apps/web/src/lib/types.ts` whenever schemas change.
 
 # React & Next.js 16 Rules
 - Do NOT call `setState` synchronously inside `useEffect` to derive state. Calculate derived values during render.

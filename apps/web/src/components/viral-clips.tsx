@@ -235,10 +235,10 @@ export function ViralClips() {
       // Handle return from Google OAuth callback
       const params = new URLSearchParams(window.location.search);
       if (params.get("youtube_auth") === "success") {
-        showToast("YouTube channel connected successfully!", "success");
+        success("YouTube channel connected successfully!");
         setShowChannelModal(true);
       } else if (params.get("youtube_auth") === "error") {
-        showToast(params.get("error_detail") || "Failed to authenticate with Google.", "error");
+        toastError(params.get("error_detail") || "Failed to authenticate with Google.");
         setShowChannelModal(true);
       }
     }
@@ -686,12 +686,14 @@ export function ViralClips() {
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 {clips.map((clip, idx) => {
-                  const isSelected = selectedClip?.id === clip.id;
-                  const viralScore = clip.hook_score || (clip as any).viral_score || 90;
+                  const isSelected =
+                    (selectedClip?.clip_id && selectedClip.clip_id === clip.clip_id) ||
+                    (selectedClip?.id && selectedClip.id === clip.id);
+                  const viralScore = clip.hook_score || clip.viral_score || 90;
 
                   return (
                     <Card
-                      key={clip.id || idx}
+                      key={clip.clip_id || clip.id || idx}
                       onClick={() => {
                         setSelectedClip(clip);
                         if (clip.hook_title) setHookTitle(clip.hook_title);
@@ -1079,7 +1081,7 @@ export function ViralClips() {
                 videoUrl={renderedClip?.download_url}
                 title={ytTitle}
                 channelName={activeChannel?.channel_title || "Vice City Gaming"}
-                channelThumbnail={activeChannel?.thumbnail_url}
+                channelThumbnail={activeChannel?.thumbnail_url || undefined}
                 hookTitle={hookTitle}
                 layout={layout}
                 musicTrack={backgroundMusic === "none" ? "Original Audio" : backgroundMusic.replace("_", " ")}

@@ -154,6 +154,55 @@ describe("ChannelPresetModal", () => {
           expect.objectContaining({
             category_id: "20",
             category_name: "Gaming",
+            game_title: "Grand Theft Auto VI",
+          })
+        );
+      });
+    });
+
+    it("should allow user to apply GTA 6 Gaming Presets in one click and persist game_title", async () => {
+      // Arrange
+      const user = userEvent.setup();
+      renderWithProvider(
+        <ChannelPresetModal
+          isOpen={true}
+          onClose={mockOnClose}
+          channel={sampleChannel}
+          onSaved={mockOnSaved}
+        />,
+        store
+      );
+
+      // Act: Click 1-Click GTA 6 Gaming Presets button
+      const gtaBtn = screen.getByRole("button", { name: /gta 6 gaming presets/i });
+      await user.click(gtaBtn);
+
+      // Assert: Category changed to Gaming (Cat 20)
+      expect(screen.getByRole("combobox")).toHaveValue("20");
+
+      // Assert: Game title input is visible with Grand Theft Auto VI
+      const gameTitleInput = screen.getByPlaceholderText(/e\.g\. grand theft auto vi/i);
+      expect(gameTitleInput).toHaveValue("Grand Theft Auto VI");
+
+      // Assert: Explanation banner is displayed
+      expect(
+        screen.getByText(/why youtube studio shows "game title \(optional\): none" on api uploads/i)
+      ).toBeInTheDocument();
+
+      // Act: Click save button
+      const saveBtn = screen.getByRole("button", { name: /save channel defaults/i });
+      await user.click(saveBtn);
+
+      // Assert: API called with GTA 6 settings including game_title
+      await waitFor(() => {
+        expect(mockUpdateYouTubeChannelSettings).toHaveBeenCalledWith(
+          "UCgwgp-cWzUEi4Vw-7mRSfOw",
+          expect.objectContaining({
+            category_id: "20",
+            category_name: "Gaming",
+            game_title: "Grand Theft Auto VI",
+            made_for_kids: false,
+            tags: expect.arrayContaining(["GTA 6", "Grand Theft Auto VI", "Rockstar Games"]),
           })
         );
       });
@@ -178,8 +227,7 @@ describe("ChannelPresetModal", () => {
 
       // Assert: Redux store integrity
       const currentReduxState = store.getState();
-      expect(currentReduxState.download).toEqual(initialReduxState.download);
-      expect(currentReduxState.ui).toEqual(initialReduxState.ui);
+      expect(currentReduxState.video).toEqual(initialReduxState.video);
       expect(currentReduxState.auth).toEqual(initialReduxState.auth);
     });
   });

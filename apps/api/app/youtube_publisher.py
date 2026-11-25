@@ -26,18 +26,19 @@ DEFAULT_YOUTUBE_DESCRIPTION = (
     "Welcome to GTA World: ViceVerse — your daily hub for GTA 6 Shorts, live gameplay streams, "
     "hidden Leonida secrets, Vice City map discoveries, crazy physics tests, and launch-week moments with Jason and Lucia.\n\n"
     "Subscribe and turn on notifications so you never miss a daily Short or live stream!\n\n"
+    "🎮 Game: Grand Theft Auto VI (Rockstar Games)\n\n"
     "#GTA6 #GTAVI #Shorts #GTA6Shorts #GTA6Live #GTA6LiveStream #ViceCity #Leonida #GTA6Gameplay #GTA6Launch #GamingShorts #LiveGaming"
 )
 
 DEFAULT_YOUTUBE_TAGS = [
-    "GTA 6", "GTA VI", "Grand Theft Auto 6", "GTA 6 Shorts", "ViceVerse",
+    "GTA 6", "GTA VI", "Grand Theft Auto VI", "Grand Theft Auto 6", "Rockstar Games", "GTA 6 Shorts", "ViceVerse",
     "GTA World ViceVerse", "ViceVerse GTA 6", "Vice City", "GTA 6 secrets",
     "GTA 6 gameplay", "GTA 6 Easter eggs", "GTA 6 clips", "GTA 6 physics",
     "GTA 6 map", "gaming Shorts", "gta6 gameplay", "gta6 lucia", "lucia gta6",
     "gta6 pc", "gta6 car", "gta6 woke", "illojuan gta6", "gta6 first mission",
     "gta6 on pc", "gya6 live", "gta6livestram", "Jason and Lucia GTA 6",
     "Jason GTA 6", "Boobie Ike GTA 6", "Brian Heder GTA 6", "Roxy GTA 6",
-    "GTA 6 characters", "GTA 6 cast"
+    "GTA 6 characters", "GTA 6 cast", "Grand Theft Auto"
 ]
 
 DEFAULT_YOUTUBE_CATEGORY_ID = "20"  # Gaming Category
@@ -127,7 +128,7 @@ def get_channel_preset(channel_id: Optional[str] = None, channel_title: Optional
     cid = channel_id or (target_ch.get("channel_id") if target_ch else "")
 
     # If the channel specifically has saved custom settings, use them!
-    if target_ch and any(target_ch.get(k) is not None for k in ("description", "tags", "category_id", "made_for_kids")):
+    if target_ch and any(target_ch.get(k) is not None for k in ("description", "tags", "category_id", "made_for_kids", "game_title")):
         cat_id = str(target_ch.get("category_id") or ("1" if cid == PIPSY_POP_CHANNEL_ID else "20"))
         cat_name = target_ch.get("category_name") or YOUTUBE_CATEGORIES.get(cat_id, "Entertainment")
         desc = target_ch.get("description")
@@ -139,6 +140,9 @@ def get_channel_preset(channel_id: Optional[str] = None, channel_title: Optional
         mfk = target_ch.get("made_for_kids")
         if mfk is None:
             mfk = True if (cid == PIPSY_POP_CHANNEL_ID or "pipsy" in c_title) else False
+        game_title = target_ch.get("game_title")
+        if game_title is None and (cat_id == "20" or "gta" in c_title or "vice" in c_title):
+            game_title = "Grand Theft Auto VI"
 
         return {
             "channel_id": cid,
@@ -147,6 +151,7 @@ def get_channel_preset(channel_id: Optional[str] = None, channel_title: Optional
             "tags": tags,
             "categoryId": cat_id,
             "category_name": cat_name,
+            "game_title": game_title,
             "selfDeclaredMadeForKids": bool(mfk),
             "containsSyntheticMedia": bool(target_ch.get("ai_generated", False)),
             "paidProductPlacement": bool(target_ch.get("paid_promotion", False)),
@@ -160,6 +165,7 @@ def get_channel_preset(channel_id: Optional[str] = None, channel_title: Optional
             "tags": PIPSY_POP_TAGS,
             "categoryId": PIPSY_POP_CATEGORY_ID,
             "category_name": "Film & Animation",
+            "game_title": None,
             "selfDeclaredMadeForKids": True,
             "containsSyntheticMedia": False,
             "paidProductPlacement": False,
@@ -173,6 +179,7 @@ def get_channel_preset(channel_id: Optional[str] = None, channel_title: Optional
         "tags": DEFAULT_YOUTUBE_TAGS,
         "categoryId": DEFAULT_YOUTUBE_CATEGORY_ID,
         "category_name": "Gaming",
+        "game_title": "Grand Theft Auto VI",
         "selfDeclaredMadeForKids": False,
         "containsSyntheticMedia": False,
         "paidProductPlacement": False,
@@ -228,6 +235,7 @@ def get_user_channels(user_id: Optional[str] = None) -> List[Dict[str, Any]]:
             "tags": ch.get("tags") or preset["tags"],
             "category_id": ch.get("category_id") or preset["categoryId"],
             "category_name": ch.get("category_name") or preset["category_name"],
+            "game_title": ch.get("game_title") if "game_title" in ch else preset.get("game_title"),
             "made_for_kids": ch.get("made_for_kids") if "made_for_kids" in ch else preset["selfDeclaredMadeForKids"],
             "ai_generated": ch.get("ai_generated") if "ai_generated" in ch else preset["containsSyntheticMedia"],
             "paid_promotion": ch.get("paid_promotion") if "paid_promotion" in ch else preset["paidProductPlacement"],
@@ -282,7 +290,7 @@ def save_user_channel(channel_data: Dict[str, Any], user_id: Optional[str] = Non
     }
 
     # Preserve custom channel metadata presets if present
-    for field in ("description", "tags", "category_id", "category_name", "made_for_kids", "ai_generated", "paid_promotion"):
+    for field in ("description", "tags", "category_id", "category_name", "made_for_kids", "ai_generated", "paid_promotion", "game_title"):
         if field in channel_data and channel_data[field] is not None:
             rec[field] = channel_data[field]
         elif existing and field in existing and existing[field] is not None:
@@ -420,6 +428,9 @@ def update_channel_settings(
     if "paid_promotion" in settings and settings["paid_promotion"] is not None:
         ch["paid_promotion"] = bool(settings["paid_promotion"])
 
+    if "game_title" in settings:
+        ch["game_title"] = str(settings["game_title"]).strip() if settings["game_title"] else None
+
     _save_channels_store()
 
     preset = get_channel_preset(channel_id, ch.get("channel_title"))
@@ -435,6 +446,7 @@ def update_channel_settings(
         "tags": ch.get("tags") or preset["tags"],
         "category_id": ch.get("category_id") or preset["categoryId"],
         "category_name": ch.get("category_name") or preset["category_name"],
+        "game_title": ch.get("game_title") if "game_title" in ch else preset.get("game_title"),
         "made_for_kids": ch.get("made_for_kids") if "made_for_kids" in ch else preset["selfDeclaredMadeForKids"],
         "ai_generated": ch.get("ai_generated") if "ai_generated" in ch else preset["containsSyntheticMedia"],
         "paid_promotion": ch.get("paid_promotion") if "paid_promotion" in ch else preset["paidProductPlacement"],
@@ -883,11 +895,22 @@ async def publish_short_video(
     else:
         final_description = preset["description"]
 
+    # If channel preset or settings specify a game title (e.g. Grand Theft Auto VI) and it's not in the description, ensure attribution
+    game_title = preset.get("game_title")
+    if game_title and f"Game: {game_title}" not in final_description and game_title not in final_description:
+        final_description = f"{final_description}\n\n🎮 Game: {game_title} (Rockstar Games)"
+
     # Use channel-specific tags if caller didn't pass custom tags or passed GTA default to Pipsy Pop
     if tags and (tags != DEFAULT_YOUTUBE_TAGS or preset["channel_id"] != PIPSY_POP_CHANNEL_ID):
-        final_tags = tags
+        final_tags = list(tags)
     else:
-        final_tags = preset["tags"]
+        final_tags = list(preset["tags"])
+
+    # If it's a gaming video with a game title, ensure key entity tags are present
+    if game_title and preset.get("categoryId") == "20":
+        for g_tag in [game_title, "GTA 6" if "theft auto" in game_title.lower() else game_title, "Rockstar Games"]:
+            if not any(g_tag.lower() == t.lower() for t in final_tags):
+                final_tags.append(g_tag)
 
     snippet: Dict[str, Any] = {
         "title": title[:100],

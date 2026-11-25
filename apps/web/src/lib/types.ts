@@ -20,6 +20,7 @@ export interface VideoMetadata {
   formats: VideoFormat[];
   downloads_available?: boolean;
   notice?: string | null;
+  view_count?: number | null;
 }
 
 export interface DownloadProgress {
@@ -30,6 +31,7 @@ export interface DownloadProgress {
   filename: string | null;
   filesize: number | null;
   error_message: string | null;
+  error?: string | null;
 }
 
 export interface HistoryItem {
@@ -71,6 +73,7 @@ export interface WatermarkResult {
 
 export interface ClipCandidate {
   clip_id: string;
+  id?: string;
   start_time: number;
   end_time: number;
   duration: number;
@@ -78,6 +81,8 @@ export interface ClipCandidate {
   hook_title: string;
   summary: string;
   reason: string;
+  transcript_snippet?: string | null;
+  reasoning?: string | null;
   thumbnail_url?: string | null;
   retention_rate?: string | null;
   hook_rating?: string | null;
@@ -213,6 +218,7 @@ export interface YouTubeChannelItem {
   tags?: string[] | null;
   category_id?: string | null;
   category_name?: string | null;
+  game_title?: string | null;
   made_for_kids?: boolean | null;
   ai_generated?: boolean | null;
   paid_promotion?: boolean | null;
@@ -225,6 +231,7 @@ export interface UpdateChannelSettingsRequest {
   tags?: string[];
   category_id?: string;
   category_name?: string;
+  game_title?: string;
   made_for_kids?: boolean;
   ai_generated?: boolean;
   paid_promotion?: boolean;
