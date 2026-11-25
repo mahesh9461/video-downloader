@@ -189,6 +189,12 @@ async def cleanup_old_files():
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     cleanup_task = asyncio.create_task(cleanup_old_files())
+    # Automatic Supabase schema synchronization
+    try:
+        from app.supabase_client import run_auto_schema_migration
+        asyncio.create_task(run_auto_schema_migration())
+    except Exception as e:
+        logger.debug("Auto-migration initialization skipped: %s", e)
     # Automated background hourly timer disabled as requested. Uploads happen only when user adds a link.
     # autopilot_task = asyncio.create_task(autopilot_background_worker())
     logger.info("Started video downloader service. FFmpeg: %s", FFMPEG_PATH or "Not Found")

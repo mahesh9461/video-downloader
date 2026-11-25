@@ -253,7 +253,7 @@ async def save_user_channel_supabase(channel_data: Dict[str, Any], user_id: str 
         "expires_at": channel_data.get("expires_at"),
         "is_default": bool(channel_data.get("is_default", False)),
     }
-    for field in ("description", "tags", "category_id", "category_name", "made_for_kids", "ai_generated", "paid_promotion"):
+    for field in ("description", "tags", "category_id", "category_name", "made_for_kids", "ai_generated", "paid_promotion", "game_title"):
         if field in channel_data and channel_data[field] is not None:
             payload[field] = channel_data[field]
 
@@ -399,5 +399,46 @@ async def get_global_settings_supabase(user_id: str = "default") -> Optional[Dic
     except Exception as e:
         logger.debug("Supabase global settings fetch skipped: %s", e)
     return None
+
+
+# ---------------------------------------------------------------------------
+# 7. Automated Schema Migration Execution
+# ---------------------------------------------------------------------------
+
+async def run_auto_schema_migration() -> bool:
+    """Automatically synchronizes database schema with Supabase via DATABASE_URL.
+    
+    Executes idempotent DDL migrations (table creation and column additions)
+    in the background on server boot, eliminating the need to manually run SQL scripts.
+    """
+    db_url = os.getenv("DATABASE_URL")
+    if not db_url:
+        return False
+
+    try:
+        from pathlib import Path
+        import asyncpg
+
+        # Find supabase_schema.sql
+        repo_root = Path(__file__).resolve().parents[3]
+        schema_file = repo_root / "supabase_schema.sql"
+        if not schema_file.exists():
+            schema_file = Path(__file__).resolve().parent.parent.parent / "supabase_schema.sql"
+
+        if not schema_file.exists():
+            logger.debug("supabase_schema.sql not found at %s", schema_file)
+            return False
+
+        sql = schema_file.read_text(encoding="utf-8")
+        conn = await asyncpg.connect(db_url, statement_cache_size=0, ssl="require", timeout=12)
+        try:
+            await conn.execute(sql)
+            logger.info("✅ Supabase schema automatically migrated & verified!")
+            return True
+        finally:
+            await conn.close()
+    except Exception as e:
+        logger.warning("Supabase auto-migration notice: %s", e)
+        return False
 
 

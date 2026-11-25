@@ -9,7 +9,10 @@ from pathlib import Path
 import asyncpg
 from dotenv import load_dotenv
 
-ROOT_DIR = Path(__file__).resolve().parents[3]
+ROOT_DIR = Path(__file__).resolve().parent.parent.parent
+if not (ROOT_DIR / "supabase_schema.sql").exists():
+    ROOT_DIR = Path(__file__).resolve().parents[3]
+
 load_dotenv(ROOT_DIR / ".env")
 load_dotenv()
 

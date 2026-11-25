@@ -16,7 +16,8 @@
     "test": "npm run test:web",
     "test:web": "npm test -w web",
     "test:api": "./scripts/test-api.sh",
-    "lint": "npm run lint -w web"
+    "lint": "npm run lint -w web",
+    "db:migrate": "./apps/api/venv/bin/python3 apps/api/scripts/migrate_supabase.py"
   },
   "devDependencies": {
     "@types/react": "^19",

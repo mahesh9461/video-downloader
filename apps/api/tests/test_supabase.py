@@ -94,3 +94,35 @@ async def test_update_clip_status(mock_patch):
         res = await update_clip_status_supabase("clip_01", {"status": "published"})
         assert res is True
         mock_patch.assert_called_once()
+
+
+@pytest.mark.anyio
+@patch("httpx.AsyncClient.post")
+async def test_save_user_channel_supabase_includes_game_title(mock_post):
+    from app.supabase_client import save_user_channel_supabase
+    mock_resp = MagicMock()
+    mock_resp.status_code = 201
+    mock_post.return_value = mock_resp
+
+    with patch("app.supabase_client.is_supabase_configured", return_value=True):
+        res = await save_user_channel_supabase({
+            "channel_id": "UC_GTA_TEST",
+            "channel_title": "GTA Hub",
+            "category_id": "20",
+            "game_title": "Grand Theft Auto VI",
+            "description": "GTA 6 daily shorts",
+            "tags": ["GTA 6", "Rockstar Games"],
+        })
+        assert res is True
+        mock_post.assert_called_once()
+        call_kwargs = mock_post.call_args.kwargs
+        assert call_kwargs["json"]["game_title"] == "Grand Theft Auto VI"
+        assert call_kwargs["json"]["category_id"] == "20"
+
+
+@pytest.mark.anyio
+async def test_run_auto_schema_migration_no_db_url(monkeypatch):
+    from app.supabase_client import run_auto_schema_migration
+    monkeypatch.delenv("DATABASE_URL", raising=False)
+    res = await run_auto_schema_migration()
+    assert res is False

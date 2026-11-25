@@ -32,12 +32,16 @@ create table if not exists public.user_youtube_channels (
     tags text[],
     category_id text default '20',
     category_name text default 'Gaming',
+    game_title text,
     made_for_kids boolean default false,
     ai_generated boolean default false,
     paid_promotion boolean default false,
     created_at timestamptz default now(),
     updated_at timestamptz default now()
 );
+
+-- Idempotent column upgrades for existing deployments
+alter table public.user_youtube_channels add column if not exists game_title text;
 
 create index if not exists idx_user_yt_channels_user_id on public.user_youtube_channels(user_id);
 
@@ -141,27 +145,35 @@ alter table public.download_history enable row level security;
 alter table public.user_global_settings enable row level security;
 
 -- Open policies for service and anon keys (single tenant / creator app)
+drop policy if exists "Allow all operations for service and anon on user_youtube_tokens" on public.user_youtube_tokens;
 create policy "Allow all operations for service and anon on user_youtube_tokens"
     on public.user_youtube_tokens for all using (true) with check (true);
 
+drop policy if exists "Allow all operations for service and anon on user_youtube_channels" on public.user_youtube_channels;
 create policy "Allow all operations for service and anon on user_youtube_channels"
     on public.user_youtube_channels for all using (true) with check (true);
 
+drop policy if exists "Allow all operations for service and anon on autopilot_sources" on public.autopilot_sources;
 create policy "Allow all operations for service and anon on autopilot_sources"
     on public.autopilot_sources for all using (true) with check (true);
 
+drop policy if exists "Allow all operations for service and anon on autopilot_batches" on public.autopilot_batches;
 create policy "Allow all operations for service and anon on autopilot_batches"
     on public.autopilot_batches for all using (true) with check (true);
 
+drop policy if exists "Allow all operations for service and anon on autopilot_clips" on public.autopilot_clips;
 create policy "Allow all operations for service and anon on autopilot_clips"
     on public.autopilot_clips for all using (true) with check (true);
 
+drop policy if exists "Allow all operations for service and anon on custom_audio_library" on public.custom_audio_library;
 create policy "Allow all operations for service and anon on custom_audio_library"
     on public.custom_audio_library for all using (true) with check (true);
 
+drop policy if exists "Allow all operations for service and anon on download_history" on public.download_history;
 create policy "Allow all operations for service and anon on download_history"
     on public.download_history for all using (true) with check (true);
 
+drop policy if exists "Allow all operations for service and anon on user_global_settings" on public.user_global_settings;
 create policy "Allow all operations for service and anon on user_global_settings"
     on public.user_global_settings for all using (true) with check (true);
 
@@ -170,4 +182,12 @@ grant all on public.user_global_settings to anon, authenticated, service_role;
 grant all on all tables in schema public to anon, authenticated, service_role;
 
 -- Enable Realtime on autopilot_clips so Next.js UI gets instant WebSocket notifications
-alter publication supabase_realtime add table public.autopilot_clips;
+do $$
+begin
+    if not exists (
+        select 1 from pg_publication_tables 
+        where pubname = 'supabase_realtime' and schemaname = 'public' and tablename = 'autopilot_clips'
+    ) then
+        alter publication supabase_realtime add table public.autopilot_clips;
+    end if;
+end $$;
