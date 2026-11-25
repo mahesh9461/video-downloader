@@ -8,17 +8,18 @@ Free Open LLM & Open-Source Hook Headline Generation Module.
 4. Local dialogue NLP heuristic analyzer (100% offline, pure Python).
 """
 
+import json
+import logging
 import os
 import re
 import shutil
-import logging
 import subprocess
-from typing import Optional, Dict, Any, List
+from typing import Any, Dict, List, Optional
 
 import httpx
 
-from app.config import FFMPEG_PATH, DOWNLOAD_DIR
-from app.clip_scorer import generate_hook_title, parse_vtt_or_srt
+from app.config import DOWNLOAD_DIR, FFMPEG_PATH
+from app.clip_scorer import generate_hook_title, parse_transcript, parse_vtt_or_srt
 
 logger = logging.getLogger(__name__)
 
@@ -79,7 +80,7 @@ def fetch_free_youtube_transcript(url: str, start_time: float, end_time: float) 
             "writesubtitles": True,
             "writeautomaticsub": True,
             "subtitleslangs": ["en.*", "en", "en-US", "en-orig"],
-            "subtitlesformat": "vtt/srt/best",
+            "subtitlesformat": "json3/srv3/vtt/srt/best",
         })
 
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
@@ -90,13 +91,18 @@ def fetch_free_youtube_transcript(url: str, start_time: float, end_time: float) 
             sub_dict = info.get("subtitles") or info.get("automatic_captions") or {}
             for lang_key in ["en", "en-orig", "en-US"]:
                 if lang_key in sub_dict and sub_dict[lang_key]:
-                    for fmt in sub_dict[lang_key]:
+                    # Prioritize json3 / srv3 first, then vtt/srt
+                    fmts = sorted(
+                        sub_dict[lang_key],
+                        key=lambda f: 0 if f.get("ext") in ("json3", "srv3") else (1 if f.get("ext") == "vtt" else 2),
+                    )
+                    for fmt in fmts:
                         sub_url = fmt.get("url")
                         if sub_url:
                             with httpx.Client(timeout=6.0, follow_redirects=True) as client:
                                 sub_resp = client.get(sub_url)
                                 if sub_resp.status_code == 200:
-                                    cues = parse_vtt_or_srt(sub_resp.text)
+                                    cues = parse_transcript(sub_resp.text)
                                     clip_cues = [
                                         c["text"]
                                         for c in cues
@@ -331,3 +337,177 @@ def generate_ai_hook(
         "hook_title": hook,
         "source": source,
     }
+
+
+def rerank_candidates_with_llm(
+    candidates: List[Dict[str, Any]], video_title: str = ""
+) -> Optional[List[Dict[str, Any]]]:
+    """
+    Batched LLM Story-Arc Re-Ranker.
+    Passes top candidate windows in a single batched prompt to multi-tier LLM:
+    1. Ollama (deepseek-r1 / llama3)
+    2. DeepSeek API
+    3. Pollinations open inference
+    4. Gemini Flash Lite
+
+    Scores each on:
+    - First-3s Hook Strength (0-100)
+    - Narrative Completeness (Setup -> Tension -> Payoff) (0-100)
+    - Loopability (Seamless loop back to opening)
+    Refines start_time and end_time, generates 3-5 word UPPERCASE hook title, and returns top clips.
+    """
+    if not candidates:
+        return None
+
+    # Prepare compact candidate summaries
+    compact_candidates = []
+    for c in candidates[:12]:
+        compact_candidates.append({
+            "clip_id": c.get("clip_id"),
+            "start_time": c.get("start_time"),
+            "end_time": c.get("end_time"),
+            "duration": c.get("duration"),
+            "transcript": c.get("transcript_snippet", c.get("summary", ""))[:300],
+        })
+
+    prompt = (
+        "You are an elite viral YouTube Shorts and TikTok video editor with 100M+ views.\n"
+        f"Video Title: {video_title}\n\n"
+        "Here are pre-filtered candidate speech segments from the video:\n"
+        f"{json.dumps(compact_candidates, indent=2)}\n\n"
+        "Your task:\n"
+        "1. Evaluate each candidate on:\n"
+        "   - First-3s Hook Strength (0-100): Curiosity gaps, stakes, counter-intuitive claims.\n"
+        "   - Narrative Completeness (0-100): Clear Setup -> Tension -> Payoff arc within the clip.\n"
+        "   - Loopability: Does the ending punchline loop back naturally into the first sentence?\n"
+        "2. Refine exact start_time and end_time slightly (within +/- 2 seconds) so speech never starts or ends mid-word/mid-clause.\n"
+        "3. Generate a 3 to 5 word UPPERCASE viral hook headline banner (no emojis, no quotes, no periods).\n"
+        "4. Assign a loop_rating: 'Seamless Loop', 'High Loopability', or 'Standard'.\n"
+        "5. Return the top 5 non-overlapping clips ordered by virality score in raw JSON array format.\n\n"
+        "Output format MUST be strictly a JSON array of objects with keys:\n"
+        "[\n"
+        "  {\n"
+        "    \"clip_id\": str,\n"
+        "    \"start_time\": float,\n"
+        "    \"end_time\": float,\n"
+        "    \"viral_score\": int (0-100),\n"
+        "    \"hook_score\": int (0-100),\n"
+        "    \"narrative_score\": int (0-100),\n"
+        "    \"loop_rating\": str,\n"
+        "    \"hook_title\": str,\n"
+        "    \"summary\": str,\n"
+        "    \"reason\": str\n"
+        "  }\n"
+        "]\n"
+        "Output ONLY the JSON array. Do not include markdown codeblocks or explanation."
+    )
+
+    def _parse_llm_json(raw_text: str) -> Optional[List[Dict[str, Any]]]:
+        if not raw_text:
+            return None
+        text = raw_text.strip()
+        # Strip markdown fences if present
+        text = re.sub(r"^```(?:json)?\s*", "", text, flags=re.MULTILINE)
+        text = re.sub(r"\s*```$", "", text, flags=re.MULTILINE)
+        text = text.strip()
+        try:
+            parsed = json.loads(text)
+            if isinstance(parsed, list) and len(parsed) > 0 and isinstance(parsed[0], dict):
+                return parsed
+        except Exception:
+            # Try to locate [ ... ]
+            m = re.search(r"\[\s*\{.*\}\s*\]", text, re.DOTALL)
+            if m:
+                try:
+                    parsed = json.loads(m.group(0))
+                    if isinstance(parsed, list) and len(parsed) > 0:
+                        return parsed
+                except Exception:
+                    pass
+        return None
+
+    # Tier 1: Local Ollama (zero latency, zero cost)
+    try:
+        ollama_url = os.getenv("OLLAMA_API_URL", "http://localhost:11434/api/generate")
+        with httpx.Client(timeout=4.0) as client:
+            resp = client.post(
+                ollama_url,
+                json={"model": "deepseek-r1", "prompt": prompt, "stream": False},
+            )
+            if resp.status_code == 200:
+                out = resp.json().get("response", "")
+                parsed = _parse_llm_json(out)
+                if parsed:
+                    logger.info("Ollama batched LLM re-ranker succeeded (%d clips)", len(parsed))
+                    return parsed
+    except Exception:
+        pass
+
+    # Tier 2: DeepSeek official API if key configured
+    deepseek_key = os.getenv("DEEPSEEK_API_KEY")
+    if deepseek_key:
+        try:
+            with httpx.Client(timeout=8.0) as client:
+                resp = client.post(
+                    "https://api.deepseek.com/chat/completions",
+                    headers={"Authorization": f"Bearer {deepseek_key}", "Content-Type": "application/json"},
+                    json={
+                        "model": "deepseek-chat",
+                        "messages": [
+                            {"role": "system", "content": "You are a viral YouTube Shorts editor. Output only a raw JSON array."},
+                            {"role": "user", "content": prompt},
+                        ],
+                        "temperature": 0.4,
+                    },
+                )
+                if resp.status_code == 200:
+                    content = resp.json()["choices"][0]["message"]["content"]
+                    parsed = _parse_llm_json(content)
+                    if parsed:
+                        logger.info("DeepSeek API batched LLM re-ranker succeeded (%d clips)", len(parsed))
+                        return parsed
+        except Exception as e:
+            logger.debug("DeepSeek API re-ranker failed: %s", e)
+
+    # Tier 3: Pollinations free public LLM
+    try:
+        with httpx.Client(timeout=8.0) as client:
+            resp = client.post(
+                "https://text.pollinations.ai/",
+                json={
+                    "messages": [
+                        {"role": "system", "content": "You are a viral video editor. Output only a raw JSON array."},
+                        {"role": "user", "content": prompt},
+                    ],
+                    "model": "openai-fast",
+                    "temperature": 0.4,
+                },
+            )
+            if resp.status_code == 200 and resp.text.strip():
+                parsed = _parse_llm_json(resp.text)
+                if parsed:
+                    logger.info("Pollinations batched LLM re-ranker succeeded (%d clips)", len(parsed))
+                    return parsed
+    except Exception as e:
+        logger.debug("Pollinations LLM re-ranker skipped: %s", e)
+
+    # Tier 4: Gemini Flash Lite
+    gemini_key = os.getenv("GEMINI_API_KEY")
+    if gemini_key:
+        try:
+            url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-lite-latest:generateContent?key={gemini_key}"
+            payload = {"contents": [{"parts": [{"text": prompt}]}]}
+            with httpx.Client(timeout=8.0) as client:
+                resp = client.post(url, json=payload)
+                if resp.status_code == 200:
+                    parts = resp.json().get("candidates", [{}])[0].get("content", {}).get("parts", [{}])
+                    if parts and "text" in parts[0]:
+                        parsed = _parse_llm_json(parts[0]["text"])
+                        if parsed:
+                            logger.info("Gemini Flash batched LLM re-ranker succeeded (%d clips)", len(parsed))
+                            return parsed
+        except Exception as e:
+            logger.debug("Gemini re-ranker skipped: %s", e)
+
+    return None
+

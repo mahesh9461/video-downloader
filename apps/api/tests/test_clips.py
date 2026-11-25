@@ -6,6 +6,10 @@ from unittest.mock import patch, MagicMock
 from app.clip_scorer import (
     parse_timestamp_to_seconds,
     parse_vtt_or_srt,
+    parse_json3_captions,
+    parse_transcript,
+    group_words_into_sentences,
+    build_sentence_aligned_windows,
     evaluate_hook_score,
     evaluate_dialogue_pacing,
     generate_hook_title,
@@ -18,6 +22,9 @@ from app.clip_renderer import (
     build_video_filtergraph,
     render_viral_clip,
     process_clip_render,
+    generate_ass_subtitles,
+    detect_and_trim_loop_silence,
+    track_faces_in_clip,
     _require_ffmpeg,
     LAYOUT_PRESETS,
     MUSIC_PRESETS,
@@ -125,6 +132,84 @@ It literally doubles your output.
         assert all(c.viral_score > 0 for c in clips)
         assert clips[0].start_time < clips[1].start_time
 
+    def test_parse_json3_captions(self):
+        raw_json = {
+            "events": [
+                {
+                    "tStartMs": 2000,
+                    "dDurationMs": 3000,
+                    "segs": [
+                        {"utf8": "Why", "tOffsetMs": 0},
+                        {"utf8": " did", "tOffsetMs": 300},
+                        {"utf8": " this", "tOffsetMs": 600},
+                        {"utf8": " happen?", "tOffsetMs": 900},
+                    ],
+                }
+            ]
+        }
+        cues = parse_json3_captions(raw_json)
+        assert len(cues) == 1
+        assert cues[0]["start"] == 2.0
+        assert cues[0]["end"] >= 5.0
+        assert len(cues[0]["words"]) == 4
+        assert cues[0]["words"][0]["word"] == "Why"
+        assert cues[0]["words"][0]["start"] == 2.0
+
+    def test_parse_transcript_auto_detect(self):
+        json_str = '{"events": [{"tStartMs": 1000, "dDurationMs": 2000, "segs": [{"utf8": "Hello world"}]}]}'
+        cues_json = parse_transcript(json_str)
+        assert len(cues_json) == 1
+        assert cues_json[0]["text"] == "Hello world"
+
+        vtt_str = "WEBVTT\n\n00:00:01.000 --> 00:00:03.000\nHello VTT world\n"
+        cues_vtt = parse_transcript(vtt_str)
+        assert len(cues_vtt) == 1
+        assert "Hello VTT" in cues_vtt[0]["text"]
+
+    def test_group_words_into_sentences(self):
+        cues = [
+            {
+                "start": 0.0,
+                "end": 2.0,
+                "text": "First sentence here.",
+                "words": [
+                    {"word": "First", "start": 0.0, "end": 0.5},
+                    {"word": "sentence", "start": 0.5, "end": 1.2},
+                    {"word": "here.", "start": 1.2, "end": 2.0},
+                ],
+            },
+            {
+                "start": 2.5,
+                "end": 4.5,
+                "text": "Second sentence follows!",
+                "words": [
+                    {"word": "Second", "start": 2.5, "end": 3.0},
+                    {"word": "sentence", "start": 3.0, "end": 3.8},
+                    {"word": "follows!", "start": 3.8, "end": 4.5},
+                ],
+            },
+        ]
+        sentences = group_words_into_sentences(cues)
+        assert len(sentences) == 2
+        assert sentences[0]["text"] == "First sentence here."
+        assert sentences[1]["text"] == "Second sentence follows!"
+
+    def test_analyze_and_score_clips_breakdown_metrics(self):
+        cues = [
+            {"start": 5.0, "end": 9.0, "text": "Why does nobody talk about this insane trick?"},
+            {"start": 9.0, "end": 22.0, "text": "It completely revolutionizes everything you do online."},
+            {"start": 22.0, "end": 35.0, "text": "Wait till you see the final result in action."},
+        ]
+        clips = analyze_and_score_clips(cues, total_duration=60.0, video_title="Viral Tricks", max_clips=2)
+        assert len(clips) > 0
+        c = clips[0]
+        assert c.hook_score is not None and c.hook_score >= 0
+        assert c.pacing_score is not None and c.pacing_score >= 0
+        assert c.audio_energy_score is not None and c.audio_energy_score >= 0
+        assert c.visual_motion_score is not None and c.visual_motion_score >= 0
+        assert c.loop_rating in ("Seamless Loop", "High Loopability", "Standard")
+        assert c.speaker_tracking_applied is True
+
 
 # ---------------------------------------------------------------------------
 # Unit tests: Clip Renderer
@@ -181,12 +266,15 @@ class TestClipRenderer:
             assert exc.value.error_type == "duration_too_long"
 
     @patch("app.clip_renderer._require_ffmpeg", return_value="/usr/bin/ffmpeg")
-    @patch("subprocess.run")
-    def test_render_viral_clip_success(self, mock_subprocess, mock_ffmpeg, tmp_path):
+    @patch("subprocess.Popen")
+    def test_render_viral_clip_success(self, mock_popen, mock_ffmpeg, tmp_path):
         out_file = tmp_path / "clip.mp4"
         out_file.write_bytes(b"dummy rendered mp4 video")
 
-        mock_subprocess.return_value = MagicMock(returncode=0, stderr="")
+        mock_proc = MagicMock()
+        mock_proc.returncode = 0
+        mock_proc.communicate.return_value = ("", "")
+        mock_popen.return_value = mock_proc
 
         res = render_viral_clip(
             input_path="/tmp/input.mp4",
@@ -200,7 +288,7 @@ class TestClipRenderer:
         assert res["filename"] == "clip.mp4"
         assert res["duration"] == 30.0
         assert res["filesize"] > 0
-        mock_subprocess.assert_called_once()
+        mock_popen.assert_called()
 
     def test_build_video_filtergraph_anti_copyright(self):
         fg = build_video_filtergraph(
@@ -210,12 +298,13 @@ class TestClipRenderer:
         )
         assert "eq=contrast=" in fg
 
-    @patch("subprocess.run")
+    @patch("subprocess.Popen")
     @patch("shutil.which", return_value="/usr/bin/ffmpeg")
-    def test_render_viral_clip_anti_copyright_and_mute(self, mock_which, mock_subprocess, tmp_path):
+    def test_render_viral_clip_anti_copyright_and_mute(self, mock_which, mock_popen, tmp_path):
         mock_proc = MagicMock()
         mock_proc.returncode = 0
-        mock_subprocess.return_value = mock_proc
+        mock_proc.communicate.return_value = ("", "")
+        mock_popen.return_value = mock_proc
 
         out_file = tmp_path / "clip_shield.mp4"
         out_file.write_bytes(b"dummy mp4 data")
@@ -230,8 +319,64 @@ class TestClipRenderer:
             background_music="lofi_chill",
         )
         assert res["duration"] == 20.0
-        cmd_args = " ".join(mock_subprocess.call_args[0][0])
-        assert "[1:a]volume=1.0[a]" in cmd_args
+        cmd_args = " ".join(mock_popen.call_args[0][0])
+        assert "[1:a]volume=1.0" in cmd_args
+        assert "loudnorm=I=-14:TP=-1.5:LRA=11" in cmd_args
+
+    def test_generate_ass_subtitles_kinetic_karaoke(self, tmp_path):
+        cues = [
+            {
+                "start": 1.0,
+                "end": 4.0,
+                "text": "Check this insane trick",
+                "words": [
+                    {"word": "Check", "start": 1.0, "end": 1.5},
+                    {"word": "this", "start": 1.5, "end": 2.0},
+                    {"word": "insane", "start": 2.0, "end": 2.8},
+                    {"word": "trick", "start": 2.8, "end": 3.8},
+                ],
+            }
+        ]
+        sub_file = tmp_path / "test.ass"
+        ok = generate_ass_subtitles(cues, start_time=0.0, end_time=5.0, output_path=str(sub_file))
+        assert ok is True
+        content = sub_file.read_text()
+        assert "[Script Info]" in content
+        assert "ViralKaraoke" in content
+        assert "MarginV" in content
+        assert "\\kf" in content
+        assert "&H0000E6FF&" in content or "&H0000FFFF&" in content
+        assert "\\fscx112\\fscy112" in content
+
+    def test_build_video_filtergraph_two_speaker_split(self):
+        ft_data = {
+            "mode": "two_speaker_split",
+            "left_x_expr": "120",
+            "right_x_expr": "850",
+            "speaker_tracking_applied": True,
+        }
+        fg = build_video_filtergraph("center_crop", face_tracking_data=ft_data)
+        assert "vstack=inputs=2" in fg
+        assert "1080:960" in fg
+        assert "120" in fg
+        assert "850" in fg
+
+    @patch("subprocess.Popen")
+    @patch("shutil.which", return_value="/usr/bin/ffmpeg")
+    @patch("os.path.exists", return_value=True)
+    def test_detect_and_trim_loop_silence(self, mock_exists, mock_which, mock_popen):
+        mock_proc = MagicMock()
+        mock_proc.returncode = 0
+        mock_proc.communicate.return_value = (
+            "",
+            "[silencedetect @ 0x123] silence_start: 2.5\n[silencedetect @ 0x123] silence_end: 4.0",
+        )
+        mock_popen.return_value = mock_proc
+
+        trimmed_end = detect_and_trim_loop_silence("/fake/video.mp4", start_time=0.0, end_time=25.0)
+        # Probe start is 25 - 4 = 21. Silence start 2.5 -> 21 + 2.5 = 23.5
+        assert trimmed_end == 23.5
+
 
 
 # ---------------------------------------------------------------------------

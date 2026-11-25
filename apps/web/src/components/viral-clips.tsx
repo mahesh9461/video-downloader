@@ -728,6 +728,40 @@ export function ViralClips() {
                             {clip.transcript_snippet || clip.reasoning || (clip as any).summary || "High retention hook identified."}
                           </p>
 
+                          {/* Virality Engine Breakdown Badges */}
+                          <div className="flex flex-wrap items-center gap-1.5 pt-1">
+                            {clip.loop_rating && (
+                              <span className="px-2 py-0.5 rounded-md bg-emerald-500/10 text-emerald-300 font-semibold text-[11px] border border-emerald-500/20">
+                                🔄 {clip.loop_rating}
+                              </span>
+                            )}
+                            {clip.speaker_tracking_applied && (
+                              <span className="px-2 py-0.5 rounded-md bg-cyan-500/10 text-cyan-300 font-semibold text-[11px] border border-cyan-500/20">
+                                🎯 Active Speaker 9:16
+                              </span>
+                            )}
+                            {clip.hook_score != null && (
+                              <span className="px-2 py-0.5 rounded-md bg-amber-500/10 text-amber-300 font-medium text-[11px] border border-amber-500/20">
+                                ⚡ {clip.hook_score}% Hook
+                              </span>
+                            )}
+                            {clip.pacing_score != null && (
+                              <span className="px-2 py-0.5 rounded-md bg-blue-500/10 text-blue-300 font-medium text-[11px] border border-blue-500/20">
+                                ⏱️ {clip.pacing_score}% Pacing
+                              </span>
+                            )}
+                            {clip.audio_energy_score != null && (
+                              <span className="px-2 py-0.5 rounded-md bg-violet-500/10 text-violet-300 font-medium text-[11px] border border-violet-500/20">
+                                🔊 {clip.audio_energy_score}% Audio
+                              </span>
+                            )}
+                            {clip.visual_motion_score != null && (
+                              <span className="px-2 py-0.5 rounded-md bg-rose-500/10 text-rose-300 font-medium text-[11px] border border-rose-500/20">
+                                🎬 {clip.visual_motion_score}% Cuts
+                              </span>
+                            )}
+                          </div>
+
                           <div className="flex items-center gap-4 text-xs text-zinc-400 pt-2 font-mono">
                             <span className="flex items-center gap-1">
                               <Clock className="w-3.5 h-3.5" />
@@ -1049,6 +1083,12 @@ export function ViralClips() {
                 hookTitle={hookTitle}
                 layout={layout}
                 musicTrack={backgroundMusic === "none" ? "Original Audio" : backgroundMusic.replace("_", " ")}
+                hookScore={selectedClip?.hook_score}
+                pacingScore={selectedClip?.pacing_score}
+                audioEnergyScore={selectedClip?.audio_energy_score}
+                visualMotionScore={selectedClip?.visual_motion_score}
+                loopRating={selectedClip?.loop_rating}
+                speakerTrackingApplied={selectedClip?.speaker_tracking_applied}
               />
             </div>
           </div>

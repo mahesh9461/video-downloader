@@ -93,7 +93,7 @@ from app.watermark import (
     MAX_UPLOAD_BYTES,
     ALLOWED_EXTENSIONS,
 )
-from app.clip_scorer import analyze_and_score_clips, parse_vtt_or_srt
+from app.clip_scorer import analyze_and_score_clips, parse_vtt_or_srt, parse_transcript
 from app.clip_renderer import (
     process_clip_render,
     ClipRenderException,
@@ -696,6 +696,7 @@ async def analyze_viral_clips(req: ClipAnalyzeRequest, request: Request):
                 "writesubtitles": True,
                 "writeautomaticsub": True,
                 "subtitleslangs": ["en", "en-US", "en.*"],
+                "subtitlesformat": "json3/srv3/vtt/srt/best",
             })
 
             async def _fetch():
@@ -704,16 +705,21 @@ async def analyze_viral_clips(req: ClipAnalyzeRequest, request: Request):
                     if info:
                         sub_dict = info.get("subtitles") or info.get("automatic_captions") or {}
                         en_subs = sub_dict.get("en") or sub_dict.get("en-US") or []
-                        vtt_url = None
-                        for fmt in en_subs:
-                            if fmt.get("ext") in ("vtt", "srt"):
-                                vtt_url = fmt.get("url")
+                        # Prioritize json3 / srv3 first, then vtt/srt
+                        sorted_subs = sorted(
+                            en_subs,
+                            key=lambda f: 0 if f.get("ext") in ("json3", "srv3") else (1 if f.get("ext") == "vtt" else 2),
+                        )
+                        target_url = None
+                        for fmt in sorted_subs:
+                            if fmt.get("url"):
+                                target_url = fmt.get("url")
                                 break
-                        if vtt_url:
+                        if target_url:
                             async with httpx.AsyncClient(timeout=4.0) as client:
-                                sub_resp = await client.get(vtt_url)
+                                sub_resp = await client.get(target_url)
                                 if sub_resp.status_code == 200:
-                                    return parse_vtt_or_srt(sub_resp.text)
+                                    return parse_transcript(sub_resp.text)
                 return None
 
             cues_res = await asyncio.wait_for(_fetch(), timeout=5.0)
@@ -976,19 +982,24 @@ async def render_viral_clip_endpoint(
                         "writesubtitles": True,
                         "writeautomaticsub": True,
                         "subtitleslangs": ["en", "en-US", "en.*"],
+                        "subtitlesformat": "json3/srv3/vtt/srt/best",
                     })
                     with yt_dlp.YoutubeDL(ydl_sub_opts) as ydl:
                         info_sub = await asyncio.to_thread(ydl.extract_info, source_input, download=False)
                         if info_sub:
                             sub_dict = info_sub.get("subtitles") or info_sub.get("automatic_captions") or {}
                             en_subs = sub_dict.get("en") or sub_dict.get("en-US") or []
-                            for fmt in en_subs:
-                                if fmt.get("ext") in ("vtt", "srt") and fmt.get("url"):
+                            sorted_subs = sorted(
+                                en_subs,
+                                key=lambda f: 0 if f.get("ext") in ("json3", "srv3") else (1 if f.get("ext") == "vtt" else 2),
+                            )
+                            for fmt in sorted_subs:
+                                if fmt.get("url"):
                                     import httpx
                                     with httpx.Client(timeout=8.0) as client:
                                         sub_resp = client.get(fmt["url"])
                                         if sub_resp.status_code == 200:
-                                            cues_to_burn = parse_vtt_or_srt(sub_resp.text)
+                                            cues_to_burn = parse_transcript(sub_resp.text)
                                             subtitle_cache.set(source_input, cues_to_burn)
                                             break
             if cues_to_burn:

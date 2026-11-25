@@ -81,6 +81,12 @@ export interface ClipCandidate {
   thumbnail_url?: string | null;
   retention_rate?: string | null;
   hook_rating?: string | null;
+  hook_score?: number | null;
+  pacing_score?: number | null;
+  audio_energy_score?: number | null;
+  visual_motion_score?: number | null;
+  loop_rating?: string | null;
+  speaker_tracking_applied?: boolean;
 }
 
 export interface ClipAnalyzeResponse {

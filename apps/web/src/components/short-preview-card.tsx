@@ -24,6 +24,12 @@ export interface ShortPreviewCardProps {
   layout?: string;
   musicTrack?: string;
   className?: string;
+  hookScore?: number | null;
+  pacingScore?: number | null;
+  audioEnergyScore?: number | null;
+  visualMotionScore?: number | null;
+  loopRating?: string | null;
+  speakerTrackingApplied?: boolean;
 }
 
 export function ShortPreviewCard({
@@ -36,6 +42,12 @@ export function ShortPreviewCard({
   layout = "center_crop",
   musicTrack = "Original Audio",
   className,
+  hookScore,
+  pacingScore,
+  audioEnergyScore,
+  visualMotionScore,
+  loopRating,
+  speakerTrackingApplied,
 }: ShortPreviewCardProps) {
   const [isPlaying, setIsPlaying] = useState(false);
 
@@ -84,13 +96,32 @@ export function ShortPreviewCard({
         <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/20 to-black/40 pointer-events-none" />
       </div>
 
-      {/* Top Banner (Hook Headline) */}
-      <div className="relative z-10 pt-6 px-1 text-center">
+      {/* Top Banner (Hook Headline & Virality Badge) */}
+      <div className="relative z-10 pt-6 px-1 text-center space-y-1.5">
         {hookTitle && (
           <div className="inline-block px-3 py-1.5 rounded-xl bg-amber-400 text-zinc-950 font-black text-xs sm:text-sm tracking-tight shadow-xl shadow-amber-400/20 uppercase transform -rotate-1 border border-amber-300">
             {hookTitle}
           </div>
         )}
+
+        {/* Virality Engine Indicators */}
+        <div className="flex flex-wrap items-center justify-center gap-1.5 pt-0.5">
+          {loopRating && (
+            <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-emerald-950/80 border border-emerald-500/40 text-[9px] font-bold text-emerald-300 backdrop-blur-md">
+              🔄 {loopRating}
+            </span>
+          )}
+          {speakerTrackingApplied && (
+            <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-cyan-950/80 border border-cyan-500/40 text-[9px] font-bold text-cyan-300 backdrop-blur-md">
+              🎯 9:16 Speaker Tracked
+            </span>
+          )}
+          {hookScore != null && (
+            <span className="inline-flex items-center px-1.5 py-0.5 rounded-full bg-amber-950/70 border border-amber-500/30 text-[9px] font-medium text-amber-200 backdrop-blur-md">
+              ⚡ {hookScore}% Hook
+            </span>
+          )}
+        </div>
       </div>
 
       {/* Middle Interaction / Play Overlay */}

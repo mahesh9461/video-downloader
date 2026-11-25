@@ -114,6 +114,12 @@ class ClipCandidate(BaseModel):
     thumbnail_url: Optional[str] = Field(None, description="Visual thumbnail of the video clip")
     retention_rate: Optional[str] = Field(None, description="Predicted viewer retention percentage")
     hook_rating: Optional[str] = Field(None, description="Virality percentile badge")
+    hook_score: Optional[int] = Field(None, ge=0, le=100, description="First-3s Hook strength score (0-100)")
+    pacing_score: Optional[int] = Field(None, ge=0, le=100, description="Speech cadence & pacing score (0-100)")
+    audio_energy_score: Optional[int] = Field(None, ge=0, le=100, description="Audio dynamic energy & variance score (0-100)")
+    visual_motion_score: Optional[int] = Field(None, ge=0, le=100, description="Visual scene-cut & novelty score (0-100)")
+    loop_rating: Optional[str] = Field(None, description="Loopability rating (e.g. 'Seamless Loop', 'High Loopability', 'Standard')")
+    speaker_tracking_applied: Optional[bool] = Field(False, description="Whether active speaker tracking was applied")
 
 
 class ClipAnalyzeRequest(BaseModel):

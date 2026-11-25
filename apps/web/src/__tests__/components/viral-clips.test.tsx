@@ -58,6 +58,51 @@ describe("ViralClips", () => {
       expect(screen.getByPlaceholderText(/paste long youtube video/i)).toBeInTheDocument();
       expect(screen.getByRole("button", { name: /find viral moments/i })).toBeInTheDocument();
     });
+
+    it("should render virality breakdown badges for analyzed clips", async () => {
+      // Arrange
+      const user = userEvent.setup();
+      mockAnalyzeClips.mockResolvedValueOnce({
+        video_id: "test12345",
+        title: "Test Podcast Episode 42",
+        total_duration: 300,
+        clips: [
+          {
+            clip_id: "clip_10_50",
+            start_time: 10,
+            end_time: 50,
+            duration: 40,
+            viral_score: 95,
+            hook_title: "THE BIGGEST MISTAKE YOU MAKE",
+            summary: "Speaker explains why startups fail.",
+            reason: "High curiosity question and speech cadence",
+            thumbnail_url: "https://i.ytimg.com/vi/test12345/hqdefault.jpg",
+            retention_rate: "96% Retention",
+            hook_rating: "Top 1% Virality",
+            hook_score: 94,
+            pacing_score: 88,
+            audio_energy_score: 92,
+            visual_motion_score: 86,
+            loop_rating: "Seamless Loop",
+            speaker_tracking_applied: true,
+          },
+        ],
+      });
+
+      renderWithProvider(<ViralClips />, store);
+
+      // Act
+      const input = screen.getByPlaceholderText(/paste long youtube video/i);
+      await user.type(input, "https://www.youtube.com/watch?v=dQw4w9WgXcQ");
+      await user.click(screen.getByRole("button", { name: /find viral moments/i }));
+
+      // Assert
+      const titles = await screen.findAllByText("THE BIGGEST MISTAKE YOU MAKE");
+      expect(titles.length).toBeGreaterThanOrEqual(1);
+      expect(screen.getAllByText(/seamless loop/i)[0]).toBeInTheDocument();
+      expect(screen.getAllByText(/speaker tracked/i)[0]).toBeInTheDocument();
+      expect(screen.getAllByText(/94% hook/i)[0]).toBeInTheDocument();
+    });
   });
 
   describe("user interaction", () => {
