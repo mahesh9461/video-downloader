@@ -37,12 +37,20 @@ export const GTA6_PRESET = {
     "🎮 Game: Grand Theft Auto VI (Rockstar Games)\n\n" +
     "#GTA6 #GTAVI #Shorts #GTA6Shorts #GTA6Live #GTA6LiveStream #ViceCity #Leonida #GTA6Gameplay #GTA6Launch #GamingShorts #LiveGaming",
   tags: [
-    "GTA 6", "GTA VI", "Grand Theft Auto VI", "Grand Theft Auto 6", "Rockstar Games", "GTA 6 Shorts", "ViceVerse",
-    "GTA World ViceVerse", "ViceVerse GTA 6", "Vice City", "GTA 6 secrets", "GTA 6 gameplay", "GTA 6 Easter eggs",
-    "GTA 6 clips", "GTA 6 physics", "GTA 6 map", "gaming Shorts", "gta6 gameplay", "gta6 lucia", "lucia gta6",
-    "gta6 pc", "gta6 car", "gta6 woke", "illojuan gta6", "gta6 first mission", "gta6 on pc", "gya6 live",
-    "gta6livestram", "Jason and Lucia GTA 6", "Jason GTA 6", "Boobie Ike GTA 6", "Brian Heder GTA 6",
-    "Roxy GTA 6", "GTA 6 characters", "GTA 6 cast", "Grand Theft Auto"
+    "GTA 6",
+    "Grand Theft Auto VI",
+    "GTA VI",
+    "Rockstar Games",
+    "GTA 6 Shorts",
+    "Vice City",
+    "ViceVerse",
+    "GTA 6 gameplay",
+    "GTA 6 clips",
+    "GTA 6 secrets",
+    "gaming Shorts",
+    "Jason GTA 6",
+    "Lucia GTA 6",
+    "Grand Theft Auto",
   ],
 };
 

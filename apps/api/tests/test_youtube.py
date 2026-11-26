@@ -214,3 +214,22 @@ async def test_set_video_thumbnail_no_token():
          patch("app.youtube_publisher.refresh_access_token", new_callable=AsyncMock, return_value=None):
         success = await set_video_thumbnail("yt_short_123", "/nonexistent/thumb.jpg")
         assert success is False
+
+
+def test_sanitize_youtube_tags_clamps_and_cleans():
+    from app.youtube_publisher import sanitize_youtube_tags
+
+    # Test stripping hashtags, removing <>, removing commas, deduplication
+    dirty_tags = ["#GTA 6", "GTA 6", "<script>", "#Grand Theft Auto VI", "Rockstar, Games"]
+    cleaned = sanitize_youtube_tags(dirty_tags)
+    assert "GTA 6" in cleaned
+    assert "Grand Theft Auto VI" in cleaned
+    assert "#GTA 6" not in cleaned
+    # Ensure deduplication: "GTA 6" should appear only once
+    assert cleaned.count("GTA 6") == 1
+
+    # Test total character limit clamping
+    oversized_tags = [f"Tag Number Very Long {i}" for i in range(100)]
+    clamped = sanitize_youtube_tags(oversized_tags, max_total_chars=400)
+    total_length = sum(len(t) + (2 if " " in t else 0) + 1 for t in clamped)
+    assert total_length <= 400

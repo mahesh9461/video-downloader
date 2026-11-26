@@ -902,13 +902,18 @@ class AutopilotManager:
         self.active_clip_id = clip.id
         self.current_step = "uploading"
         self.current_step_label = f"Uploading Short #{clip.clip_index} to YouTube..."
-        self._log(f"🚀 Publishing Short #{clip.clip_index}/6 to YouTube: '{clip.hook_title}'")
-        self._save_state()
+        # Ensure title has #Shorts and is never blank
+        raw_hook = (clip.hook_title or "").strip()
+        if not raw_hook:
+            raw_hook = (clip.source_title or "").strip() or f"GTA 6 Viral Moment #{clip.clip_index}"
+        
+        if not raw_hook.lower().endswith("#shorts") and "#shorts" not in raw_hook.lower():
+            short_title = f"{raw_hook} #Shorts"
+        else:
+            short_title = raw_hook
 
-        # Ensure title has #Shorts
-        short_title = clip.hook_title
-        if not short_title.lower().endswith("#shorts"):
-            short_title = f"{short_title} #Shorts"
+        self._log(f"🚀 Publishing Short #{clip.clip_index}/6 to YouTube: '{short_title}'")
+        self._save_state()
 
         try:
             # Background auto-token refresh check

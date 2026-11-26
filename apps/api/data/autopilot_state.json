@@ -8,45 +8,46 @@
   "processed_video_ids": [
     "kT6fs5zlw-Y",
     "WF-7H3tOhYI",
-    "gmbbMsw_ynk"
+    "gmbbMsw_ynk",
+    "NEnvw-Nb2vc"
   ],
-  "daily_uploads_count": 6,
+  "daily_uploads_count": 0,
   "daily_upload_limit": 6,
   "upload_interval_seconds": 3600,
   "cooldown_until": null,
-  "disk_space_cleaned_mb": 3209.79,
-  "last_cleaned_at": "2026-11-25T08:32:47.067442+00:00",
+  "disk_space_cleaned_mb": 3464.01,
+  "last_cleaned_at": "2026-11-26T10:00:12.867989+00:00",
   "recent_logs": [
-    "[14:00:56] \u23ed\ufe0f Cover thumbnail generation skipped for Short #5 (disabled in global settings)",
-    "[14:00:56] \u2705 Video preview ready for Short #5: gta6_short_0309ccb9_5.mp4",
-    "[14:00:56] \ud83c\udfa3 Hook for Short #6: '' (overlay_enabled=False)",
-    "[14:00:56] \ud83c\udfb5 Text & Song set for Clip #6: none | vice_city_synth",
-    "[14:00:56] \ud83c\udfac Rendering Clip 6 (Full HD horizontal 16:9, threads=2): hook='' style='none'",
-    "[14:01:47] \u23ed\ufe0f Cover thumbnail generation skipped for Short #6 (disabled in global settings)",
-    "[14:01:47] \u2705 Video preview ready for Short #6: gta6_short_0309ccb9_6.mp4",
-    "[14:01:47] \ud83e\uddf9 Cleaned disk: deleted autopilot_src_gmbbMsw_ynk.mp4 (freed 159.5 MB)",
-    "[14:01:47] \u2705 Batch 0309ccb9 ready: 6 GTA 6 Shorts prepared.",
-    "[14:01:47] \ud83d\ude80 Starting sequential auto-upload: uploading all 6 clips to YouTube one by one...",
-    "[14:01:47] \ud83d\udce4 Uploading Short #1/6: ''",
-    "[14:01:47] \ud83d\ude80 Publishing Short #1/6 to YouTube: ''",
-    "[14:01:53] \ud83c\udf89 Successfully uploaded Short #1! URL: https://www.youtube.com/shorts/i99FUiMNcpM",
-    "[14:01:56] \ud83d\udce4 Uploading Short #2/6: ''",
-    "[14:01:56] \ud83d\ude80 Publishing Short #2/6 to YouTube: ''",
-    "[14:02:03] \ud83c\udf89 Successfully uploaded Short #2! URL: https://www.youtube.com/shorts/a6yng8eYGR0",
-    "[14:02:06] \ud83d\udce4 Uploading Short #3/6: ''",
-    "[14:02:06] \ud83d\ude80 Publishing Short #3/6 to YouTube: ''",
-    "[14:02:12] \ud83c\udf89 Successfully uploaded Short #3! URL: https://www.youtube.com/shorts/9cK3RiYRRwk",
-    "[14:02:15] \ud83d\udce4 Uploading Short #4/6: ''",
-    "[14:02:15] \ud83d\ude80 Publishing Short #4/6 to YouTube: ''",
-    "[14:02:22] \ud83c\udf89 Successfully uploaded Short #4! URL: https://www.youtube.com/shorts/HuSYmHtHqZg",
-    "[14:02:25] \ud83d\udce4 Uploading Short #5/6: ''",
-    "[14:02:25] \ud83d\ude80 Publishing Short #5/6 to YouTube: ''",
-    "[14:02:30] \ud83c\udf89 Successfully uploaded Short #5! URL: https://www.youtube.com/shorts/yHj2CjWtaUs",
-    "[14:02:33] \ud83d\udce4 Uploading Short #6/6: ''",
-    "[14:02:33] \ud83d\ude80 Publishing Short #6/6 to YouTube: ''",
-    "[14:02:44] \ud83c\udf89 Successfully uploaded Short #6! URL: https://www.youtube.com/shorts/PS-NYamxf20",
-    "[14:02:47] \ud83e\uddf9 Purged 872.9 MB temporary clip files from completed batch.",
-    "[14:02:47] \ud83c\udf89 Batch complete! All 6 clips published to YouTube one by one. Cleared active batch & purged temporary storage."
+    "[15:29:56] \u2705 Video preview ready for Short #2: gta6_short_2432fb9c_2.mp4",
+    "[15:29:56] \ud83c\udfa3 Hook for Short #3: '' (overlay_enabled=False)",
+    "[15:29:56] \ud83c\udfb5 Text & Song set for Clip #3: none | vice_city_synth",
+    "[15:29:56] \ud83c\udfac Rendering Clip 3 (9:16 vertical, threads=2): hook='' style='none'",
+    "[15:30:00] \u23ed\ufe0f Cover thumbnail generation skipped for Short #3 (disabled in global settings)",
+    "[15:30:00] \u2705 Video preview ready for Short #3: gta6_short_2432fb9c_3.mp4",
+    "[15:30:00] \ud83c\udfa3 Hook for Short #4: '' (overlay_enabled=False)",
+    "[15:30:00] \ud83c\udfb5 Text & Song set for Clip #4: none | vice_city_synth",
+    "[15:30:00] \ud83c\udfac Rendering Clip 4 (9:16 vertical, threads=2): hook='' style='none'",
+    "[15:30:05] \u23ed\ufe0f Cover thumbnail generation skipped for Short #4 (disabled in global settings)",
+    "[15:30:05] \u2705 Video preview ready for Short #4: gta6_short_2432fb9c_4.mp4",
+    "[15:30:05] \ud83c\udfa3 Hook for Short #5: '' (overlay_enabled=False)",
+    "[15:30:05] \ud83c\udfb5 Text & Song set for Clip #5: none | vice_city_synth",
+    "[15:30:05] \ud83c\udfac Rendering Clip 5 (9:16 vertical, threads=2): hook='' style='none'",
+    "[15:30:08] \u23ed\ufe0f Cover thumbnail generation skipped for Short #5 (disabled in global settings)",
+    "[15:30:08] \u2705 Video preview ready for Short #5: gta6_short_2432fb9c_5.mp4",
+    "[15:30:08] \ud83c\udfa3 Hook for Short #6: '' (overlay_enabled=False)",
+    "[15:30:08] \ud83c\udfb5 Text & Song set for Clip #6: none | vice_city_synth",
+    "[15:30:08] \ud83c\udfac Rendering Clip 6 (9:16 vertical, threads=2): hook='' style='none'",
+    "[15:30:12] \u23ed\ufe0f Cover thumbnail generation skipped for Short #6 (disabled in global settings)",
+    "[15:30:12] \u2705 Video preview ready for Short #6: gta6_short_2432fb9c_6.mp4",
+    "[15:30:12] \ud83e\uddf9 Cleaned disk: deleted autopilot_src_NEnvw-Nb2vc.mp4 (freed 209.5 MB)",
+    "[15:30:12] \u2705 Batch 2432fb9c ready: 6 GTA 6 Shorts prepared.",
+    "[15:30:12] \ud83d\ude80 Starting sequential auto-upload: uploading all 6 clips to YouTube one by one...",
+    "[15:30:12] \ud83d\udce4 Uploading Short #1/6: ''",
+    "[15:30:12] \ud83d\ude80 Publishing Short #1/6 to YouTube: ''",
+    "[15:30:12] \u274c Upload failed for Short #1: YouTube upload initiation failed (400): The request metadata specifies invalid video keywords.",
+    "[15:30:12] \u26a0\ufe0f Short #1 upload paused/failed. Stopping sequential upload.",
+    "[15:30:12] \ud83e\uddf9 Purged 44.7 MB temporary clip files from completed batch.",
+    "[15:30:12] \ud83c\udf89 Batch complete! All 6 clips published to YouTube one by one. Cleared active batch & purged temporary storage."
   ],
   "all_published_videos": [
     {
@@ -270,5 +271,13 @@
       "duration": 25.0
     }
   ],
-  "recent_errors": []
+  "recent_errors": [
+    {
+      "clip_id": "2432fb9c_1",
+      "title": "",
+      "stage": "upload",
+      "error": "YouTube upload initiation failed (400): The request metadata specifies invalid video keywords.",
+      "timestamp": "2026-11-26T10:00:12.861819+00:00"
+    }
+  ]
 }

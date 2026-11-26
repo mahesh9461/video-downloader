@@ -31,15 +31,65 @@ DEFAULT_YOUTUBE_DESCRIPTION = (
 )
 
 DEFAULT_YOUTUBE_TAGS = [
-    "GTA 6", "GTA VI", "Grand Theft Auto VI", "Grand Theft Auto 6", "Rockstar Games", "GTA 6 Shorts", "ViceVerse",
-    "GTA World ViceVerse", "ViceVerse GTA 6", "Vice City", "GTA 6 secrets",
-    "GTA 6 gameplay", "GTA 6 Easter eggs", "GTA 6 clips", "GTA 6 physics",
-    "GTA 6 map", "gaming Shorts", "gta6 gameplay", "gta6 lucia", "lucia gta6",
-    "gta6 pc", "gta6 car", "gta6 woke", "illojuan gta6", "gta6 first mission",
-    "gta6 on pc", "gya6 live", "gta6livestram", "Jason and Lucia GTA 6",
-    "Jason GTA 6", "Boobie Ike GTA 6", "Brian Heder GTA 6", "Roxy GTA 6",
-    "GTA 6 characters", "GTA 6 cast", "Grand Theft Auto"
+    "GTA 6",
+    "Grand Theft Auto VI",
+    "GTA VI",
+    "Rockstar Games",
+    "GTA 6 Shorts",
+    "Vice City",
+    "ViceVerse",
+    "GTA 6 gameplay",
+    "GTA 6 clips",
+    "GTA 6 secrets",
+    "gaming Shorts",
+    "Jason GTA 6",
+    "Lucia GTA 6",
+    "Grand Theft Auto",
 ]
+
+
+def sanitize_youtube_tags(raw_tags: Optional[List[str]], max_total_chars: int = 420) -> List[str]:
+    """Sanitizes and clamps video tags to ensure 100% compliance with YouTube Data API v3.
+    
+    YouTube enforces:
+    - Maximum 500 characters total across all tags combined (including comma separators and quotes on multi-word tags).
+    - Individual tags must not exceed 100 characters.
+    - No '<' or '>' or comma characters.
+    - Strips leading '#' from tags.
+    - Deduplicates case-insensitively while preserving priority order.
+    """
+    if not raw_tags:
+        return []
+
+    cleaned: List[str] = []
+    seen: set = set()
+    total_length = 0
+
+    for item in raw_tags:
+        if not item or not isinstance(item, str):
+            continue
+        # Remove leading hashtags, forbidden brackets, commas, and trim whitespace
+        tag = item.strip().lstrip("#").replace("<", "").replace(">", "").replace(",", "").strip()
+        if not tag or len(tag) > 80:
+            continue
+
+        tag_lower = tag.lower()
+        if tag_lower in seen:
+            continue
+
+        # YouTube overhead calculation: 
+        # tags with spaces have implicit double quotes (+2) plus comma separator (+1)
+        overhead = (2 if " " in tag else 0) + 1
+        item_cost = len(tag) + overhead
+
+        if total_length + item_cost > max_total_chars:
+            break
+
+        cleaned.append(tag)
+        seen.add(tag_lower)
+        total_length += item_cost
+
+    return cleaned
 
 DEFAULT_YOUTUBE_CATEGORY_ID = "20"  # Gaming Category
 
@@ -405,14 +455,7 @@ def update_channel_settings(
         raw_tags = settings["tags"]
         if isinstance(raw_tags, str):
             raw_tags = [t.strip() for t in raw_tags.split(",") if t.strip()]
-        cleaned_tags = []
-        seen = set()
-        for t in raw_tags:
-            tag_str = str(t).strip().lstrip("#").strip()
-            if tag_str and tag_str.lower() not in seen:
-                seen.add(tag_str.lower())
-                cleaned_tags.append(tag_str)
-        ch["tags"] = cleaned_tags
+        ch["tags"] = sanitize_youtube_tags(raw_tags, max_total_chars=420)
 
     if "category_id" in settings and settings["category_id"] is not None:
         cat_id = str(settings["category_id"]).strip()
@@ -880,8 +923,13 @@ async def publish_short_video(
     if not video_path.is_file():
         raise FileNotFoundError(f"Video file not found: {filename}")
 
-    if "#shorts" not in title.lower():
-        title = f"{title.strip()} #Shorts"
+    # Ensure title is never empty or only whitespace/#shorts
+    clean_title = (title or "").strip()
+    if not clean_title or clean_title.lower() == "#shorts":
+        clean_title = f"{video_path.stem} #Shorts"
+    elif "#shorts" not in clean_title.lower():
+        clean_title = f"{clean_title} #Shorts"
+    clean_title = clean_title[:100]
 
     file_size = video_path.stat().st_size
     init_url = "https://www.googleapis.com/upload/youtube/v3/videos?uploadType=resumable&part=snippet,status"
@@ -906,16 +954,19 @@ async def publish_short_video(
     else:
         final_tags = list(preset["tags"])
 
-    # If it's a gaming video with a game title, ensure key entity tags are present
+    # If it's a gaming video with a game title, ensure key entity tags are prioritized
     if game_title and preset.get("categoryId") == "20":
         for g_tag in [game_title, "GTA 6" if "theft auto" in game_title.lower() else game_title, "Rockstar Games"]:
             if not any(g_tag.lower() == t.lower() for t in final_tags):
-                final_tags.append(g_tag)
+                final_tags.insert(0, g_tag)
+
+    # Sanitize and strictly enforce YouTube's 500-char combined tag limit
+    sanitized_tags = sanitize_youtube_tags(final_tags, max_total_chars=420)
 
     snippet: Dict[str, Any] = {
-        "title": title[:100],
+        "title": clean_title,
         "description": final_description,
-        "tags": final_tags,
+        "tags": sanitized_tags,
         "categoryId": preset["categoryId"],
     }
 
@@ -991,7 +1042,7 @@ async def publish_short_video(
         return {
             "video_id": video_id,
             "youtube_url": f"https://www.youtube.com/shorts/{video_id}",
-            "title": title,
+            "title": clean_title,
             "privacy": privacy,
             "status": "uploaded",
         }
