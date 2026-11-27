@@ -1,5 +1,6 @@
-from typing import List, Optional
-from pydantic import BaseModel, Field
+import uuid
+from typing import Any, List, Optional
+from pydantic import BaseModel, Field, model_validator
 
 
 class MetadataRequest(BaseModel):
@@ -103,14 +104,14 @@ class WatermarkResult(BaseModel):
 
 
 class ClipCandidate(BaseModel):
-    clip_id: str = Field(..., description="Unique ID for this clip segment")
+    clip_id: str = Field(default_factory=lambda: f"clip_{uuid.uuid4().hex[:8]}", description="Unique ID for this clip segment")
     start_time: float = Field(..., ge=0, description="Start timestamp in seconds")
     end_time: float = Field(..., ge=0, description="End timestamp in seconds")
-    duration: float = Field(..., ge=0, description="Clip duration in seconds")
-    viral_score: int = Field(..., ge=0, le=100, description="Engagement virality score (0-100)")
-    hook_title: str = Field(..., description="Generated hook headline for the top banner")
-    summary: str = Field(..., description="Brief summary of what happens in this clip")
-    reason: str = Field(..., description="Why this clip is predicted to perform well")
+    duration: float = Field(0.0, ge=0, description="Clip duration in seconds")
+    viral_score: int = Field(75, ge=0, le=100, description="Engagement virality score (0-100)")
+    hook_title: str = Field("MUST WATCH MOMENT", description="Generated hook headline for the top banner")
+    summary: str = Field("", description="Brief summary of what happens in this clip")
+    reason: str = Field("High energy action sequence", description="Why this clip is predicted to perform well")
     thumbnail_url: Optional[str] = Field(None, description="Visual thumbnail of the video clip")
     retention_rate: Optional[str] = Field(None, description="Predicted viewer retention percentage")
     hook_rating: Optional[str] = Field(None, description="Virality percentile badge")
@@ -120,6 +121,30 @@ class ClipCandidate(BaseModel):
     visual_motion_score: Optional[int] = Field(None, ge=0, le=100, description="Visual scene-cut & novelty score (0-100)")
     loop_rating: Optional[str] = Field(None, description="Loopability rating (e.g. 'Seamless Loop', 'High Loopability', 'Standard')")
     speaker_tracking_applied: Optional[bool] = Field(False, description="Whether active speaker tracking was applied")
+
+    @model_validator(mode="before")
+    @classmethod
+    def _normalize_candidate_fields(cls, data: Any) -> Any:
+        if isinstance(data, dict):
+            # Alias clip_id <- id
+            if not data.get("clip_id"):
+                data["clip_id"] = data.get("id") or f"clip_{uuid.uuid4().hex[:8]}"
+            # Alias summary <- transcript, transcript_snippet
+            if not data.get("summary"):
+                data["summary"] = data.get("transcript") or data.get("transcript_snippet") or "Highlight segment"
+            # Alias reason <- reasoning
+            if not data.get("reason"):
+                data["reason"] = data.get("reasoning") or "High energy action sequence"
+            # Compute duration if missing
+            if ("duration" not in data or data["duration"] is None) and "start_time" in data and "end_time" in data:
+                data["duration"] = round(float(data["end_time"]) - float(data["start_time"]), 1)
+            # Ensure viral_score is int
+            if "viral_score" in data and isinstance(data["viral_score"], (float, str)):
+                try:
+                    data["viral_score"] = int(round(float(data["viral_score"])))
+                except (ValueError, TypeError):
+                    data["viral_score"] = 75
+        return data
 
 
 class ClipAnalyzeRequest(BaseModel):

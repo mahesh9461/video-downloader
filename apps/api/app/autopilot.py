@@ -550,13 +550,22 @@ class AutopilotManager:
                 end = min(total_dur, start + raw_default_clip_len)
                 from app.schemas import ClipCandidate
                 clip_candidates.append(ClipCandidate(
+                    clip_id=f"clip_{int(start)}_{int(end)}",
                     start_time=start,
                     end_time=end,
                     duration=round(end - start, 1),
-                    viral_score=75.0,
+                    viral_score=75,
                     hook_title=f"GTA 6 INSANE MOMENT #{idx + 1}",
-                    transcript=f"GTA 6 Highlight segment {idx + 1}",
+                    summary=f"GTA 6 Highlight segment {idx + 1}",
                     reason="High energy action sequence",
+                    retention_rate="88% Retention",
+                    hook_rating="High Engagement",
+                    hook_score=75,
+                    pacing_score=75,
+                    audio_energy_score=80,
+                    visual_motion_score=75,
+                    loop_rating="Seamless Loop",
+                    speaker_tracking_applied=True,
                 ))
 
             # Pre-populate batch so UI immediately sees all 6 planned clips upon refresh

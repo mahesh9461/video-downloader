@@ -1,10 +1,10 @@
 {
   "is_running": false,
-  "state": "idle",
+  "state": "rendering",
   "current_batch": null,
   "active_clip_id": null,
-  "current_step": "completed",
-  "current_step_label": "All 6 clips successfully uploaded to YouTube!",
+  "current_step": "downloading",
+  "current_step_label": "Downloading source video: 'GTA 6 \u2013 Robbing BIGGEST BANKS With Jason and Lucia! (Crazy 5-Star Police Chase Escape)'",
   "processed_video_ids": [
     "kT6fs5zlw-Y",
     "WF-7H3tOhYI",
@@ -12,18 +12,13 @@
     "NEnvw-Nb2vc",
     "Hcg067atjCU"
   ],
-  "daily_uploads_count": 6,
+  "daily_uploads_count": 0,
   "daily_upload_limit": 6,
   "upload_interval_seconds": 3600,
   "cooldown_until": null,
-  "disk_space_cleaned_mb": 5119.24,
-  "last_cleaned_at": "2026-11-26T10:13:43.812594+00:00",
+  "disk_space_cleaned_mb": 22399.6,
+  "last_cleaned_at": "2026-11-27T18:03:01.405045",
   "recent_logs": [
-    "[15:42:58] \u23ed\ufe0f Cover thumbnail generation skipped for Short #5 (disabled in global settings)",
-    "[15:42:58] \u2705 Video preview ready for Short #5: gta6_short_f76423b3_5.mp4",
-    "[15:42:58] \ud83c\udfa3 Hook for Short #6: '' (overlay_enabled=False)",
-    "[15:42:58] \ud83c\udfb5 Text & Song set for Clip #6: none | vice_city_synth",
-    "[15:42:58] \ud83c\udfac Rendering Clip 6 (9:16 vertical, threads=2): hook='' style='none'",
     "[15:43:04] \u23ed\ufe0f Cover thumbnail generation skipped for Short #6 (disabled in global settings)",
     "[15:43:04] \u2705 Video preview ready for Short #6: gta6_short_f76423b3_6.mp4",
     "[15:43:04] \ud83e\uddf9 Cleaned disk: deleted autopilot_src_Hcg067atjCU.mp4 (freed 1597.6 MB)",
@@ -48,7 +43,12 @@
     "[15:43:37] \ud83d\ude80 Publishing Short #6/6 to YouTube: 'Who Can Make The Most Money In GTA 6? (Ft. IShowSpeed) #Shorts'",
     "[15:43:40] \ud83c\udf89 Successfully uploaded Short #6! URL: https://www.youtube.com/shorts/50j_2zxWU8g",
     "[15:43:43] \ud83e\uddf9 Purged 57.6 MB temporary clip files from completed batch.",
-    "[15:43:43] \ud83c\udf89 Batch complete! All 6 clips published to YouTube one by one. Cleared active batch & purged temporary storage."
+    "[15:43:43] \ud83c\udf89 Batch complete! All 6 clips published to YouTube one by one. Cleared active batch & purged temporary storage.",
+    "[17:53:56] \ud83d\udce5 Downloading source video for clipping: 'GTA 6 \ud83d\uded1 Welcome to Vice City (Day 1)'",
+    "[18:02:47] \ud83d\udce6 Downloaded source (17280.4 MB). Analyzing 6 viral segments...",
+    "[18:03:01] \u274c Failed to process batch: 2 validation errors for ClipCandidate\nclip_id\n  Field required [type=missing, input_value={'start_time': 8170.0, 'e...energy action sequence'}, input_type=dict]\n    For further information visit https://errors.pydantic.dev/2.14/v/missing\nsummary\n  Field required [type=missing, input_value={'start_time': 8170.0, 'e...energy action sequence'}, input_type=dict]\n    For further information visit https://errors.pydantic.dev/2.14/v/missing",
+    "[18:03:01] \ud83e\uddf9 Cleaned disk: deleted autopilot_src_QjbepgVChIA.mp4 (freed 17280.4 MB)",
+    "[18:06:28] \ud83d\udce5 Downloading source video for clipping: 'GTA 6 \u2013 Robbing BIGGEST BANKS With Jason and Lucia! (Crazy 5-Star Police Chase Escape)'"
   ],
   "all_published_videos": [
     {
@@ -273,6 +273,12 @@
     }
   ],
   "recent_errors": [
+    {
+      "title": "GTA 6 \ud83d\uded1 Welcome to Vice City (Day 1)",
+      "stage": "batch",
+      "error": "2 validation errors for ClipCandidate\nclip_id\n  Field required [type=missing, input_value={'start_time': 8170.0, 'e...energy action sequence'}, input_type=dict]\n    For further information visit https://errors.pydantic.dev/2.14/v/missing\nsummary\n  Field required [type=missing, input_value={'start_time': 8170.0, 'e...energy action sequence'}, input_type=dict]\n    For further information visit https://errors.pydantic.dev/2.14/v/missing",
+      "timestamp": "2026-11-27T12:33:01.405873+00:00"
+    },
     {
       "clip_id": "2432fb9c_1",
       "title": "",
