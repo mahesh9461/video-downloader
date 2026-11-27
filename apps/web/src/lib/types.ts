@@ -190,6 +190,7 @@ export interface AutopilotPublishedVideo {
   preview_url?: string | null;
   cover_url?: string | null;
   duration?: number;
+  file_size_mb?: number | null;
 }
 
 export interface UserProfile {
@@ -268,6 +269,7 @@ export interface AutopilotClipItem {
   download_url?: string | null;
   cover_filename?: string | null;
   cover_url?: string | null;
+  file_size_mb?: number | null;
   scheduled_time?: string | null;
   status: "queued" | "rendering" | "preview_ready" | "uploading" | "published" | "cleaned" | "failed";
   current_step?: "queued" | "discovering" | "hook_created" | "styling" | "rendering" | "preview_ready" | "uploading" | "published" | "failed";

@@ -509,6 +509,7 @@ export function AutopilotDashboard({ onOpenAuth }: AutopilotDashboardProps = {})
       published_at?: string;
       clip_index?: number;
       cover_url?: string | null;
+      file_size_mb?: number | null;
     }> = [];
     const seen = new Set<string>();
 
@@ -538,6 +539,7 @@ export function AutopilotDashboard({ onOpenAuth }: AutopilotDashboardProps = {})
             youtube_video_id: c.youtube_video_id || "",
             clip_index: c.clip_index,
             cover_url: c.cover_url,
+            file_size_mb: c.file_size_mb,
           });
         }
       }
@@ -1506,29 +1508,41 @@ export function AutopilotDashboard({ onOpenAuth }: AutopilotDashboardProps = {})
                 <div className="space-y-2">
                   <div className="flex items-center justify-between">
                     <span className="text-xs font-bold px-2 py-0.5 rounded bg-red-600/20 text-red-400 border border-red-600/30">
-                      Short #{clip.clip_index} of 6
+                      {clip.layout === "horizontal" || clip.layout === "landscape" || clip.layout === "16:9" ? "Video" : "Short"} #{clip.clip_index} of 6
                     </span>
-                    <span className="text-[11px] text-zinc-400">
-                      {clip.status === "published" ? (
-                        <span className="text-emerald-400 font-semibold flex items-center gap-1">
-                          <CheckCircle2 className="w-3.5 h-3.5" /> Published
+                    <div className="flex items-center gap-2">
+                      {clip.file_size_mb && clip.status !== "rendering" ? (
+                        <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-zinc-800 text-zinc-300 border border-zinc-700/50">
+                          {clip.file_size_mb.toFixed(1)} MB
                         </span>
-                      ) : clip.status === "uploading" ? (
-                        <span className="text-red-400 font-semibold flex items-center gap-1 animate-pulse">
-                          <Upload className="w-3.5 h-3.5" /> Uploading...
-                        </span>
-                      ) : clip.status === "failed" ? (
-                        <span className="text-rose-400 font-semibold flex items-center gap-1">
-                          <AlertCircle className="w-3.5 h-3.5" /> Issue
-                        </span>
-                      ) : !isAuthenticated && (clip.preview_url || clip.status === "preview_ready") ? (
-                        <span className="text-emerald-400 font-semibold flex items-center gap-1">
-                          <CheckCircle2 className="w-3.5 h-3.5" /> Free Download Ready
-                        </span>
-                      ) : (
-                        <span>Drop: +{clip.clip_index - 1}h</span>
-                      )}
-                    </span>
+                      ) : null}
+                      <span className="text-[11px] text-zinc-400">
+                        {clip.status === "rendering" ? (
+                          <span className="text-blue-400 font-semibold flex items-center gap-1 animate-pulse">
+                            <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                            {clip.file_size_mb ? `${clip.file_size_mb.toFixed(1)} MB (Encoding)` : "Encoding..."}
+                          </span>
+                        ) : clip.status === "published" ? (
+                          <span className="text-emerald-400 font-semibold flex items-center gap-1">
+                            <CheckCircle2 className="w-3.5 h-3.5" /> Published
+                          </span>
+                        ) : clip.status === "uploading" ? (
+                          <span className="text-red-400 font-semibold flex items-center gap-1 animate-pulse">
+                            <Upload className="w-3.5 h-3.5" /> Uploading...
+                          </span>
+                        ) : clip.status === "failed" ? (
+                          <span className="text-rose-400 font-semibold flex items-center gap-1">
+                            <AlertCircle className="w-3.5 h-3.5" /> Issue
+                          </span>
+                        ) : !isAuthenticated && (clip.preview_url || clip.status === "preview_ready") ? (
+                          <span className="text-emerald-400 font-semibold flex items-center gap-1">
+                            <CheckCircle2 className="w-3.5 h-3.5" /> Free Download Ready
+                          </span>
+                        ) : (
+                          <span>Drop: +{clip.clip_index - 1}h</span>
+                        )}
+                      </span>
+                    </div>
                   </div>
 
                   <h3 className="text-sm font-semibold text-white line-clamp-2">
@@ -1832,8 +1846,13 @@ export function AutopilotDashboard({ onOpenAuth }: AutopilotDashboardProps = {})
                 >
                   <div className="flex items-start justify-between gap-3">
                     <div className="space-y-1 flex-1 min-w-0">
-                      <span className="text-[10px] font-bold text-emerald-400 uppercase tracking-wider">
-                        Short #{video.clip_index ?? idx + 1} • Live on YouTube
+                      <span className="text-[10px] font-bold text-emerald-400 uppercase tracking-wider flex items-center gap-1.5 flex-wrap">
+                        <span>{video.youtube_url?.includes("/watch") ? "Video" : "Short"} #{video.clip_index ?? idx + 1} • Live on YouTube</span>
+                        {video.file_size_mb ? (
+                          <span className="px-1.5 py-0.2 rounded bg-emerald-900/60 text-emerald-300 border border-emerald-500/30 font-mono text-[9px] lowercase">
+                            {video.file_size_mb.toFixed(1)} MB
+                          </span>
+                        ) : null}
                       </span>
                       <h3 className="text-sm font-semibold text-white line-clamp-2">
                         {video.title}

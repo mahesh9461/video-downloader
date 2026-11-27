@@ -269,6 +269,7 @@ class AutopilotClipItem(BaseModel):
     download_url: Optional[str] = None
     cover_filename: Optional[str] = None
     cover_url: Optional[str] = None
+    file_size_mb: Optional[float] = None
     scheduled_time: Optional[str] = None
     status: str = Field("queued", description="'queued', 'rendering', 'preview_ready', 'uploading', 'published', 'cleaned', 'failed'")
     current_step: Optional[str] = Field("queued", description="'discovering', 'hook_created', 'styling', 'rendering', 'preview_ready', 'uploading', 'published', 'failed'")
@@ -302,6 +303,7 @@ class AutopilotPublishedVideo(BaseModel):
     published_at: str
     preview_url: Optional[str] = None
     duration: Optional[float] = 0.0
+    file_size_mb: Optional[float] = None
     channel_id: Optional[str] = None
     channel_title: Optional[str] = None
     user_id: Optional[str] = None

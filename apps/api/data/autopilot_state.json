@@ -56,7 +56,8 @@
       "published_at": "2026-11-27T13:28:51.956128+00:00",
       "preview_url": "/api/file/gta6_short_e9b4be8a_3.mp4",
       "cover_url": null,
-      "duration": 450.0
+      "duration": 450.0,
+      "file_size_mb": 773.95
     },
     {
       "id": "e9b4be8a_2",
@@ -67,7 +68,8 @@
       "published_at": "2026-11-27T13:28:25.498241+00:00",
       "preview_url": "/api/file/gta6_short_e9b4be8a_2.mp4",
       "cover_url": null,
-      "duration": 450.0
+      "duration": 450.0,
+      "file_size_mb": 946.47
     },
     {
       "id": "e9b4be8a_1",
@@ -78,7 +80,8 @@
       "published_at": "2026-11-27T13:27:54.409191+00:00",
       "preview_url": "/api/file/gta6_short_e9b4be8a_1.mp4",
       "cover_url": null,
-      "duration": 435.4
+      "duration": 435.4,
+      "file_size_mb": 371.88
     }
   ],
   "recent_errors": []

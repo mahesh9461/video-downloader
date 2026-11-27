@@ -850,12 +850,22 @@ class AutopilotManager:
                 else:
                     self._log(f"⏭️ Cover thumbnail generation skipped for Short #{clip_index} (disabled in global settings)")
 
+                if os.path.exists(output_path):
+                    try:
+                        clip.file_size_mb = round(os.path.getsize(output_path) / (1024 * 1024), 2)
+                    except Exception:
+                        pass
+
+                is_long_clip = (dur_mode == "long") or clip.layout in ("horizontal", "landscape", "16:9") or (clip.duration and clip.duration > 60)
+                video_kind = "Video" if is_long_clip else "Short"
+                size_str = f" ({clip.file_size_mb:.2f} MB)" if clip.file_size_mb else ""
+
                 clip.status = "preview_ready"
                 clip.current_step = "preview_ready"
-                clip.step_description = "Video rendered! Video preview is ready."
+                clip.step_description = f"Video rendered! Video preview is ready{size_str}."
                 self.current_step = "preview_ready"
-                self.current_step_label = f"Short #{clip_index} video preview is ready."
-                self._log(f"✅ Video preview ready for Short #{clip_index}: {output_filename}")
+                self.current_step_label = f"{video_kind} #{clip_index} video preview is ready{size_str}."
+                self._log(f"✅ Video preview ready for {video_kind} #{clip_index}: {output_filename}{size_str}")
                 self._save_state()
 
             # Step 4: AGGRESSIVE DISK CLEANUP 1 — Delete the raw source video immediately!
@@ -1075,6 +1085,7 @@ class AutopilotManager:
                 "preview_url": clip.preview_url or f"/api/file/{clip.filename}",
                 "cover_url": clip.cover_url,
                 "duration": clip.duration,
+                "file_size_mb": getattr(clip, "file_size_mb", None),
             }
             self.all_published_videos = [p for p in self.all_published_videos if p.get("id") != clip.id]
             self.all_published_videos.insert(0, pub_item)
@@ -1259,6 +1270,17 @@ class AutopilotManager:
                 active_id = channels_items[0].channel_id
         except Exception as e:
             logger.debug("Failed to populate channels in get_status: %s", e)
+
+        # Update dynamic file sizes for any active or rendering clips on disk
+        if self.current_batch and self.current_batch.clips:
+            for c in self.current_batch.clips:
+                if c.filename:
+                    fp = DOWNLOAD_DIR / c.filename
+                    if fp.is_file():
+                        try:
+                            c.file_size_mb = round(fp.stat().st_size / (1024 * 1024), 2)
+                        except Exception:
+                            pass
 
         return AutopilotStatus(
             is_running=self.is_running,
