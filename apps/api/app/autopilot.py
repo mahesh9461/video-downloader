@@ -910,6 +910,14 @@ class AutopilotManager:
                                     cp.unlink()
                                 except Exception:
                                     pass
+                        # Also clean up any temporary .ass subtitle files
+                        sub_p = DOWNLOAD_DIR / f"captions_{self.current_batch.batch_id}_{c.clip_index}.ass"
+                        if sub_p.is_file():
+                            try:
+                                freed_batch_mb += sub_p.stat().st_size / (1024 * 1024)
+                                sub_p.unlink()
+                            except Exception:
+                                pass
                     if freed_batch_mb > 0:
                         self.disk_space_cleaned_mb += freed_batch_mb
                         self.last_cleaned_at = datetime.now(timezone.utc).isoformat()
@@ -972,22 +980,30 @@ class AutopilotManager:
             self._save_state()
             return False
 
+        is_long_video = clip.layout in ("horizontal", "landscape", "16:9") or (clip.duration and clip.duration > 60)
+        video_kind = "Video" if is_long_video else "Short"
+        total_clips = len(self.current_batch.clips) if self.current_batch and self.current_batch.clips else 6
+
         self.state = "uploading"
         clip.status = "uploading"
         clip.current_step = "uploading"
-        clip.step_description = "Uploading video to YouTube Shorts via YouTube Data API..."
+        clip.step_description = f"Uploading {video_kind.lower()} to YouTube via YouTube Data API..."
         self.active_clip_id = clip.id
         self.current_step = "uploading"
-        self.current_step_label = f"Uploading Short #{clip.clip_index} to YouTube..."
-        # Ensure title has #Shorts and is never blank
+        self.current_step_label = f"Uploading {video_kind} #{clip.clip_index} to YouTube..."
+        
+        # Build video title: append #Shorts only for vertical Shorts
         raw_hook = (clip.hook_title or "").strip()
         if not raw_hook:
             raw_hook = (clip.source_title or "").strip() or f"GTA 6 Viral Moment #{clip.clip_index}"
         
-        if not raw_hook.lower().endswith("#shorts") and "#shorts" not in raw_hook.lower():
-            short_title = f"{raw_hook} #Shorts"
+        if not is_long_video:
+            if not raw_hook.lower().endswith("#shorts") and "#shorts" not in raw_hook.lower():
+                upload_title = f"{raw_hook} #Shorts"
+            else:
+                upload_title = raw_hook
         else:
-            short_title = raw_hook
+            upload_title = raw_hook
 
         # Load user global settings if present to respect default_privacy and default_tags
         upload_privacy = "public"
@@ -1002,7 +1018,7 @@ class AutopilotManager:
         except Exception as e:
             logger.debug("Failed loading settings for upload privacy: %s", e)
 
-        self._log(f"🚀 Publishing Short #{clip.clip_index}/6 to YouTube: '{short_title}' (privacy={upload_privacy})")
+        self._log(f"🚀 Publishing {video_kind} #{clip.clip_index}/{total_clips} to YouTube: '{upload_title}' (privacy={upload_privacy})")
         self._save_state()
 
         try:
@@ -1011,7 +1027,7 @@ class AutopilotManager:
 
             pub_res = await publish_short_video(
                 filename=clip.filename,
-                title=short_title[:100],
+                title=upload_title[:100],
                 description=DEFAULT_YOUTUBE_DESCRIPTION,
                 tags=upload_tags,
                 privacy=upload_privacy,
@@ -1020,7 +1036,10 @@ class AutopilotManager:
             )
 
             vid_id = pub_res.get("video_id")
-            yt_url = pub_res.get("youtube_url") or f"https://youtube.com/shorts/{vid_id}"
+            if is_long_video:
+                yt_url = f"https://www.youtube.com/watch?v={vid_id}"
+            else:
+                yt_url = pub_res.get("youtube_url") or f"https://youtube.com/shorts/{vid_id}"
 
             # Auto-upload Full HD cover image as YouTube custom thumbnail
             if clip.cover_filename:

@@ -1,7 +1,7 @@
 {
   "user_id": "usr_046f541938db",
   "duration_mode": "long",
-  "long_clip_duration_seconds": 330,
+  "long_clip_duration_seconds": 450,
   "layout": "horizontal",
   "progress_bar": true,
   "progress_bar_color": "cyan",
@@ -31,5 +31,5 @@
     "Shorts"
   ],
   "active_channel_id": null,
-  "updated_at": "2026-11-27T12:51:59.519680+00:00"
+  "updated_at": "2026-11-27T13:04:54.124434+00:00"
 }
