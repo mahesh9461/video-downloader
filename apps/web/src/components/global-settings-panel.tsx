@@ -26,6 +26,7 @@ import { useToast } from "@/hooks/use-toast";
 export const DEFAULT_GLOBAL_SETTINGS: GlobalSettings = {
   user_id: "default",
   duration_mode: "short",
+  long_clip_duration_seconds: 240,
   layout: "center_crop",
   progress_bar: true,
   progress_bar_color: "yellow",
@@ -508,7 +509,7 @@ export function GlobalSettingsPanel({
                 <div className="grid grid-cols-2 gap-2.5">
                   {[
                     { id: "short", label: "Short Video (< 30s)", desc: "Vertical 9:16 for Shorts / Reels / TikTok" },
-                    { id: "long", label: "Full HD Video (3–4 min)", desc: "Horizontal 16:9 for Widescreen YouTube / PC" },
+                    { id: "long", label: "Full HD Video (Custom Min)", desc: "Horizontal 16:9 for Widescreen YouTube / PC" },
                   ].map((d) => (
                     <button
                       key={d.id}
@@ -531,6 +532,64 @@ export function GlobalSettingsPanel({
                     </button>
                   ))}
                 </div>
+
+                {settings.duration_mode === "long" && (
+                  <div className="mt-3 p-3 bg-zinc-950/70 border border-zinc-800 rounded-xl space-y-2.5">
+                    <div className="flex items-center justify-between">
+                      <label className="text-xs font-bold text-zinc-300">
+                        Target Long Video Duration
+                      </label>
+                      <span className="text-[11px] font-mono text-cyan-400 font-bold">
+                        {Math.round((settings.long_clip_duration_seconds || 330) / 60)} min ({settings.long_clip_duration_seconds || 330}s)
+                      </span>
+                    </div>
+                    <div className="grid grid-cols-4 gap-2">
+                      {[
+                        { label: "3–4 min", sec: 210 },
+                        { label: "5–6 min", sec: 330 },
+                        { label: "7–8 min", sec: 450 },
+                        { label: "9–10 min", sec: 570 },
+                      ].map((preset) => (
+                        <button
+                          key={preset.sec}
+                          type="button"
+                          onClick={() =>
+                            updateSettings((prev) => ({
+                              ...prev,
+                              long_clip_duration_seconds: preset.sec,
+                            }))
+                          }
+                          className={`py-1.5 px-2 rounded-lg text-xs font-bold border transition-all ${
+                            (settings.long_clip_duration_seconds || 330) === preset.sec
+                              ? "bg-cyan-500/30 border-cyan-400 text-white"
+                              : "bg-zinc-900 border-zinc-800 text-zinc-400 hover:text-white"
+                          }`}
+                        >
+                          {preset.label}
+                        </button>
+                      ))}
+                    </div>
+                    <div className="flex items-center gap-2 pt-1">
+                      <span className="text-[11px] text-zinc-400 whitespace-nowrap">Custom Minutes:</span>
+                      <Input
+                        type="number"
+                        min={1}
+                        max={15}
+                        step={0.5}
+                        value={Math.round(((settings.long_clip_duration_seconds || 330) / 60) * 10) / 10}
+                        onChange={(e) => {
+                          const mins = parseFloat(e.target.value) || 5;
+                          updateSettings((prev) => ({
+                            ...prev,
+                            long_clip_duration_seconds: Math.round(mins * 60),
+                          }));
+                        }}
+                        className="h-8 text-xs bg-zinc-900 border-zinc-800 text-white font-mono w-24"
+                      />
+                      <span className="text-[10px] text-zinc-500">(1 to 15 min supported)</span>
+                    </div>
+                  </div>
+                )}
               </div>
 
               <div>

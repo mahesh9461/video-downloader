@@ -620,6 +620,7 @@ def build_video_filtergraph(
     layout: str,
     hook_title: Optional[str] = None,
     hook_style: str = "none",
+    hook_position: str = "top",
     clip_duration: float = 30.0,
     progress_bar: bool = True,
     progress_bar_color: str = "yellow",
@@ -680,7 +681,12 @@ def build_video_filtergraph(
     if hook_title and hook_title.strip() and hook_style not in ("none", "clean"):
         clean_title = sanitize_drawtext_string(hook_title.strip())
         if clean_title:
-            y_pos = "120" if is_horizontal else "240"
+            if hook_position == "center":
+                y_pos = "(h-text_h)/2"
+            elif hook_position == "bottom":
+                y_pos = "h-text_h-180" if is_horizontal else "h-text_h-320"
+            else:
+                y_pos = "120" if is_horizontal else "240"
             font_sz = "44" if is_horizontal else "52"
             if hook_style == "hormozi_bold":
                 filters.append(
@@ -688,13 +694,19 @@ def build_video_filtergraph(
                     "borderw=4:bordercolor=black:shadowcolor=black@0.9:shadowx=3:shadowy=3:"
                     f"x=(w-text_w)/2:y={y_pos}:line_spacing=12"
                 )
-            elif hook_style in ("mrbeast_urgency", "red_accent"):
+            elif hook_style in ("mrbeast_urgency", "red_accent", "red_bold"):
                 filters.append(
                     f"drawtext=text='{clean_title}':fontsize={font_sz}:fontcolor=white:"
                     "box=1:boxcolor=0xE50914@0.92:boxborderw=16:"
                     f"x=(w-text_w)/2:y={y_pos}:line_spacing=12"
                 )
-            elif hook_style == "tiktok_trending":
+            elif hook_style in ("neon_cyan", "cyan_glow"):
+                filters.append(
+                    f"drawtext=text='{clean_title}':fontsize={font_sz}:fontcolor=0x00F0FF:"
+                    "borderw=4:bordercolor=black:shadowcolor=black@0.9:shadowx=3:shadowy=3:"
+                    f"x=(w-text_w)/2:y={y_pos}:line_spacing=12"
+                )
+            elif hook_style in ("tiktok_trending",):
                 filters.append(
                     f"drawtext=text='{clean_title}':fontsize={font_sz}:fontcolor=white:"
                     "box=1:boxcolor=0x111827@0.8:boxborderw=18:"
@@ -706,10 +718,16 @@ def build_video_filtergraph(
                     "borderw=3:bordercolor=black@0.8:shadowcolor=black@0.95:shadowx=4:shadowy=4:"
                     f"x=(w-text_w)/2:y={y_pos}:line_spacing=12"
                 )
-            elif hook_style == "bold_white":
+            elif hook_style in ("bold_white", "clean_white"):
                 filters.append(
                     f"drawtext=text='{clean_title}':fontsize={font_sz}:fontcolor=white:"
                     "box=1:boxcolor=black@0.75:boxborderw=14:"
+                    f"x=(w-text_w)/2:y={y_pos}:line_spacing=10"
+                )
+            elif hook_style in ("viral_yellow", "yellow_box"):
+                filters.append(
+                    f"drawtext=text='{clean_title}':fontsize={font_sz}:fontcolor=0xFFE600:"
+                    "box=1:boxcolor=black@0.85:boxborderw=14:"
                     f"x=(w-text_w)/2:y={y_pos}:line_spacing=10"
                 )
             else:
@@ -763,8 +781,10 @@ def render_viral_clip(
     layout: str = "center_crop",
     hook_title: Optional[str] = None,
     hook_style: str = "none",
+    hook_position: str = "top",
     background_music: Optional[str] = "none",
     music_volume: float = 0.12,
+    original_audio_volume: float = 1.0,
     progress_bar: bool = True,
     progress_bar_color: str = "yellow",
     subtitles_path: Optional[str] = None,
@@ -787,8 +807,8 @@ def render_viral_clip(
     # Upgrade 4: Seamless loop closure - detect and trim trailing dead silence (<120ms)
     refined_end_time = detect_and_trim_loop_silence(input_path, start_time, end_time)
     clip_duration = round(refined_end_time - start_time, 2)
-    if clip_duration > 300:
-        raise ClipRenderException("Maximum clip duration is 5 minutes (300 seconds).", "duration_too_long")
+    if clip_duration > 900:
+        raise ClipRenderException("Maximum clip duration is 15 minutes (900 seconds).", "duration_too_long")
 
     # Upgrade 2: Active-Speaker Face-Tracking
     face_tracking_data: Dict[str, Any] = {
@@ -803,6 +823,7 @@ def render_viral_clip(
         layout=layout,
         hook_title=hook_title,
         hook_style=hook_style,
+        hook_position=hook_position,
         clip_duration=clip_duration,
         progress_bar=progress_bar,
         progress_bar_color=progress_bar_color,
@@ -847,11 +868,12 @@ def render_viral_clip(
             "-i", f"aevalsrc=exprs='{synth_expr}':d={clip_duration}:s=44100",
         ])
 
+    orig_vol = max(0.0, min(2.0, float(original_audio_volume)))
     # Upgrade 4: Softened anti-copyright pitch perturbation (1.015) + broadcast mastering (loudnorm)
     if anti_copyright_shield:
-        voice_af = "asetrate=44100*1.015,aresample=44100,atempo=1/1.015,equalizer=f=1000:t=q:w=1:g=-1,highpass=f=60"
+        voice_af = f"asetrate=44100*1.015,aresample=44100,atempo=1/1.015,volume={orig_vol},equalizer=f=1000:t=q:w=1:g=-1,highpass=f=60"
     else:
-        voice_af = "volume=1.0"
+        voice_af = f"volume={orig_vol}"
 
     loudnorm_af = "loudnorm=I=-14:TP=-1.5:LRA=11"
 
@@ -944,8 +966,10 @@ async def process_clip_render(
     layout: str = "center_crop",
     hook_title: Optional[str] = None,
     hook_style: str = "none",
+    hook_position: str = "top",
     background_music: Optional[str] = "none",
     music_volume: float = 0.12,
+    original_audio_volume: float = 1.0,
     progress_bar: bool = True,
     progress_bar_color: str = "yellow",
     subtitles_path: Optional[str] = None,
@@ -967,8 +991,10 @@ async def process_clip_render(
         layout=layout,
         hook_title=hook_title,
         hook_style=hook_style,
+        hook_position=hook_position,
         background_music=background_music,
         music_volume=music_volume,
+        original_audio_volume=original_audio_volume,
         progress_bar=progress_bar,
         progress_bar_color=progress_bar_color,
         subtitles_path=subtitles_path,

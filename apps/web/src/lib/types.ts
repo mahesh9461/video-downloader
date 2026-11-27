@@ -339,6 +339,7 @@ export interface CoverImageSettings {
 export interface GlobalSettings {
   user_id?: string;
   duration_mode?: "short" | "long";
+  long_clip_duration_seconds?: number;
   layout: string;
   progress_bar: boolean;
   progress_bar_color: string;

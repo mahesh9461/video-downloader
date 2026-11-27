@@ -506,6 +506,8 @@ class AutopilotManager:
             except Exception as sub_err:
                 logger.debug("Autopilot subtitle extraction notice: %s", sub_err)
 
+            extracted_cues = cues
+
             # Load user global settings if present to respect duration_mode, text overlay, audio mix, and cover image settings
             global_settings = await load_effective_global_settings(user_id=user_id)
 
@@ -513,11 +515,12 @@ class AutopilotManager:
             total_dur = video_info.get("duration") or 300
 
             # Analyze and score clips to discover the most viral highlights
-            # short mode: <30s (typically 15-28s); long mode: 3-4 min (180-240s)
+            # short mode: <30s (typically 15-28s); long mode: custom duration (e.g. 5-6 min = 300-360s)
             if dur_mode == "long":
-                raw_min = 180.0
-                raw_max = 240.0
-                raw_default_clip_len = 180.0
+                target_long_sec = (global_settings and getattr(global_settings, "long_clip_duration_seconds", None)) or 240
+                raw_min = max(60.0, float(target_long_sec - 30))
+                raw_max = min(total_dur, float(target_long_sec + 30))
+                raw_default_clip_len = min(total_dur, float(target_long_sec))
             else:
                 raw_min = 15.0
                 raw_max = 28.0
@@ -641,6 +644,7 @@ class AutopilotManager:
                 profile = STYLE_PROFILES[idx % len(STYLE_PROFILES)]
                 
                 # Check global audio mix setting
+                orig_vol = 1.0
                 if global_settings and hasattr(global_settings, "audio_mix") and global_settings.audio_mix:
                     if global_settings.audio_mix.background_music == "none":
                         audio_choice = "none"
@@ -648,9 +652,11 @@ class AutopilotManager:
                     else:
                         audio_choice = global_settings.audio_mix.background_music or "vice_city_synth"
                         music_vol = global_settings.audio_mix.music_volume if global_settings.audio_mix.music_volume is not None else 0.12
+                    orig_vol = global_settings.audio_mix.original_audio_volume if global_settings.audio_mix.original_audio_volume is not None else 1.0
                 else:
                     audio_choice = custom_audio_list[idx % len(custom_audio_list)] if custom_audio_list else PROCEDURAL_MUSIC_FALLBACKS[idx % len(PROCEDURAL_MUSIC_FALLBACKS)]
                     music_vol = 0.12
+                    orig_vol = 1.0
                 self.active_clip_id = clip.id
 
                 # Substep 1: Hook Creation ("that ok we have created the hook. this the hook")
@@ -663,10 +669,19 @@ class AutopilotManager:
                 except Exception:
                     pass
 
-                # Check global text overlay setting
-                text_overlay_enabled = True
+                # If hook is default/fallback, respect user's default_hook setting if customized
                 if global_settings and hasattr(global_settings, "text_overlay") and global_settings.text_overlay:
-                    text_overlay_enabled = global_settings.text_overlay.enabled
+                    if getattr(global_settings.text_overlay, "default_hook", None) and (not final_hook or final_hook == cand.hook_title):
+                        final_hook = global_settings.text_overlay.default_hook.strip()
+
+                # Check global text overlay settings
+                text_overlay_enabled = True
+                hook_position = "top"
+                burn_captions_enabled = False
+                if global_settings and hasattr(global_settings, "text_overlay") and global_settings.text_overlay:
+                    text_overlay_enabled = getattr(global_settings.text_overlay, "enabled", True)
+                    hook_position = getattr(global_settings.text_overlay, "position", "top") or "top"
+                    burn_captions_enabled = getattr(global_settings.text_overlay, "burn_captions", False)
 
                 if not text_overlay_enabled:
                     render_hook_title = ""
@@ -683,18 +698,27 @@ class AutopilotManager:
                 clip.step_description = f"Hook created: '{clip.hook_title}'" if text_overlay_enabled else "Hook overlay disabled by global settings"
                 self.current_step = "hook_created"
                 self.current_step_label = f"Short #{clip_index}: Created viral hook '{clip.hook_title}'" if text_overlay_enabled else f"Short #{clip_index}: Hook overlay off"
-                self._log(f"🎣 Hook for Short #{clip_index}: '{clip.hook_title}' (overlay_enabled={text_overlay_enabled})")
+                self._log(f"🎣 Hook for Short #{clip_index}: '{clip.hook_title}' (overlay_enabled={text_overlay_enabled}, position={hook_position})")
                 self._save_state()
 
                 # Substep 2: Text Styling & Song ("now this is the text thing song")
+                # Respect global progress bar settings
+                progress_bar_enabled = True
+                pb_color = profile["progress_bar_color"]
+                if global_settings:
+                    if hasattr(global_settings, "progress_bar"):
+                        progress_bar_enabled = bool(global_settings.progress_bar)
+                    if getattr(global_settings, "progress_bar_color", None):
+                        pb_color = global_settings.progress_bar_color
+
                 clip.current_step = "styling"
                 clip.background_music = audio_choice
-                clip.progress_bar_color = profile["progress_bar_color"]
+                clip.progress_bar_color = pb_color
                 if dur_mode == "long":
                     clip.layout = "horizontal"
                 else:
                     clip.layout = (global_settings and global_settings.layout) or profile["layout"]
-                clip.step_description = f"Overlay: {clip.hook_style} ({profile['progress_bar_color']} bar) • Song: {audio_choice}"
+                clip.step_description = f"Overlay: {clip.hook_style} ({pb_color} bar) • Song: {audio_choice}"
                 self.current_step = "styling"
                 self.current_step_label = f"Clip #{clip_index}: Styled text ({clip.hook_style}) & song ({audio_choice})"
                 self._log(f"🎵 Text & Song set for Clip #{clip_index}: {clip.hook_style} | {audio_choice}")
@@ -709,13 +733,39 @@ class AutopilotManager:
                 clip.step_description = f"Rendering {format_desc} video with low CPU mode..."
                 self.current_step = "rendering"
                 self.current_step_label = f"Rendering Clip #{clip_index}/{len(clip_candidates[:target_slice_count])} (threads=2)..."
-                self._log(f"🎬 Rendering Clip {clip_index} ({format_desc}, threads=2): hook='{render_hook_title}' style='{render_hook_style}'")
+                self._log(f"🎬 Rendering Clip {clip_index} ({format_desc}, layout={clip.layout}, threads=2): hook='{render_hook_title}' style='{render_hook_style}'")
                 self._save_state()
 
                 render_layout = clip.layout
                 render_pb_color = clip.progress_bar_color
 
-                def _render(c=cand, h=render_hook_title, s=render_hook_style, ly=render_layout, a=audio_choice, mv=music_vol, pb_col=render_pb_color, out=output_path):
+                # Generate subtitles if burn_captions is requested
+                subtitles_file_path: Optional[str] = None
+                if burn_captions_enabled and extracted_cues:
+                    try:
+                        from app.clip_renderer import generate_ass_subtitles
+                        sub_file = str(DOWNLOAD_DIR / f"captions_{batch_id}_{clip_index}.ass")
+                        generate_ass_subtitles(extracted_cues, cand.start_time, cand.end_time, sub_file)
+                        if os.path.exists(sub_file) and os.path.getsize(sub_file) > 0:
+                            subtitles_file_path = sub_file
+                            self._log(f"📝 Burned kinetic subtitles into Short #{clip_index}")
+                    except Exception as sub_err:
+                        logger.debug("Subtitle burn notice for clip #%d: %s", clip_index, sub_err)
+
+                def _render(
+                    c=cand,
+                    h=render_hook_title,
+                    s=render_hook_style,
+                    pos=hook_position,
+                    ly=render_layout,
+                    a=audio_choice,
+                    mv=music_vol,
+                    ov=orig_vol,
+                    pb=progress_bar_enabled,
+                    pb_col=render_pb_color,
+                    sub=subtitles_file_path,
+                    out=output_path,
+                ):
                     return render_viral_clip(
                         input_path=source_path,
                         output_path=out,
@@ -724,10 +774,13 @@ class AutopilotManager:
                         layout=ly,
                         hook_title=h,
                         hook_style=s,
+                        hook_position=pos,
                         background_music=a,
                         music_volume=mv,
-                        progress_bar=True,
+                        original_audio_volume=ov,
+                        progress_bar=pb,
                         progress_bar_color=pb_col,
+                        subtitles_path=sub,
                         threads=2,
                     )
 
@@ -750,8 +803,13 @@ class AutopilotManager:
 
                 # Check global cover image setting
                 cover_enabled = False
+                cover_headline = final_hook
+                cover_theme = "gta_action"
                 if global_settings and hasattr(global_settings, "cover_image") and global_settings.cover_image:
                     cover_enabled = global_settings.cover_image.enabled and dur_mode != "long"
+                    cover_theme = getattr(global_settings.cover_image, "theme", "gta_action") or "gta_action"
+                    if getattr(global_settings.cover_image, "headline", None):
+                        cover_headline = global_settings.cover_image.headline.strip() or final_hook
 
                 if cover_enabled:
                     # Generate Full HD 1080x1920 viral cover image
@@ -763,11 +821,11 @@ class AutopilotManager:
                             generate_viral_cover_image,
                             video_path=output_path,
                             output_path=cover_output_path,
-                            hook_title=final_hook,
+                            hook_title=cover_headline,
                             hook_style=profile["hook_style"],
                             badge_text="GTA 6 EXCLUSIVE",
                             template_index=idx,
-                            use_gta_template=True,
+                            use_gta_template=(cover_theme == "gta_action"),
                         )
                         if os.path.exists(cover_output_path):
                             clip.cover_filename = cover_filename

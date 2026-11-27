@@ -262,7 +262,7 @@ class TestClipRenderer:
     def test_render_viral_clip_duration_too_long(self):
         with patch("app.clip_renderer._require_ffmpeg", return_value="/usr/bin/ffmpeg"):
             with pytest.raises(ClipRenderException) as exc:
-                render_viral_clip("/tmp/in.mp4", "/tmp/out.mp4", start_time=0.0, end_time=350.0)
+                render_viral_clip("/tmp/in.mp4", "/tmp/out.mp4", start_time=0.0, end_time=950.0)
             assert exc.value.error_type == "duration_too_long"
 
     @patch("app.clip_renderer._require_ffmpeg", return_value="/usr/bin/ffmpeg")

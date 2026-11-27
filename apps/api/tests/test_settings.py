@@ -33,6 +33,8 @@ def test_get_default_global_settings():
 
 def test_update_global_settings():
     payload = {
+        "duration_mode": "long",
+        "long_clip_duration_seconds": 330,
         "layout": "blurred_background",
         "progress_bar": True,
         "progress_bar_color": "cyan",
@@ -62,6 +64,8 @@ def test_update_global_settings():
     assert resp.status_code == 200
     res_data = resp.json()
     assert res_data["layout"] == "blurred_background"
+    assert res_data["duration_mode"] == "long"
+    assert res_data["long_clip_duration_seconds"] == 330
     assert res_data["progress_bar_color"] == "cyan"
     assert res_data["text_overlay"]["hook_style"] == "neon_cyan"
     assert res_data["text_overlay"]["default_hook"] == "DON'T MISS THIS MOMENT!"

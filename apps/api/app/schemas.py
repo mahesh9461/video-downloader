@@ -468,6 +468,7 @@ class CoverImageSettings(BaseModel):
 class GlobalSettings(BaseModel):
     user_id: Optional[str] = Field("default", description="Associated user ID or 'default'")
     duration_mode: str = Field("short", description="Clip duration mode: 'short' (<30s vertical 9:16) or 'long' (3-4 min horizontal 16:9)")
+    long_clip_duration_seconds: Optional[int] = Field(240, ge=30, le=900, description="Target duration for long clips in seconds (e.g. 180-240 for 3-4m, 300-360 for 5-6m)")
     layout: str = Field("center_crop", description="Default layout: center_crop, blurred_background, horizontal, stacked")
     progress_bar: bool = Field(True, description="Include kinetic progress bar at bottom of Short")
     progress_bar_color: str = Field("yellow", description="Progress bar color: yellow, cyan, pink, red, green")
