@@ -638,7 +638,7 @@ def build_video_filtergraph(
     is_horizontal = layout in ("horizontal", "landscape", "16:9")
 
     if is_horizontal:
-        base_v = "[0:v]scale=1920:1080:force_original_aspect_ratio=decrease,pad=1920:1080:(ow-iw)/2:(oh-ih)/2:black[framed]"
+        base_v = "[0:v]scale=1920:1080:force_original_aspect_ratio=decrease:flags=lanczos,pad=1920:1080:(ow-iw)/2:(oh-ih)/2:black[framed]"
     elif layout == "center_crop":
         ft_mode = face_tracking_data.get("mode") if face_tracking_data else None
         if ft_mode == "two_speaker_split":
@@ -647,30 +647,30 @@ def build_video_filtergraph(
             right_x = face_tracking_data.get("right_x_expr", "iw/2")
             base_v = (
                 f"[0:v]split=2[spk1_in][spk2_in];"
-                f"[spk1_in]crop=w=ih*9/16:h=ih/2:x='{left_x}':y=0,scale=1080:960[top_v];"
-                f"[spk2_in]crop=w=ih*9/16:h=ih/2:x='{right_x}':y=0,scale=1080:960[bot_v];"
+                f"[spk1_in]crop=w=ih*9/16:h=ih/2:x='{left_x}':y=0,scale=1080:960:flags=lanczos[top_v];"
+                f"[spk2_in]crop=w=ih*9/16:h=ih/2:x='{right_x}':y=0,scale=1080:960:flags=lanczos[bot_v];"
                 f"[top_v][bot_v]vstack=inputs=2[framed]"
             )
         elif ft_mode == "single_speaker" and face_tracking_data.get("center_x_expr"):
             cx_expr = face_tracking_data["center_x_expr"]
-            base_v = f"[0:v]crop=w=ih*9/16:h=ih:x='{cx_expr}':y=0,scale=1080:1920[framed]"
+            base_v = f"[0:v]crop=w=ih*9/16:h=ih:x='{cx_expr}':y=0,scale=1080:1920:flags=lanczos[framed]"
         else:
-            base_v = "[0:v]crop=ih*9/16:ih:(iw-ow)/2:0,scale=1080:1920[framed]"
+            base_v = "[0:v]crop=ih*9/16:ih:(iw-ow)/2:0,scale=1080:1920:flags=lanczos[framed]"
     elif layout == "split_screen":
         base_v = (
             "[0:v]split=2[top_raw][bot_raw];"
-            "[top_raw]scale=1080:960:force_original_aspect_ratio=increase,crop=1080:960[top_v];"
-            "[bot_raw]scale=1080:960:force_original_aspect_ratio=increase,crop=1080:960,boxblur=18:4[bot_v];"
+            "[top_raw]scale=1080:960:force_original_aspect_ratio=increase:flags=lanczos,crop=1080:960[top_v];"
+            "[bot_raw]scale=1080:960:force_original_aspect_ratio=increase:flags=lanczos,crop=1080:960,boxblur=18:4[bot_v];"
             "[top_v][bot_v]vstack=inputs=2[framed]"
         )
     elif layout == "fit_black":
-        base_v = "[0:v]scale=1080:1920:force_original_aspect_ratio=decrease,pad=1080:1920:(ow-iw)/2:(oh-ih)/2:black[framed]"
+        base_v = "[0:v]scale=1080:1920:force_original_aspect_ratio=decrease:flags=lanczos,pad=1080:1920:(ow-iw)/2:(oh-ih)/2:black[framed]"
     else:
         # Default: blurred_background (Opus Clip style)
         base_v = (
             "[0:v]split=2[in_bg][in_fg];"
-            "[in_bg]scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,boxblur=22:5[bg];"
-            "[in_fg]scale=1080:-1[fg];"
+            "[in_bg]scale=1080:1920:force_original_aspect_ratio=increase:flags=lanczos,crop=1080:1920,boxblur=22:5[bg];"
+            "[in_fg]scale=1080:-1:flags=lanczos[fg];"
             "[bg][fg]overlay=(W-w)/2:(H-h)/2[framed]"
         )
 
@@ -893,8 +893,12 @@ def render_viral_clip(
         "-threads", thread_str,
         "-tune", "film",
         "-crf", "18",
+        "-pix_fmt", "yuv420p",
+        "-profile:v", "high",
+        "-level", "4.2",
         "-c:a", "aac",
         "-b:a", "192k",
+        "-ar", "48000",
         "-movflags", "+faststart",
         output_path,
     ])
