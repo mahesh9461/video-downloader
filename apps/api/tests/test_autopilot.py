@@ -129,6 +129,49 @@ async def test_publish_clip_and_immediate_cleanup(mock_refresh, mock_publish, tm
 
 
 @pytest.mark.anyio
+@patch("app.autopilot.publish_short_video")
+@patch("app.autopilot.refresh_access_token")
+async def test_publish_clip_respects_global_privacy(mock_refresh, mock_publish, tmp_path):
+    from app.schemas import GlobalSettings
+    clip_file = tmp_path / "gta6_short_priv.mp4"
+    clip_file.write_bytes(b"x" * 1024)
+
+    mock_publish.return_value = {
+        "video_id": "yt_priv_999",
+        "youtube_url": "https://youtube.com/shorts/yt_priv_999",
+        "title": "GTA 6 Private Clip #Shorts",
+        "privacy": "private",
+        "status": "uploaded",
+    }
+
+    clip_item = AutopilotClipItem(
+        id="batch1_priv",
+        source_video_id="src_priv",
+        source_title="GTA 6 Private",
+        clip_index=1,
+        start_time=0.0,
+        end_time=20.0,
+        duration=20.0,
+        hook_title="GTA 6 Private Clip",
+        filename=clip_file.name,
+        scheduled_time=datetime.now(timezone.utc).isoformat(),
+        status="queued",
+        user_id="test_user_priv",
+    )
+
+    mock_settings = GlobalSettings(default_privacy="private", default_tags=["GTA6Private"])
+
+    with patch("app.autopilot.DOWNLOAD_DIR", tmp_path), \
+         patch("app.autopilot.load_effective_global_settings", new_callable=AsyncMock, return_value=mock_settings):
+        success = await autopilot_manager.publish_clip(clip_item)
+        assert success is True
+        mock_publish.assert_called_once()
+        _, kwargs = mock_publish.call_args
+        assert kwargs.get("privacy") == "private"
+        assert kwargs.get("tags") == ["GTA6Private"]
+
+
+@pytest.mark.anyio
 async def test_tick_cooldown_triggers_when_limit_reached():
     autopilot_manager.is_running = True
     autopilot_manager.daily_uploads_count = 6

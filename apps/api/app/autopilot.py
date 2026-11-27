@@ -572,6 +572,12 @@ class AutopilotManager:
             custom_audio_list = self.get_custom_audio_files()
             now_ts = time.time()
             preliminary_clips: List[AutopilotClipItem] = []
+
+            # Respect user global layout, progress bar color, and hook styling if set
+            effective_layout = getattr(global_settings, "layout", None) if global_settings else None
+            effective_pb_color = getattr(global_settings, "progress_bar_color", None) if global_settings else None
+            effective_hook_style = (global_settings.text_overlay.hook_style if (global_settings and getattr(global_settings, "text_overlay", None) and global_settings.text_overlay) else None)
+
             for idx, cand in enumerate(clip_candidates[:6]):
                 clip_index = idx + 1
                 profile = STYLE_PROFILES[idx % len(STYLE_PROFILES)]
@@ -579,6 +585,10 @@ class AutopilotManager:
                 scheduled_epoch = now_ts + 60 + (idx * self.upload_interval_seconds)
                 scheduled_iso = datetime.fromtimestamp(scheduled_epoch, tz=timezone.utc).isoformat()
                 output_filename = f"gta6_short_{batch_id}_{clip_index}.mp4"
+
+                clip_layout = "horizontal" if dur_mode == "long" else (effective_layout or profile["layout"])
+                clip_pb_color = effective_pb_color or profile["progress_bar_color"]
+                clip_hook_style = effective_hook_style or profile["hook_style"]
 
                 preliminary_clips.append(AutopilotClipItem(
                     id=f"{batch_id}_{clip_index}",
@@ -589,9 +599,9 @@ class AutopilotManager:
                     end_time=cand.end_time,
                     duration=cand.duration,
                     hook_title=cand.hook_title,
-                    hook_style=profile["hook_style"],
-                    progress_bar_color=profile["progress_bar_color"],
-                    layout=profile["layout"],
+                    hook_style=clip_hook_style,
+                    progress_bar_color=clip_pb_color,
+                    layout=clip_layout,
                     background_music=audio_choice,
                     filename=output_filename,
                     preview_url=f"/api/file/{output_filename}",
@@ -921,7 +931,20 @@ class AutopilotManager:
         else:
             short_title = raw_hook
 
-        self._log(f"🚀 Publishing Short #{clip.clip_index}/6 to YouTube: '{short_title}'")
+        # Load user global settings if present to respect default_privacy and default_tags
+        upload_privacy = "public"
+        upload_tags = DEFAULT_YOUTUBE_TAGS
+        try:
+            global_settings = await load_effective_global_settings(user_id=clip.user_id)
+            if global_settings:
+                if getattr(global_settings, "default_privacy", None) in ("public", "unlisted", "private"):
+                    upload_privacy = global_settings.default_privacy
+                if getattr(global_settings, "default_tags", None):
+                    upload_tags = global_settings.default_tags
+        except Exception as e:
+            logger.debug("Failed loading settings for upload privacy: %s", e)
+
+        self._log(f"🚀 Publishing Short #{clip.clip_index}/6 to YouTube: '{short_title}' (privacy={upload_privacy})")
         self._save_state()
 
         try:
@@ -932,8 +955,8 @@ class AutopilotManager:
                 filename=clip.filename,
                 title=short_title[:100],
                 description=DEFAULT_YOUTUBE_DESCRIPTION,
-                tags=DEFAULT_YOUTUBE_TAGS,
-                privacy="public",
+                tags=upload_tags,
+                privacy=upload_privacy,
                 channel_id=clip.channel_id,
                 user_id=clip.user_id,
             )
