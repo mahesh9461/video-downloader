@@ -126,3 +126,23 @@ async def test_run_auto_schema_migration_no_db_url(monkeypatch):
     monkeypatch.delenv("DATABASE_URL", raising=False)
     res = await run_auto_schema_migration()
     assert res is False
+
+
+@pytest.mark.anyio
+async def test_run_auto_schema_migration_with_db_url_success(monkeypatch):
+    from app.supabase_client import run_auto_schema_migration
+    monkeypatch.setenv("DATABASE_URL", "postgresql://postgres:pass@localhost:5432/postgres")
+    
+    mock_conn = AsyncMock()
+    mock_conn.execute.return_value = "CREATE TABLE"
+    mock_conn.close.return_value = None
+
+    with patch("asyncpg.connect", new_callable=AsyncMock, return_value=mock_conn):
+        res = await run_auto_schema_migration()
+        assert res is True
+        mock_conn.execute.assert_called_once()
+        executed_sql = mock_conn.execute.call_args[0][0]
+        # Verify schema contains key tables and columns
+        assert "user_global_settings" in executed_sql
+        assert "game_title" in executed_sql
+        assert "user_youtube_channels" in executed_sql

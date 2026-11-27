@@ -119,6 +119,41 @@ describe("GlobalSettingsPanel", () => {
       await user.click(coverToggle);
       expect(screen.getByRole("button", { name: /cover active/i })).toBeInTheDocument();
     });
+
+    it("should allow selecting custom 5-6 min duration for long video mode and saving", async () => {
+      // Arrange
+      const user = userEvent.setup();
+      renderWithProvider(<GlobalSettingsPanel defaultExpanded={true} />, store);
+
+      // Act 1: Switch to Layout & Privacy tab
+      const layoutTab = screen.getByRole("button", { name: /layout & privacy/i });
+      await user.click(layoutTab);
+
+      // Act 2: Select Full HD Video (Custom Min)
+      const longModeBtn = screen.getByRole("button", { name: /full hd video \(custom min\)/i });
+      await user.click(longModeBtn);
+
+      // Assert: Long duration controls appear
+      expect(screen.getByText("Target Long Video Duration")).toBeInTheDocument();
+
+      // Act 3: Click 5-6 min preset button
+      const fiveToSixBtn = screen.getByRole("button", { name: /5–6 min/i });
+      await user.click(fiveToSixBtn);
+
+      // Act 4: Save settings
+      const saveBtn = screen.getByRole("button", { name: /save as global default/i });
+      await user.click(saveBtn);
+
+      // Assert: API called with long duration settings (330s)
+      await waitFor(() => {
+        expect(mockSaveGlobalSettings).toHaveBeenCalledWith(
+          expect.objectContaining({
+            duration_mode: "long",
+            long_clip_duration_seconds: 330,
+          })
+        );
+      });
+    });
   });
 
   describe("Redux state verification", () => {
