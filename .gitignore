@@ -70,5 +70,6 @@ next-env.d.ts
 apps/api/data/users.json
 apps/api/data/sessions.json
 apps/api/data/youtube_channels.json
+apps/api/data/autopilot_state.json
 
 
